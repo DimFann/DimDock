@@ -1,0 +1,50 @@
+﻿@page
+@model DimDock.LinuxArchive.Pages.Sketch.ViewerModel
+@{
+    ViewBag.ShowNavigation = false;
+    ViewBag.UserScalable = true;
+}
+
+<style>
+    body{
+        background-color: black;
+    }
+</style>
+
+<div id="_jsError" style="display:none;"class="smallText">
+    That ImageId isn't valid, or is not publicly visible on GDrive.
+    <br />
+    If you believe that it is valid and it is visible on GDrive please send me a message on Twitter (@@DimFann).
+</div>
+
+<script>
+    function onImageError() {
+        document.getElementById("_image").style = "display:none;";
+        document.getElementById("_jsError").style = "color:white;";
+    }
+</script>
+
+@if(!string.IsNullOrWhiteSpace(Model.Error))
+{
+    <div class="smallText" style="color:white;">
+        @foreach (string line in Model.Error?.Split("\n") ?? Enumerable.Empty<string>())
+        {
+            @line
+            <br />
+        }
+    </div>
+}
+
+<div class="viewerContainer">
+    <img id="_image" class="viewerImage" src="@Model.ImageUrl" onerror="onImageError()" style="background-image: linear-gradient(linen, white);"/>
+</div>
+
+<script>
+    document.getElementById("_image").addEventListener("click", function () {
+        var img = document.getElementById("_image");
+        if (img.className == "viewerImage")
+            img.className = "viewerImageFull";
+        else
+            img.className = "viewerImage";
+    });
+</script>

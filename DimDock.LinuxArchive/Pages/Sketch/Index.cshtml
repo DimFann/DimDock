@@ -1,0 +1,75 @@
+﻿@page
+@using SketchArchiveLib.Google;
+@using SketchArchiveLib;
+@using System.Text;
+@model DimDock.LinuxArchive.Pages.SketchModel
+@{
+    ViewData["Title"] = "Sketch Archive";
+    ViewBag.SketchNavigation = true;
+}
+
+<table class="navTable verticalMargin">
+    <!-- Relative navigation -->
+    <tr><td><a href="/Sketch/?FolderId=@Model.RootId&RootId=@Model.RootId">/</a></td></tr>
+    <tr><td><a href="/Sketch/?FolderId=@Model.ParentFolderId&RootId=@Model.RootId">..</a></td></tr>
+
+    <!-- Per DriveItem navigation -->
+    @foreach (var item in (Model?.FolderItems?.Files ?? Enumerable.Empty<GDriveItem>()).Folders().SortDirectoryItems())
+    {
+        var link = item.ToLink(Model.RootId);
+        <tr>
+            <td><a href="/Sketch/@link">@item.Name</a></td>
+        </tr>
+    }
+</table>
+
+@if (Model.Display == Display.Gallery)
+{
+    <div class="gallery verticalMargin">
+        @foreach (var item in (Model?.FolderItems?.Files ?? Enumerable.Empty<GDriveItem>()).Files().SortGalleryItems())
+        {
+            var link = item.ToLink(Model.RootId);
+            var thumb = item.ToThumb(512);
+            <a class="galleryItem" href="@link">
+                <img class="galleryImage" src="@thumb" />
+            </a>
+        }
+    </div>
+}
+else if (Model.Display == Display.Comic)
+{
+    var items = (Model?.FolderItems.Files ?? Enumerable.Empty<GDriveItem>()).Files().SortGalleryItems();
+    if (items.Any())
+    {
+        <div class="comicControls verticalMargin">
+            <button id="_first" onclick="return first();">First</button>
+            <button id="_prev" onclick="return prev();">Prev</button>
+            <button id="_next" onclick="return next();">Next</button>
+            <button id="_last" onclick="return last();">Last</button>
+            <label id="_pi"></label>
+        </div>
+        <div class="comic verticalMargin">
+            <a id="_link">
+                <img onload="updateButtonState()" id="_image" class="comicImage"/>
+            </a>
+        </div>
+        <script src="~/js/comic.js"></script>
+        <script>
+            
+        @foreach (var item in items)
+        {
+            // Populate the pages array with links and images.
+            var link = item.ToLink(Model.RootId);
+            var image = item.ToThumb(600);
+            <text>
+            pages.push({"link":'@link',"image":'@image'});
+            </text>
+        }
+
+            // Complate initialization.
+            end = pages.length - 1;
+            populate();
+
+        </script>
+    }
+}

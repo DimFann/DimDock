@@ -1,0 +1,52 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    @if(@ViewBag.UserScalable)
+    {
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    }
+    else
+    {
+        <meta name="viewport" content="width=device-width, user-scalable=no">
+    }
+    <title>@ViewData["Title"] - DimDock</title>
+    <link rel="stylesheet" href="~/css/dimdock.css" />
+</head>
+<body>
+    <header class="smallText">
+        @if(@ViewBag.ShowNavigation)
+        {
+        <div style="padding:10px;">
+            <a href="/">Home</a>
+            @if (ViewBag.SketchNavigation)
+            {
+                @("|")
+                <a href="/Sketch/">Sketch Archive Home</a>
+                <!--
+        @("|")
+        <a href="/Sketch/Custom/">Custom</a>
+        @("|")
+        <a href="/Sketch/About/">About</a>
+            -->
+            }
+            else
+            {
+                @("|")
+                <a href="/Sketch/">Sketch Archive</a>
+            }
+        </div>
+        }
+    </header>
+
+    <div>
+        <main role="main" class="container">
+            @RenderBody()
+        </main>
+    </div>
+
+    <footer>
+    </footer>
+
+</body>
+</html>
