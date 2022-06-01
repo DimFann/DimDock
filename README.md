@@ -1,7 +1,7 @@
 # DimDock
-server side code for dimdock.com
+Server-side code for dimdock.com
 
-webapp looks for "glabalSettings.json" under:
+The webapp looks for "globalSettings.json" under:
 ```
 C:\web\globalSettings.json (Windows)
 or
@@ -23,3 +23,11 @@ or
 	}
 }
 ```
+# How to deploy
+Make sure you're running at least .NET 6.0, clone the repository anywhere you'd like, then create the global settings file,
+making sure to fill in any field that's occupied by a placeholder, then build and run the project with
+```
+dotnet build
+dotnet run
+```
+within the project directory.
