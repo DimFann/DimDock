@@ -2,13 +2,14 @@
 server side code for dimdock.com
 
 webapp looks for "glabalSettings.json" under:
-
+```
 C:\web\globalSettings.json (Windows)
 or
 /web/globalSettings.json (Linux)
+```
 
 **globalSettings.json**
-
+```
 {
 	"DimDock":{
 		"Page":"https://www.dimdock.com/sketch/",
@@ -21,3 +22,4 @@ or
 		"FileIdTimeoutMs":3000,
 	}
 }
+```
