@@ -1,4 +1,4 @@
-﻿.aboutMe {
+.aboutMe {
     padding:10px;
     border-style: solid;
     border-color: black;
@@ -12,6 +12,9 @@ header {
         background-image: -webkit-gradient(linear, left top, right bottom, from(rgba(255, 255, 255, 1)), to(rgba(0, 0, 0, 0)));
     */
     background:white;
+    border-style: solid;
+    border-color: black;
+    border-width: 1px;
     position: sticky;
     top: 0;
     min-width:fit-content;
@@ -109,3 +112,4 @@ header {
 .comicImage {
     width: 100%;
 }
+
