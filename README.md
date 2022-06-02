@@ -1,7 +1,7 @@
 # DimDock
 server side code for dimdock.com
 
-webapp looks for "glabalSettings.json" under:
+webapp looks for "globalSettings.json" under:
 ```
 C:\web\globalSettings.json (Windows)
 or
