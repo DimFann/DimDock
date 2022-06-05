@@ -62,6 +62,7 @@ namespace DimDock.LinuxArchive
             app.UseRouting();
             app.UseAuthorization();
             app.UseEndpoints(endpoints => endpoints.MapRazorPages());
+	    app.UsePathBase(Configuration.GetValue<string>("Subdirectory"));
         }
     }
 }

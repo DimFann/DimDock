@@ -2,6 +2,8 @@
 @using SketchArchiveLib.Google;
 @using SketchArchiveLib;
 @using System.Text;
+@using Microsoft.Extensions.Configuration;
+@inject IConfiguration Configuration;
 @model DimDock.LinuxArchive.Pages.SketchModel
 @{
     ViewData["Title"] = "Sketch Archive";
@@ -10,15 +12,15 @@
 
 <table class="navTable verticalMargin">
     <!-- Relative navigation -->
-    <tr><td><a href="~/gallery/Sketch/?FolderId=@Model.RootId&RootId=@Model.RootId">/</a></td></tr>
-    <tr><td><a href="~/gallery/Sketch/?FolderId=@Model.ParentFolderId&RootId=@Model.RootId">..</a></td></tr>
+    <tr><td><a href="@Configuration.GetSection("AppConfig")["Subdirectory"]/Sketch/?FolderId=@Model.RootId&RootId=@Model.RootId">/</a></td></tr>
+    <tr><td><a href="@Configuration.GetSection("AppConfig")["Subdirectory"]/Sketch/?FolderId=@Model.ParentFolderId&RootId=@Model.RootId">..</a></td></tr>
 
     <!-- Per DriveItem navigation -->
     @foreach (var item in (Model?.FolderItems?.Files ?? Enumerable.Empty<GDriveItem>()).Folders().SortDirectoryItems())
     {
         var link = item.ToLink(Model.RootId);
         <tr>
-            <td><a href="~/gallery/Sketch/@link">@item.Name</a></td>
+            <td><a href="@Configuration.GetSection("AppConfig")["Subdirectory"]/Sketch/@link">@item.Name</a></td>
         </tr>
     }
 </table>
@@ -53,7 +55,7 @@ else if (Model.Display == Display.Comic)
                 <img onload="updateButtonState()" id="_image" class="comicImage"/>
             </a>
         </div>
-        <script src="~/gallery/js/comic.js"></script>
+        <script src="@Configuration.GetSection("AppConfig")["Subdirectory"]/js/comic.js"></script>
         <script>
             
         @foreach (var item in items)

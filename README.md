@@ -1,5 +1,5 @@
 # DimDock
-Server-side code for dimdock.com
+Server-side code for ricyart.net/gallery (originally used for dimdock.com)
 
 The webapp looks for "globalSettings.json" under:
 ```
@@ -31,3 +31,16 @@ dotnet build
 dotnet run
 ```
 within the project directory.
+
+This webapp is configured to work on the root directory of your domain by default. If you wish to change this
+(for instance, you want this webapp to work on "https://example.domain/gallery"), open
+```
+DimDock.LinuxArchive/appsettings.json
+```
+with any text editor of your choice, then fill in the "Subdirectory" field with a subdirectory you want this
+webapp to work on, following this example:
+```
+  "AppConfig": {
+        "Subdirectory": "/gallery",
+  }
+```

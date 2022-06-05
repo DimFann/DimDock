@@ -1,4 +1,6 @@
-﻿<!DOCTYPE html>
+﻿@using Microsoft.Extensions.Configuration
+@inject IConfiguration Configuration
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="utf-8" />
@@ -11,29 +13,29 @@
         <meta name="viewport" content="width=device-width, user-scalable=no">
     }
     <title>@ViewData["Title"] - RicyArt</title>
-    <link rel="stylesheet" href="~/gallery/css/dimdock.css" />
+    <link rel="stylesheet" href="@Configuration.GetSection("AppConfig")["Subdirectory"]/css/dimdock.css" />
 </head>
 <body>
     <header class="smallText">
         @if(@ViewBag.ShowNavigation)
         {
         <div style="padding:10px;">
-            <a href="/gallery">Home</a>
+            <a href="@Configuration.GetSection("AppConfig")["Subdirectory"]">Home</a>
             @if (ViewBag.SketchNavigation)
             {
                 @("|")
-                <a href="~/gallery/Sketch/">Sketch Archive Home</a>
+                <a href="@Configuration.GetSection("AppConfig")["Subdirectory"]/Sketch/">Sketch Archive Home</a>
                 <!--
         @("|")
-        <a href="~/gallery/Sketch/Custom/">Custom</a>
+        <a href="@Configuration.GetSection("AppConfig")["Subdirectory"]/Sketch/Custom/">Custom</a>
         @("|")
-        <a href="~/gallery/Sketch/About/">About</a>
+        <a href="@Configuration.GetSection("AppConfig")["Subdirectory"]/Sketch/About/">About</a>
             -->
             }
             else
             {
                 @("|")
-                <a href="~/gallery/Sketch/">Sketch Archive (NSFW)</a>
+                <a href="@Configuration.GetSection("AppConfig")["Subdirectory"]/Sketch/">Sketch Archive (NSFW)</a>
             }
         </div>
         }
