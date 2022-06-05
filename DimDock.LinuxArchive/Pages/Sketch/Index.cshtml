@@ -10,15 +10,15 @@
 
 <table class="navTable verticalMargin">
     <!-- Relative navigation -->
-    <tr><td><a href="/Sketch/?FolderId=@Model.RootId&RootId=@Model.RootId">/</a></td></tr>
-    <tr><td><a href="/Sketch/?FolderId=@Model.ParentFolderId&RootId=@Model.RootId">..</a></td></tr>
+    <tr><td><a href="~/gallery/Sketch/?FolderId=@Model.RootId&RootId=@Model.RootId">/</a></td></tr>
+    <tr><td><a href="~/gallery/Sketch/?FolderId=@Model.ParentFolderId&RootId=@Model.RootId">..</a></td></tr>
 
     <!-- Per DriveItem navigation -->
     @foreach (var item in (Model?.FolderItems?.Files ?? Enumerable.Empty<GDriveItem>()).Folders().SortDirectoryItems())
     {
         var link = item.ToLink(Model.RootId);
         <tr>
-            <td><a href="/Sketch/@link">@item.Name</a></td>
+            <td><a href="~/gallery/Sketch/@link">@item.Name</a></td>
         </tr>
     }
 </table>
@@ -53,7 +53,7 @@ else if (Model.Display == Display.Comic)
                 <img onload="updateButtonState()" id="_image" class="comicImage"/>
             </a>
         </div>
-        <script src="~/js/comic.js"></script>
+        <script src="~/gallery/js/comic.js"></script>
         <script>
             
         @foreach (var item in items)

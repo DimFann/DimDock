@@ -10,30 +10,30 @@
     {
         <meta name="viewport" content="width=device-width, user-scalable=no">
     }
-    <title>@ViewData["Title"] - DimDock</title>
-    <link rel="stylesheet" href="~/css/dimdock.css" />
+    <title>@ViewData["Title"] - RicyArt</title>
+    <link rel="stylesheet" href="~/gallery/css/dimdock.css" />
 </head>
 <body>
     <header class="smallText">
         @if(@ViewBag.ShowNavigation)
         {
         <div style="padding:10px;">
-            <a href="/">Home</a>
+            <a href="/gallery">Home</a>
             @if (ViewBag.SketchNavigation)
             {
                 @("|")
-                <a href="/Sketch/">Sketch Archive Home</a>
+                <a href="~/gallery/Sketch/">Sketch Archive Home</a>
                 <!--
         @("|")
-        <a href="/Sketch/Custom/">Custom</a>
+        <a href="~/gallery/Sketch/Custom/">Custom</a>
         @("|")
-        <a href="/Sketch/About/">About</a>
+        <a href="~/gallery/Sketch/About/">About</a>
             -->
             }
             else
             {
                 @("|")
-                <a href="/Sketch/">Sketch Archive (NSFW)</a>
+                <a href="~/gallery/Sketch/">Sketch Archive (NSFW)</a>
             }
         </div>
         }
