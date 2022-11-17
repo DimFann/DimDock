@@ -1,0 +1,83 @@
+﻿@page
+@model DimDock.LinuxArchive.Pages.Commissions.IndexModel
+@{
+}
+
+<div class="commissions">
+    <h2>Guidelines</h2>
+
+    <hr />
+    <h3>Payment</h3>
+    <ul>
+        <li>I only take payment through PayPal.</li>
+        <li>For Tier 3 and 4 I will send you an invoice when payment is due.</li>
+    </ul>
+
+    <hr />
+    <h3>I will draw SFW/NSFW.</h3>
+    <ul>
+        <li>If I've drawn it before it's a decent bet that I'd draw it again.</li>
+        <li>If you want to know if I'll draw something specific, ask. Worst case I say no, I'm not in the business of shaming.</li>
+    </ul>
+
+    <hr />
+    <h3>Turnarounds are ESTIMATES, unless we've discussed a deadline.</h3>
+    <ul>
+        <li>I will try to honor those estimates but life gets in the way sometimes, if you ever want to inquire on the status of your order please feel free to ask.</li>
+        <li>For queued work I will notify you when I've started working</li>
+    </ul>
+
+    <hr />
+    <h3>I will maintain two types of work, immediate and queued.</h3>
+    <ul>
+        <li>I will start immediate work upon acceptance & receipt of payment.</li>
+        <li>Immediate work will exist in a soft queue, I may let you know that there is a backlog before accepting your ask if this is the case.</li>
+        <li>Queued work will enter a work queue, I am limiting the length of this queue to 3 for the time being. I will work on these in the order that they are received/appear. I may work on some items concurrently, but the order of the list is the order of priority.</li>
+    </ul>
+
+    <hr />
+    <h3>Regarding revisions.</h3>
+    <h4>Tier 0 and Tier 1</h4>
+    <ul>
+        <li>I will not make major revisions.</li>
+        <li>If I've forgotten a minor detail let me know and I'll add it if possible.</li>
+    </ul>
+    <h4>Tier 2 and Tier 3</h4>
+    <ul>
+        <li>The time for revisions is after I've sent you a sketch to approve.</li>
+        <li>After you've approved the sketch it will get increasingly difficult to make major revisions so please call things out as soon as possible..</li>
+    </ul>
+    <h4>Tier 4</h4>
+    <ul>
+        <li>This is a process and may be a big expense on your part so I will try to accommodate revisions through all steps of the process.</li>
+        <li>What I mentioned for Tier 2 and 3 still applies.</li>
+        <li>If it can't be done without significant effort I will let you know and we can discuss options.</li>
+    </ul>
+
+    <hr />
+    @foreach (var item in Model?.Tiers.OrderBy(x => x.Id))
+    {
+        <div class="tier">
+            <h2 class="tierTitle">@item.Title</h2>
+            <div class="tierDescription">@item.Description</div>
+            <div><b>Pricing:</b>@item.Pricing</div>
+            <div><b>Turnaround:</b>@item.Turnaround</div>
+            <div class="tierDescription">
+                <h3>Notes</h3>
+                @Html.Raw(item.Notes)
+                <hr />
+                <h3>Examples</h3>
+                <div>
+
+                </div>
+                <div class="tierExample">
+                    @foreach (var ex in item.ExampleUrls)
+                    {
+                        <img src="@ex" />
+                    }
+                </div>
+            </div>
+        </div>
+    }
+
+</div>
