@@ -1,23 +1,24 @@
 ﻿@page
-@model DimDock.LinuxArchive.Pages.Commissions.IndexModel
+@using DimDock.LinuxArchive.Pages.Commissions;
+@model IndexModel
 @{
+    ViewData["Title"] = "Commissions";
 }
 
-<div class="commissions">
+<div class="aboutMe smallText">
     <h2>Guidelines</h2>
 
     <hr />
     <h3>Payment</h3>
     <ul>
-        <li>I only take payment through PayPal.</li>
-        <li>For Tier 3 and 4 I will send you an invoice when payment is due.</li>
+        <li>I'm based in the U.S. So any processor that works for that where I can issue invoices works for me.</li>
     </ul>
 
     <hr />
-    <h3>I will draw SFW/NSFW.</h3>
+    <h3>Will you draw X?</h3>
     <ul>
         <li>If I've drawn it before it's a decent bet that I'd draw it again.</li>
-        <li>If you want to know if I'll draw something specific, ask. Worst case I say no, I'm not in the business of shaming.</li>
+        <li>If you want to know if I'll draw something specific, ask. Worst case I say no.</li>
     </ul>
 
     <hr />
@@ -25,6 +26,7 @@
     <ul>
         <li>I will try to honor those estimates but life gets in the way sometimes, if you ever want to inquire on the status of your order please feel free to ask.</li>
         <li>For queued work I will notify you when I've started working</li>
+        <li>Could be sooner.</li>
     </ul>
 
     <hr />
@@ -55,13 +57,23 @@
     </ul>
 
     <hr />
+    <h3>I got more than what I asked for...</h3>
+    <ul>
+        <li>This kind of just happens sometimes.</li>
+        <li>What I'm charging for is the minimum level of work I'm going to do. I won't necessarily do more, but sometimes you just get in the zone y'know.</li>
+        <li>If you're a repeat customer and your last T1 wasn't as detailed as your first T1, then ayy that's why this is here.</li>
+    </ul>
+
+    <hr />
     @foreach (var item in Model?.Tiers.OrderBy(x => x.Id))
     {
         <div class="tier">
             <h2 class="tierTitle">@item.Title</h2>
             <div class="tierDescription">@item.Description</div>
             <div><b>Pricing:</b>@item.Pricing</div>
+            <div><b>Payment Due:</b>@item.PayWhen</div>
             <div><b>Turnaround:</b>@item.Turnaround</div>
+            <div><b>Queued:</b>@(item.Queued ? "Yes" : "No")</div>
             <div class="tierDescription">
                 <h3>Notes</h3>
                 @Html.Raw(item.Notes)
@@ -79,5 +91,4 @@
             </div>
         </div>
     }
-
 </div>

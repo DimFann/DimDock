@@ -1,10 +1,40 @@
-﻿.aboutMe {
-    padding:10px;
+﻿.tier {
+    border: solid 1px;
+    padding: 5px;
+    margin: 10px;
+    font-family: Courier New;
+}
+
+.tierTitle{
+    background-color:darkseagreen;
+}
+
+.tierDescription{
+}
+
+.tierExample {
+    display: flex;
+    overflow: scroll;
+    height: 200px;
+}
+
+.tierExample img {
+    max-height: 256px;
+    background-color: gray;
+}
+
+.aboutMe {
+    padding: 10px;
     border-style: solid;
     border-color: black;
     border-width: 1px;
     max-width: 512px;
     box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+}
+
+.aboutMe h1 h2 h3 h4 {
+    word-wrap: break-word;
+    white-space: normal;
 }
 
 header {
@@ -19,7 +49,7 @@ header {
 }
 
 .container{
-    display: grid;
+    display: block;
 }
 
 .navTable {
