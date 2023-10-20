@@ -5,8 +5,20 @@ using Newtonsoft.Json;
 
 namespace SketchArchiveLib.Google
 {
+    public class ShortcutDetails
+    {
+        [JsonProperty("targetId")]
+        public string TargetId;
+
+        [JsonProperty("targetMimeType")]
+        public string TargetMimeType;
+    }
+
     public class GDriveItem
     {
+        [JsonProperty("shortcutDetails")]
+        public ShortcutDetails ShortcutDetails;
+
         [JsonProperty("parents")]
         public List<string> Parents;
 
@@ -32,7 +44,7 @@ namespace SketchArchiveLib.Google
         {
             if (Folder)
             {
-                string url = $".?folderID={ID}";
+                string url = $".?folderID={ShortcutDetails?.TargetId ?? ID}";
 
                 if(!string.IsNullOrEmpty(ResourceKey))
                     url += $"&resourceKey={ResourceKey}";
@@ -71,11 +83,11 @@ namespace SketchArchiveLib.Google
             }
             else if(MimeType.StartsWith("video",StringComparison.OrdinalIgnoreCase))
             {
-                return $"https://drive.google.com/file/d/{ID}/view?resourceKey={ResourceKey}";
+                return $"https://drive.google.com/file/d/{ShortcutDetails?.TargetId ?? ID}/view?resourceKey={ResourceKey}";
             }
             else
             {
-                return $"./Viewer/?imageId={ID}";
+                return $"./Viewer/?imageId={ShortcutDetails?.TargetId ?? ID}";
             }
         }
 
@@ -84,7 +96,7 @@ namespace SketchArchiveLib.Google
             if (!Folder)
             {
                 string resourceKeyString = string.IsNullOrWhiteSpace(ResourceKey) ? "" : $"&resourceKey={ResourceKey}";
-                return $"https://drive.google.com/thumbnail?sz=w{width}&id={ID}{resourceKeyString}";
+                return $"https://drive.google.com/thumbnail?sz=w{width}&id={ShortcutDetails?.TargetId ?? ID}{resourceKeyString}";
             }
             return null;
         }

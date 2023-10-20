@@ -36,7 +36,7 @@ namespace SketchArchiveLib.Google
                 request.AddHeader("X-Goog-Drive-Resource-Keys", $"{id}/{resourceKey}");
 
             request.AddParameter("key", _apiKey);
-            request.AddParameter("fields", "id,name,mimeType,parents,description,resourceKey");
+            request.AddParameter("fields", "id,name,mimeType,parents,description,resourceKey,shortcutDetails");
             request.AddParameter("fileId", id);
 
             RestResponse response = await _restClient.ExecuteAsync(request);
@@ -62,7 +62,7 @@ namespace SketchArchiveLib.Google
             if (!string.IsNullOrWhiteSpace(resourceKey))
                 request.AddHeader("X-Goog-Drive-Resource-Keys", $"{folderID}/{resourceKey}");
 
-            request.AddParameter("fields", "files(id,name,mimeType,parents,description,resourceKey)");
+            request.AddParameter("fields", "files(id,name,mimeType,parents,description,resourceKey,shortcutDetails)");
             request.AddParameter("key", _apiKey);
             request.AddParameter("q", $"'{folderID}' in parents");
 
