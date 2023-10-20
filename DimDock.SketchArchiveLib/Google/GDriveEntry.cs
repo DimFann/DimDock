@@ -12,6 +12,9 @@ namespace SketchArchiveLib.Google
 
         [JsonProperty("targetMimeType")]
         public string TargetMimeType;
+
+        [JsonProperty("targetResourceKey")]
+        public string TargetResourceKey;
     }
 
     public class GDriveItem
@@ -83,7 +86,7 @@ namespace SketchArchiveLib.Google
             }
             else if(MimeType.StartsWith("video",StringComparison.OrdinalIgnoreCase))
             {
-                return $"https://drive.google.com/file/d/{ShortcutDetails?.TargetId ?? ID}/view?resourceKey={ResourceKey}";
+                return $"https://drive.google.com/file/d/{ShortcutDetails?.TargetId ?? ID}/view?resourceKey={ShortcutDetails?.TargetResourceKey ?? ResourceKey}";
             }
             else
             {
@@ -95,7 +98,10 @@ namespace SketchArchiveLib.Google
         {
             if (!Folder)
             {
-                string resourceKeyString = string.IsNullOrWhiteSpace(ResourceKey) ? "" : $"&resourceKey={ResourceKey}";
+                if (ShortcutDetails?.TargetResourceKey != null)
+                    Console.WriteLine("hello");
+
+                string resourceKeyString = string.IsNullOrWhiteSpace(ShortcutDetails?.TargetResourceKey ?? ResourceKey) ? "" : $"&resourceKey={ResourceKey}";
                 return $"https://drive.google.com/thumbnail?sz=w{width}&id={ShortcutDetails?.TargetId ?? ID}{resourceKeyString}";
             }
             return null;

@@ -65,13 +65,15 @@ namespace SketchArchiveLib.Google
             request.AddParameter("fields", "files(id,name,mimeType,parents,description,resourceKey,shortcutDetails)");
             request.AddParameter("key", _apiKey);
             request.AddParameter("q", $"'{folderID}' in parents");
+            request.AddParameter("pageSize", "1000");
 
             RestResponse response = await _restClient.ExecuteAsync(request);
 
             if (response.StatusCode == HttpStatusCode.OK)
             {
                 LastError = "";
-                return JsonConvert.DeserializeObject<GDriveFiles>(response.Content);
+                var gdf = JsonConvert.DeserializeObject<GDriveFiles>(response.Content);
+                return gdf;
             }
 
 #if DEV
