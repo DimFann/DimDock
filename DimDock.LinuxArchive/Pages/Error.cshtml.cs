@@ -1,11 +1,9 @@
+using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Logging;
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace DimDock.LinuxArchive.Pages
 {
@@ -23,9 +21,14 @@ namespace DimDock.LinuxArchive.Pages
             _logger = logger;
         }
 
-        public void OnGet()
+        public IActionResult OnGet()
         {
             RequestId = Activity.Current?.Id ?? HttpContext.TraceIdentifier;
+
+            var feature = HttpContext.Features.Get<IStatusCodeReExecuteFeature>();
+            Console.WriteLine(feature.OriginalPath);
+
+            return Redirect(feature.OriginalPath);
         }
     }
 }

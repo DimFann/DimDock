@@ -61,17 +61,22 @@ header {
     font-size: Large;
 }
 
-    .navTable td {
-        padding-left: 10px;
-    }
+.navTable td {
+    padding-left: 10px;
+}
 
-    .navTable tr:nth-child(even) {
-        background: #FFFFFF
-    }
+.navTable tr:nth-child(even) {
+    background: #FFFFFF
+}
 
-    .navTable tr:nth-child(odd) {
-        background: #EFF3FB
-    }
+.navTable tr:nth-child(odd) {
+    background: #EFF3FB
+}
+
+.easyUrl {
+    width: 100%;
+    max-width: 512px;
+}
 
 .gallery {
     margin: -5px;

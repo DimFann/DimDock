@@ -101,8 +101,20 @@ namespace SketchArchiveLib.Google
                 if (ShortcutDetails?.TargetResourceKey != null)
                     Console.WriteLine("hello");
 
-                string resourceKeyString = string.IsNullOrWhiteSpace(ShortcutDetails?.TargetResourceKey ?? ResourceKey) ? "" : $"&resourceKey={ResourceKey}";
-                return $"https://drive.google.com/thumbnail?sz=w{width}&id={ShortcutDetails?.TargetId ?? ID}{resourceKeyString}";
+                if (MimeType.StartsWith("video", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Google please fix, wtf.
+                    string resourceKeyString = string.IsNullOrWhiteSpace(ShortcutDetails?.TargetResourceKey ?? ResourceKey) ? "" : $"&resourcekey={ResourceKey}";
+                    var url = $"https://drive.google.com/thumbnail?sz=w{width}&id={ShortcutDetails?.TargetId ?? ID}{resourceKeyString}";
+                    return url;
+                }
+                else
+                {
+                    string resourceKeyString = string.IsNullOrWhiteSpace(ShortcutDetails?.TargetResourceKey ?? ResourceKey) ? "" : $"&resourceKey={ResourceKey}";
+                    var url = $"https://drive.google.com/thumbnail?sz=w{width}&id={ShortcutDetails?.TargetId ?? ID}{resourceKeyString}";
+                    return url;
+                }
+                
             }
             return null;
         }

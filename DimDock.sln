@@ -1,11 +1,21 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.30517.126
+# Visual Studio Version 17
+VisualStudioVersion = 17.5.33530.505
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DimDock.LinuxArchive", "DimDock.LinuxArchive\DimDock.LinuxArchive.csproj", "{A0C40C1D-4AA6-4BF0-8411-B23E53ACD53A}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "DimDock.SketchArchiveLib", "DimDock.SketchArchiveLib\DimDock.SketchArchiveLib.csproj", "{D7E8D418-7EAF-4EEE-B1AC-DA0ABD8A2CAA}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Sandbox", "Sandbox\Sandbox.csproj", "{D9E9D621-F9D6-4284-9F7B-C964DBDF76EB}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{03CFF615-0D65-4811-B57F-773CD6D6CE3A}"
+	ProjectSection(SolutionItems) = preProject
+		.gitignore = .gitignore
+		examples\globalSettings.json = examples\globalSettings.json
+		LICENSE = LICENSE
+		README.md = README.md
+	EndProjectSection
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -21,6 +31,10 @@ Global
 		{D7E8D418-7EAF-4EEE-B1AC-DA0ABD8A2CAA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D7E8D418-7EAF-4EEE-B1AC-DA0ABD8A2CAA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D7E8D418-7EAF-4EEE-B1AC-DA0ABD8A2CAA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D9E9D621-F9D6-4284-9F7B-C964DBDF76EB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D9E9D621-F9D6-4284-9F7B-C964DBDF76EB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D9E9D621-F9D6-4284-9F7B-C964DBDF76EB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D9E9D621-F9D6-4284-9F7B-C964DBDF76EB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

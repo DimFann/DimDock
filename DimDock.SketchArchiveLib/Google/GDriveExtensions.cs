@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 
@@ -11,7 +10,7 @@ namespace SketchArchiveLib.Google
         {
             return items.OrderBy(x =>
             {
-                StringBuilder sb = new StringBuilder();
+                StringBuilder sb = new();
                 for(int i = 0; i < x.Name.Length; i++)
                 {
                     if (char.IsDigit(x.Name[i]))
