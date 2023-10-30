@@ -40,6 +40,9 @@ namespace SketchArchiveLib.Google
         [JsonProperty("resourceKey")]
         public string ResourceKey;
 
+        [JsonProperty("modifiedTime")]
+        public DateTime ModifiedTime;
+
         [JsonIgnore]
         public bool Folder { get { return !string.IsNullOrEmpty(MimeType) && MimeType.IndexOf("folder", System.StringComparison.OrdinalIgnoreCase) >= 0; } }
 
@@ -122,6 +125,9 @@ namespace SketchArchiveLib.Google
 
     public class GDriveFiles
     {
+        [JsonProperty("description")]
+        public string Description;
+
         [JsonProperty("files")]
         public List<GDriveItem> Files;
     }

@@ -148,12 +148,12 @@ namespace DimDock.SketchArchiveLib.Google
         /// </summary>
         /// <param name="path"></param>
         /// <returns></returns>
-        public DriveMapItem GetFolderId(string path)
+        public (string Path, DriveMapItem Item) GetFolderId(string path)
         {
             lock(_lock)
             {
                 if (_map.ContainsKey(path))
-                    return _map[path];
+                    return (path,_map[path]);
                 else
                     return default;
             }

@@ -8,7 +8,28 @@
     ViewBag.SketchNavigation = true;
 }
 
-<input class="easyUrl" value="@Model.EasyUrl"/>
+@if (!string.IsNullOrWhiteSpace(Model.Path) || !string.IsNullOrWhiteSpace(Model.EasyUrl))
+{
+    <div class="navBlock">
+        @if(!string.IsNullOrWhiteSpace(Model.Path))
+        {
+            <h3>@Model.Path</h3>
+        }
+
+        @if(!string.IsNullOrWhiteSpace(Model.EasyUrl))
+        {
+            <input class="easyUrl" value="@Model.EasyUrl"/>
+        }
+    </div>
+}
+
+@if (!string.IsNullOrWhiteSpace(Model.Description))
+{
+<div class="navDescription">
+    <pre>@Model.Description</pre>
+</div>
+}
+
 <table class="navTable verticalMargin">
     <!-- Relative navigation -->
     <tr><td><a href="/Sketch/?FolderId=@Model.RootId&RootId=@Model.RootId">/</a></td></tr>

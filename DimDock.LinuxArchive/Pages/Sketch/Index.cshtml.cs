@@ -32,7 +32,9 @@ namespace DimDock.LinuxArchive.Pages
         public string ParentFolderId { get; set; } = string.Empty;
         public string FolderName { get; set; } = string.Empty;
         public string ResourceKey { get; set; } = string.Empty;
+        public string Path { get; set; } = string.Empty;
         public string EasyUrl { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
 
         public GDriveFiles FolderItems = null;
 
@@ -41,12 +43,12 @@ namespace DimDock.LinuxArchive.Pages
             var url = HttpUtility.UrlDecode(Request.Query["url"]);
             if(!string.IsNullOrWhiteSpace(url))
             {
-                var item = _driveMap.GetFolderId(url);
-                if(item != null)
+                (string Path, DriveMapItem Item) = _driveMap.GetFolderId(url);
+                if(Item != null)
                 {
-                    string newUrl = $"/Sketch?folderID={item.FolderId}";
-                    if (!string.IsNullOrWhiteSpace(item.ResourceKey))
-                        newUrl += $"&resourceKey={item.ResourceKey}";
+                    string newUrl = $"/Sketch?folderID={Item.FolderId}";
+                    if (!string.IsNullOrWhiteSpace(Item.ResourceKey))
+                        newUrl += $"&resourceKey={Item.ResourceKey}";
                     return Redirect(newUrl);
                 }
                 else
@@ -70,8 +72,9 @@ namespace DimDock.LinuxArchive.Pages
             var request = HttpContext.Request;
             if (easyUrlEntry != default)
             {
+                Path = easyUrlEntry.Name;
                 var split = easyUrlEntry.Name.Split('/').Select(x=>Uri.EscapeDataString(x));
-                EasyUrl = $"{request.Scheme}://{request.Host}/Sketch/{string.Join("/",split)}";
+                EasyUrl = $"{request.Scheme}://{request.Host}/Sketch?url={string.Join("/",split)}";
             }
             else
                 EasyUrl = $"{request.Scheme}://{request.Host}/Sketch";
@@ -90,12 +93,32 @@ namespace DimDock.LinuxArchive.Pages
             if (string.IsNullOrWhiteSpace(FolderId))
                 FolderId = RootId;
 
-            if (string.IsNullOrWhiteSpace(ParentFolderId))
+            // See if DriveMap has it.
+            if (string.IsNullOrWhiteSpace(ParentFolderId) && FolderId != RootId && !string.IsNullOrWhiteSpace(Path))
+                ParentFolderId = GetParentId(Path);
+
+            // Default to the Root ID.
+            if(string.IsNullOrWhiteSpace(ParentFolderId))
                 ParentFolderId = RootId;
 
             FolderItems = await _driveReader.GetFolderContentsAsync(FolderId, ResourceKey);
 
+            Description = FolderItems.Description;
+
             return null;
+        }
+
+        private string GetParentId(string path)
+        {
+            int idx = path.LastIndexOf('/');
+            if(idx >= 0)
+            {
+                path = path[..idx].TrimEnd('/');
+                (_, DriveMapItem Item) = _driveMap.GetFolderId(path);
+                return Item?.FolderId;
+            }
+            else
+                return null;
         }
     }
 }
