@@ -79,7 +79,7 @@ namespace SketchArchiveLib.Google
                     if(!string.IsNullOrWhiteSpace(description))
                         gdf.Description = description;
                 }
-                catch(Exception e)
+                catch(Exception)
                 {
                     // TODO: Log this or something.
                 }

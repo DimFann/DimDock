@@ -1,8 +1,10 @@
+using DimDock.SketchArchiveLib;
 using DimDock.SketchArchiveLib.Google;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Rewrite;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 using SketchArchiveLib.Google;
 using System;
@@ -73,9 +75,14 @@ namespace DimDock.LinuxArchive
                 Configuration.GetSection("DimDock:HiddenFeatures:DriveMap:ApiDelayMs").Get<int>(),
                 Configuration.GetSection("DimDock:HiddenFeatures:DriveMap:RefreshIntervalMinutes").Get<int>()
             );
+            TextFileCache textFileCache = new(
+                Path.Combine("wwwroot", "md"),
+                "*.md"
+            );
 
             services.AddSingleton(driveReader);
             services.AddSingleton(driveMap);
+            services.AddSingleton(textFileCache);
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -92,6 +99,20 @@ namespace DimDock.LinuxArchive
             app.UseRouting();
             app.UseAuthorization();
             app.UseEndpoints(endpoints => endpoints.MapRazorPages());
+
+            app.UseStaticFiles(new StaticFileOptions()
+            {
+                FileProvider = new PhysicalFileProvider(
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"node_modules", "marked")),
+                RequestPath = "/npm/marked"
+            });
+
+            app.UseStaticFiles(new StaticFileOptions()
+            {
+                FileProvider = new PhysicalFileProvider(
+                    Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"node_modules", "dompurify","dist")),
+                RequestPath = "/npm/dompurify"
+            });
         }
 
         public void SketchTraverse(RewriteContext context)

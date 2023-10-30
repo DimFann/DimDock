@@ -8,27 +8,33 @@
     ViewBag.SketchNavigation = true;
 }
 
-@if (!string.IsNullOrWhiteSpace(Model.Path) || !string.IsNullOrWhiteSpace(Model.EasyUrl))
+<div class="navBlock">
+@*@if(!string.IsNullOrWhiteSpace(Model.Path))
 {
-    <div class="navBlock">
-        @if(!string.IsNullOrWhiteSpace(Model.Path))
-        {
-            <h3>@Model.Path</h3>
-        }
+    <h3>@Model.Path</h3>
+}*@
 
-        @if(!string.IsNullOrWhiteSpace(Model.EasyUrl))
-        {
-            <input class="easyUrl" value="@Model.EasyUrl"/>
-        }
-    </div>
+@if(!string.IsNullOrWhiteSpace(Model.EasyUrl))
+{
+    <input class="easyUrl" value="@Model.EasyUrl"/>
 }
 
 @if (!string.IsNullOrWhiteSpace(Model.Description))
 {
-<div class="navDescription">
-    <pre>@Model.Description</pre>
-</div>
+        <div class="navDescription smallText">
+        <div class="markdown" id="descriptionMarkdown">
+        </div>
+    </div>
+    <script src="/npm/marked/marked.min.js"></script>
+    <script src="/npm/dompurify/purify.min.js"></script>
+    <script>
+        document.getElementById('descriptionMarkdown').innerHTML =
+            DOMPurify.sanitize(marked.parse(@Html.Raw(Json.Serialize(Model.Description))));
+    </script>
 }
+</div>
+
+
 
 <table class="navTable verticalMargin">
     <!-- Relative navigation -->
@@ -95,3 +101,4 @@ else if (Model.Display == Display.Comic)
         </script>
     }
 }
+
