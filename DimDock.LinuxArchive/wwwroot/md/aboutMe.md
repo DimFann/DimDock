@@ -67,7 +67,10 @@ The URLs are weird and long and unreadable because all this site does is pass ar
 This about page is Markdown compiled to HTML using [markedjs/marked (GitHub)](https://github.com/markedjs/marked)
 Any captions on any folder pages in the archive are compiled in the same way, the text is taken from the description field on GDrive folders.
 
-#### Please let me know if something is broken.
-DMs on Twitter or Discord are good, GitHub issues and pull requests are good too.
+#### Please let me know if something is broken, vunerable, or just implemented in a trash way.
+DMs on Twitter or Discord are good, GitHub issues and pull requests are very much appreciated.
+
+#### Have any ideas that might be cool to add.
+Let me know, and I'll see what I can do if I like the idea.
 
 
