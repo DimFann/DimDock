@@ -43,6 +43,27 @@ namespace SketchArchiveLib.Google
         [JsonProperty("modifiedTime")]
         public DateTime ModifiedTime;
 
+        public string RelativeModifiedTime
+        {
+            get
+            {
+                var time = DateTime.UtcNow - ModifiedTime;
+                if (time.TotalDays >= 365)
+                    return $"{(int)time.TotalDays / 365} years ago";
+                if (time.TotalDays > 31)
+                    return $"{(int)time.TotalDays / 31} months ago";
+                else if (time.TotalDays >= 1)
+                    return $"{(int)time.TotalDays} days ago";
+                else if (time.TotalHours >= 1)
+                    return $"{(int)time.TotalHours} hours ago";
+                else if (time.TotalMinutes >= 1)
+                    return $"{(int)time.TotalMinutes} minutes ago";
+                else
+                    return "moments ago";
+                    
+            }
+        }
+
         [JsonIgnore]
         public bool Folder { get { return !string.IsNullOrEmpty(MimeType) && MimeType.IndexOf("folder", System.StringComparison.OrdinalIgnoreCase) >= 0; } }
 
