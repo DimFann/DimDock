@@ -43,6 +43,13 @@ namespace DimDock.LinuxArchive.Pages
             var url = HttpUtility.UrlDecode(Request.Query["url"]);
             if(!string.IsNullOrWhiteSpace(url))
             {
+                // This is a legacy url, these are out there but don't create these anymore.
+                if(url.StartsWith("Sketches__"))
+                {
+                    string[] split = url.Split("__").Skip(1).ToArray(); // Remove "Sketches"
+                    url = string.Join("/", split);
+                }
+
                 (string Path, DriveMapItem Item) = _driveMap.GetFolderId(url);
                 if(Item != null)
                 {
