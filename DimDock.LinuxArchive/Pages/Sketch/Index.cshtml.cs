@@ -110,7 +110,7 @@ namespace DimDock.LinuxArchive.Pages
 
             FolderItems = await _driveReader.GetFolderContentsAsync(FolderId, ResourceKey);
 
-            Description = FolderItems.Description;
+            Description = FolderItems.Description?.Replace("\r\n", "\n").Replace("\n", "\n\n"); ;
 
             return null;
         }
