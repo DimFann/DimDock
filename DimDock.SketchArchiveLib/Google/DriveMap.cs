@@ -48,6 +48,7 @@ namespace DimDock.SketchArchiveLib.Google
         private readonly string _rootFolderId;
         private readonly string _rootFolderResourceKey;
         private readonly string _cachedMap;
+        private readonly bool _enableRefresh;
 
         /// <summary>
         /// Constructor.
@@ -82,18 +83,18 @@ namespace DimDock.SketchArchiveLib.Google
             _rootFolderId = rootFolderId;
             _rootFolderResourceKey = rootFolderResourceKey;
             _apiDelayMs = apiDelayMs;
+            _enableRefresh = enableRefresh;
+
+            _rebuildTimer = new Timer();
+            _rebuildTimer.Elapsed += OnElapsedRebuildTimer;
+            _rebuildTimer.Interval = refreshIntervalMinutes * 60 * 1000;
+            _rebuildTimer.AutoReset = true;
 
             if(buildOnStart)
                 OnElapsedRebuildTimer(null, null);
 
-            if(enableRefresh)
-            {
-                _rebuildTimer = new Timer();
-                _rebuildTimer.Elapsed += OnElapsedRebuildTimer;
-                _rebuildTimer.Interval = refreshIntervalMinutes * 60 * 1000;
-                _rebuildTimer.AutoReset = true;
+            if(_enableRefresh)
                 _rebuildTimer.Start();
-            }
         }
 
         /// <summary>
@@ -171,7 +172,8 @@ namespace DimDock.SketchArchiveLib.Google
         {
             try
             {
-                _rebuildTimer.Stop();
+                if(_enableRefresh)
+                    _rebuildTimer.Stop();
 
                 var newMap = BuildMap(_driveReader, _rootFolderId, _rootFolderResourceKey, _apiDelayMs, _logger);
                 if(newMap != null)
@@ -193,7 +195,8 @@ namespace DimDock.SketchArchiveLib.Google
             }
             finally
             {
-                _rebuildTimer.Start();
+                if(_enableRefresh)
+                    _rebuildTimer.Start();
             }
         }
 

@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using SketchArchiveLib;
+using static System.Net.WebRequestMethods;
 
 namespace DimDock.LinuxArchive.Pages.Sketch
 {
@@ -21,6 +22,7 @@ namespace DimDock.LinuxArchive.Pages.Sketch
             ImageId = imageId ?? ImageId;
             if(!string.IsNullOrWhiteSpace(ImageId))
             {
+                //ImageUrl = $"https://drive.usercontent.google.com/download?id={ImageId}&export=view&authuser=0";
                 ImageUrl = $"https://drive.google.com/uc?export=view&id={ImageId}";
             }
             else

@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using Newtonsoft.Json;
+using static System.Net.Mime.MediaTypeNames;
 
 namespace SketchArchiveLib.Google
 {
@@ -114,7 +115,8 @@ namespace SketchArchiveLib.Google
             }
             else
             {
-                return $"./Viewer/?imageId={ShortcutDetails?.TargetId ?? ID}";
+                return $"https://drive.google.com/uc?export=view&id={ShortcutDetails?.TargetId ?? ID}";
+                //return $"./Viewer/?imageId={ShortcutDetails?.TargetId ?? ID}";
             }
         }
 

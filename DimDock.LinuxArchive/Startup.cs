@@ -48,8 +48,8 @@ namespace DimDock.LinuxArchive
             }).CreateLogger("DimDock");
 
             // Set this to a known value if not provided.
-            if(!Configuration.GetSection("DimDock:HiddenFeatures:DriveMap:CacheFile").Exists())
-                Configuration["DimDock:HiddenFeatures:DriveMap:CacheFile"] = Path.Combine(webRootPath, "dimdock.drivemap.cache.json");
+            if(!Configuration.GetSection("DimDock:MaintenanceFeatures:DriveMap:CacheFile").Exists())
+                Configuration["DimDock:MaintenanceFeatures:DriveMap:CacheFile"] = Path.Combine(webRootPath, "dimdock.drivemap.cache.json");
         }
 
         public ILogger Logger { get; }
@@ -66,14 +66,14 @@ namespace DimDock.LinuxArchive
                 Configuration["DimDock:ApiUrlGetFiles"]
             );
             DriveMap driveMap = new(
-                Configuration["DimDock:HiddenFeatures:DriveMap:CacheFile"],
+                Configuration["DimDock:MaintenanceFeatures:DriveMap:CacheFile"],
                 driveReader,
                 Configuration["DimDock:RootId"],
                 Configuration["DimDock:ResourceKey"],
-                Configuration.GetSection("DimDock:HiddenFeatures:DriveMap:EnableRefresh").Get<bool>(),
+                Configuration.GetSection("DimDock:MaintenanceFeatures:DriveMap:EnableRefresh").Get<bool>(),
                 Logger,
-                Configuration.GetSection("DimDock:HiddenFeatures:DriveMap:ApiDelayMs").Get<int>(),
-                Configuration.GetSection("DimDock:HiddenFeatures:DriveMap:RefreshIntervalMinutes").Get<int>()
+                Configuration.GetSection("DimDock:MaintenanceFeatures:DriveMap:ApiDelayMs").Get<int>(),
+                Configuration.GetSection("DimDock:MaintenanceFeatures:DriveMap:RefreshIntervalMinutes").Get<int>()
             );
             TextFileCache textFileCache = new(
                 Path.Combine("wwwroot", "md"),
@@ -90,9 +90,8 @@ namespace DimDock.LinuxArchive
         {
             app.UseHttpsRedirection();
             app.UseStaticFiles();
-            app.UseRewriter(new RewriteOptions().Add(SketchTraverse));
 
-            app.UseStatusCodePagesWithReExecute("/Error");
+            app.UseStatusCodePagesWithRedirects("/Error?statusCode={0}");
             app.UseExceptionHandler("/Error");
             app.UseHsts();
 
@@ -113,25 +112,6 @@ namespace DimDock.LinuxArchive
                     Path.Combine(AppDomain.CurrentDomain.BaseDirectory,"node_modules", "dompurify","dist")),
                 RequestPath = "/npm/dompurify"
             });
-        }
-
-        public void SketchTraverse(RewriteContext context)
-        {
-            var request = context.HttpContext.Request;
-            var path = request.Path.ToString();
-
-            // TODO:    This is kind of hacky, but I personally will never make a folder
-            //          Named "Viewer" at the root of my archive.
-            //          If you intend to do that feel free to make the change.
-            //          I'm avoiding it now because it'll break links people have already copied.
-            if (path.StartsWith("/Sketch/") && !path.StartsWith("/Sketch/Viewer"))
-            {
-                path = path[8..];
-                if (!string.IsNullOrWhiteSpace(path))
-                {
-                    context.HttpContext.Request.Path = $"/Sketch?url={path}";
-                }
-            }
         }
     }
 }
