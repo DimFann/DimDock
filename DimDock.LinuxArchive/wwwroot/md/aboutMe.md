@@ -6,7 +6,8 @@
 Hi, I'm Dim.
 <br>
 I draw for fun on my free time.
-Do software stuff for a living.
+Did software stuff for a living, trying to do that again. Layoffs are a bitch. 
+If you need a moderately capable .NET dev (8 yrs backend) and you're cool with me being weird on my own time HMU.
 
 ---
 #### If you want to reach me: Twitter is a good place. You can probably guess my Discord handle.
@@ -16,6 +17,7 @@ I also post on social media when I remember to.
 #### Mostly active on:
 * [@DimFann, Twitter (SFW)](https://twitter.com/DimFann)
 * [@difasesa, Twitter (SFW)](https://twitter.com/difasesa)
+* [@dimfann, BlueSky (SFW/NSFW/Shitposting)](https://bsky.app/profile/dimfann.bsky.social)
 
 #### Less active on:
 * [Mastodon.Art](https://mastodon.art/@DimFann)
@@ -60,12 +62,6 @@ Don't be a dick, don't trace then pretend you didn't.
 ---
 #### I like this website, I want to know more about it.
 [DimFann/DimDock GitHub](https://github.com/DimFann/DimDock)
-<br>
-This is an ASP.NET Core site running Razor Pages.
-The content is served by Google, using the Google Drive API.
-The URLs are weird and long and unreadable because all this site does is pass around a GDrive folder IDs and resource keys.
-This about page is Markdown compiled to HTML using [markedjs/marked (GitHub)](https://github.com/markedjs/marked)
-Any captions on any folder pages in the archive are compiled in the same way, the text is taken from the description field on GDrive folders.
 
 #### Please let me know if something is broken, vunerable, or just implemented in a trash way.
 DMs on Twitter or Discord are good, GitHub issues and pull requests are very much appreciated.

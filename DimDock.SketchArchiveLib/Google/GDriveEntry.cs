@@ -66,7 +66,22 @@ namespace SketchArchiveLib.Google
         }
 
         [JsonIgnore]
-        public bool Folder { get { return !string.IsNullOrEmpty(MimeType) && MimeType.IndexOf("folder", System.StringComparison.OrdinalIgnoreCase) >= 0; } }
+        public bool Folder 
+        { 
+            get 
+            {
+                return 
+                // Is a folder.
+                (!string.IsNullOrEmpty(MimeType) && 
+                MimeType.Contains("folder", System.StringComparison.OrdinalIgnoreCase))
+                            
+                ||
+
+                // Is a shortcut to a folder.
+                (!string.IsNullOrEmpty(ShortcutDetails?.TargetMimeType) && 
+                ShortcutDetails.TargetMimeType.Contains("folder", StringComparison.OrdinalIgnoreCase));      
+            } 
+        }
 
         public string ToLink(string rootID, Display? displayOverride = null)
         {
