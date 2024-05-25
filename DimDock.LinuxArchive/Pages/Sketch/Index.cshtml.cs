@@ -81,10 +81,10 @@ namespace DimDock.LinuxArchive.Pages
             {
                 Path = easyUrlEntry.Name;
                 var split = easyUrlEntry.Name.Split('/').Select(x=>Uri.EscapeDataString(x));
-                EasyUrl = $"{request.Scheme}://{request.Host}/Sketch?url={string.Join("/",split)}";
+                EasyUrl = $"{(request.IsHttps ? "https" : "http")}://{request.Host}/Sketch?url={string.Join("/",split)}";
             }
             else
-                EasyUrl = $"{request.Scheme}://{request.Host}/Sketch";
+                EasyUrl = $"{(request.IsHttps ? "https" : "http")}://{request.Host}/Sketch";
 
             if (string.IsNullOrWhiteSpace(ResourceKey))
                 ResourceKey = _resourceKey;
