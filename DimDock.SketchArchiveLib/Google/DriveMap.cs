@@ -119,20 +119,24 @@ namespace DimDock.SketchArchiveLib.Google
         ):
             this(driveReader,rootFolderId,rootFolderResourceKey,false,enableRefresh,logger, apiDelayMs, refreshIntervalMinutes)
         {
-            var map = LoadMap(cachedMap,logger);
+            _cachedMap = cachedMap;
+
+            var map = LoadMap(_cachedMap,logger);
             if(map != null)
             {
                 lock(_lock)
                 {
                     _map.Clear();
                     _map = map;
-                    _cachedMap = cachedMap;
                 }
             }
             else
             {
-                // Load failed.
-                OnElapsedRebuildTimer(null, null);
+                // Load failed, just run this in the background.
+                Task.Run(() =>
+                {
+                    Rebuild();
+                });
             }
         }
 
