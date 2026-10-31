@@ -1,0 +1,57 @@
+version: '3.8'
+
+services:
+  db:
+    image: mariadb:latest
+    container_name: mariadb
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: myuser
+      MYSQL_PASSWORD: mypassword
+    volumes:
+      - ./db_data:/var/lib/mysql
+      - ./init:/docker-entrypoint-initdb.d
+    ports:
+      - "43306:3306"
+
+  # db-console:
+  #   image: mariadb:latest
+  #   container_name: console
+  #   depends_on:
+  #     - db
+  #   stdin_open: true
+  #   tty: true
+  #   command: ["sh", "-c", "trap 'exit 0' INT; sleep infinity"]
+
+  path-loader:
+    build: ./path_loader
+    container_name: path-loader
+    depends_on:
+      - db
+    volumes:
+      - ./app_state:/app_state
+      - ./img_src:/img_src
+      - ./img_db_thumbs:/img_db_thumbs
+    environment:
+      DB_HOST: db
+      DB_USER: myuser
+      DB_PASSWORD: mypassword
+      DB_NAME: mydb
+    command: ["python", "/app/load_paths.py"]
+
+  website:
+    build: ./website
+    container_name: website
+    depends_on:
+      - path-loader
+    ports:
+      - "8080:80"
+    environment:
+      ASPNETCORE_URLS: http://+:80
+      ConnectionStrings__DefaultConnection: "Server=db;Port=43306;Database=mydb;User=myuser;Password=mypassword;"
+    volumes:
+      - ./app_state:/app_state
+      - ./img_src:/img_src
+      - ./img_db_thumbs:/img_db_thumbs

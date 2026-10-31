@@ -1,0 +1,33 @@
+@page
+@model SearchModel
+@{
+    ViewData["Title"] = "Search";
+}
+
+<h2>Search</h2>
+
+<form method="post">
+    <label for="InputPath">Enter Path:</label>
+    <input type="text" id="InputPath" name="InputPath" value="@Model.InputPath" />
+    <button type="submit">Submit</button>
+</form>
+
+@if (!string.IsNullOrEmpty(Model.Message))
+{
+    <p style="color: gray;">@Model.Message</p>
+}
+
+@if (Model.Results.Any())
+{
+    <h3>Results for "@Model.InputPath"</h3>
+    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+        @foreach (var item in Model.Results)
+        {
+            var ext = Model.GetExtension(item.OriginalName);
+            <a href="@($"/img_db/{item.Id}.{ext}")" target="_blank" style="text-decoration: none;">
+                <img src="@($"/img_db_thumbs/{item.Id}.png")" alt="@item.OriginalName"
+                    style="border: 1px solid #ccc; padding: 4px; width: 150px; height: auto;" />
+            </a>
+        }
+    </div>
+}

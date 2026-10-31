@@ -1,0 +1,60 @@
+@model GalleryModel
+
+@if (!string.IsNullOrEmpty(Model.Message))
+{
+    <p style="color: gray;">@Model.Message</p>
+}
+
+<!-- Path table wrapper -->
+<div style="max-width: 400px; margin-left: 0; font-family: 'Courier New', monospace;">
+    <table style="width: 100%; border-collapse: collapse; border: 1px solid #e0f0ff;">
+        <tr style="background-color: #f0f0f0;">
+            <td style="border: 1px solid #e0f0ff;"><a href="/Gallery">/</a></td>
+        </tr>
+        <tr style="background-color: #ffffff;">
+            <td style="border: 1px solid #e0f0ff;">
+                <a href="@($"/Gallery/{(Model.ParentPath == "root" ? "" : Model.ParentPath)}")">..</a>
+            </td>
+        </tr>
+        @if (Model.Paths.Any())
+        {
+            var rowIndex = 0;
+            foreach (var path in Model.Paths)
+            {
+                var segments = path.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                var lastSegment = segments.Length > 0 ? segments[^1] : path.Path;
+                var bg = rowIndex % 2 == 0 ? "#f0f0f0" : "#ffffff";
+                <tr style="background-color: @bg;">
+                    <td style="border: 1px solid #e0f0ff;">
+                        <a href="@($"/Gallery/{path.Path}")">@Html.Encode(lastSegment)</a>
+                    </td>
+                </tr>
+                rowIndex++;
+            }
+        }
+    </table>
+    @if (!string.IsNullOrWhiteSpace(Model.PathEntry?.Description))
+    {
+        <div style="max-width: 600px; margin: 16px 0; border: 1px solid #e0f0ff; font-size: 12px; background-color: #e8e8e8">
+            @Html.Raw(Markdig.Markdown.ToHtml(Model.PathEntry.Description))
+        </div>
+    }
+</div>
+
+<hr style="margin: 24px 0; border: none; border-top: 1px solid #ccc;" />
+
+<!-- Image grid -->
+@if (Model.Items.Any())
+{
+    <div style="width: 100%; display: flex; flex-wrap: wrap; gap: 12px;">
+        @foreach (var item in Model.Items)
+        {
+            var fullPath = $"/img_src/{item.ParentPath}/{item.OriginalName}";
+            <a href="@fullPath" target="_blank" style="text-decoration: none;">
+                <img src="@($"/img_db_thumbs/{item.Id}.png")"
+                     alt="@item.OriginalName ?? $"Image {item.Id}""
+                     style="border: 1px solid #ccc; padding: 4px; width: 256px; height: 256px; object-fit: cover;" />
+            </a>
+        }
+    </div>
+}

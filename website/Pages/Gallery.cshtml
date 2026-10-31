@@ -1,0 +1,33 @@
+@page "{*path}"
+@model GalleryModel
+@{
+    ViewData["Title"] = "Gallery";
+}
+
+<!-- Title and spinner aligned left -->
+<div style="max-width: 400px; margin-left: 0;">
+    <h4 style="text-align: left;">@Model.Path</h4>
+    <div id="loadingSpinner"></div>
+</div>
+
+<!-- Results container spans full width -->
+<div id="galleryResults">
+    @await Html.PartialAsync("_GalleryResults", Model)
+</div>
+
+<style>
+#loadingSpinner {
+    display: none;
+    margin: 16px 0;
+    width: 32px;
+    height: 32px;
+    border: 4px solid #cce6ff;
+    border-top: 4px solid #3399ff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+@@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+</style>
