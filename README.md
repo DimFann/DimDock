@@ -44,8 +44,8 @@ additions without restarting the website. Blog imports use a unique
 source-filename key, defined in the initial schema. Blog files are imported
 once when `app_state/.blogs_initialized` is absent; the loader drops and
 recreates the `Blogs` table, then imports the current files. To rebuild blogs
-after adding, editing, or removing files, delete that marker and recreate the
-path-loader:
+after adding, editing, or removing files (or changing alias generation), delete
+that marker and recreate the path-loader:
 
 ```powershell
 $dataDir = (Get-Content .env | Where-Object { $_ -match '^DATA_DIR=' } | Select-Object -First 1) -replace '^DATA_DIR=', ''
@@ -54,5 +54,8 @@ docker compose up --build --force-recreate path-loader
 ```
 
 This only rebuilds the `Blogs` table; image and path records are left intact.
+Post URLs use a lowercase title slug, or a UTC timestamp slug such as
+`nov-7-2026-080000-utc` for untitled posts. Duplicate slugs receive a numeric
+suffix. Existing numeric `/blog/{id}` URLs remain supported.
 In-place migrations for other schema changes are not supported; recreate the
 development database for those changes.

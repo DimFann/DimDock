@@ -46,10 +46,12 @@ CREATE TABLE Paths (
 CREATE TABLE Blogs (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     source_filename VARCHAR(255) NOT NULL,
+    alias VARCHAR(255) NOT NULL,
     title VARCHAR(1024),
     timestamp DATETIME,
     `text` TEXT,
-    UNIQUE KEY uq_blogs_source_filename (source_filename)
+    UNIQUE KEY uq_blogs_source_filename (source_filename),
+    UNIQUE KEY uq_blogs_alias (alias)
 ) AUTO_INCREMENT = 0;
 
 -- Create Paths table with auto-incrementing id

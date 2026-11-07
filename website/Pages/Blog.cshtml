@@ -15,7 +15,7 @@
         : null;
 
     <article class="blog-post">
-        <a class="blog-post-link" href="@($"/blog/{post.Id}")">
+        <a class="blog-post-link" href="@($"/blog/{Uri.EscapeDataString(post.Alias)}")">
             <h2 class="blog-post-title">@(string.IsNullOrWhiteSpace(post.Title) ? "Untitled" : post.Title)</h2>
             <div class="blog-post-date">
                 @if (timestamp is not null)

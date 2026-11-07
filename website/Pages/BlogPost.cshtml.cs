@@ -21,11 +21,17 @@ public class BlogPostModel : PageModel
 
     public Blog Post { get; private set; } = null!;
 
-    public async Task<IActionResult> OnGetAsync(ulong id)
+    public async Task<IActionResult> OnGetAsync(string slugOrId)
     {
-        var post = await _context.Blogs
+        var query = _context.Blogs
             .AsNoTracking()
-            .FirstOrDefaultAsync(blog => blog.Id == id);
+            .AsQueryable();
+
+        var post = await query.FirstOrDefaultAsync(blog => blog.Alias == slugOrId);
+        if (post is null && ulong.TryParse(slugOrId, out var id))
+        {
+            post = await query.FirstOrDefaultAsync(blog => blog.Id == id);
+        }
 
         if (post is null)
         {

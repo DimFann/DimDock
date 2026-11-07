@@ -6,6 +6,7 @@ from PIL import Image
 import traceback
 import re
 import json
+import unicodedata
 
 # 🔧 Configuration
 MAX_THUMBNAIL_SIZE = (256, 256)
@@ -118,6 +119,28 @@ def extract_blog_title(text):
         return title or None
     return None
 
+def create_blog_alias(title, timestamp, used_aliases):
+    if title:
+        normalized_title = unicodedata.normalize('NFKD', title)
+        ascii_title = normalized_title.encode('ascii', 'ignore').decode('ascii').lower()
+        alias = re.sub(r'[^a-z0-9]+', '-', ascii_title).strip('-')
+    else:
+        alias = ''
+
+    if not alias:
+        alias = (
+            f"{timestamp.strftime('%b').lower()}-{timestamp.day}-"
+            f"{timestamp.year}-{timestamp:%H%M%S}-utc"
+        )
+
+    base_alias = alias
+    suffix = 2
+    while alias in used_aliases:
+        alias = f"{base_alias}-{suffix}"
+        suffix += 1
+    used_aliases.add(alias)
+    return alias
+
 def process_blogs(cursor):
     if os.path.exists(BLOGS_INITIALIZED_FILE):
         print("Blogs already initialized. Skipping blog import.", flush=True)
@@ -131,14 +154,17 @@ def process_blogs(cursor):
         CREATE TABLE Blogs (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
             source_filename VARCHAR(255) NOT NULL,
+            alias VARCHAR(255) NOT NULL,
             title VARCHAR(1024),
             timestamp DATETIME,
             `text` TEXT,
-            UNIQUE KEY uq_blogs_source_filename (source_filename)
+            UNIQUE KEY uq_blogs_source_filename (source_filename),
+            UNIQUE KEY uq_blogs_alias (alias)
         )
     """)
 
     inserted_blogs = 0
+    used_aliases = set()
     for filename in sorted(os.listdir(BLOG_DIR)):
         match = BLOG_FILENAME_PATTERN.fullmatch(filename)
         if not match:
@@ -172,10 +198,11 @@ def process_blogs(cursor):
             continue
 
         title = extract_blog_title(blog_text)
+        alias = create_blog_alias(title, utc_timestamp, used_aliases)
         cursor.execute("""
-            INSERT INTO Blogs (source_filename, title, timestamp, `text`)
-            VALUES (%s, %s, %s, %s)
-        """, (filename, title, utc_timestamp, blog_text))
+            INSERT INTO Blogs (source_filename, alias, title, timestamp, `text`)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (filename, alias, title, utc_timestamp, blog_text))
         inserted_blogs += 1
         print(f"Imported blog: {filename}", flush=True)
 

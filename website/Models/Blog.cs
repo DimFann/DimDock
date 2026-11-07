@@ -13,6 +13,9 @@ public class Blog
     [Column("title")]
     public string? Title { get; set; }
 
+    [Column("alias")]
+    public string Alias { get; set; } = string.Empty;
+
     [Column("timestamp")]
     public DateTime? Timestamp { get; set; }
 
