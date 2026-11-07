@@ -1,5 +1,6 @@
 import os
 import datetime
+import hashlib
 import mysql.connector
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
@@ -181,14 +182,19 @@ def extract_date_from_filename_or_path(filename, folder_path):
 
     return datetime.datetime(2000, 1, 1)
 
-def insert_item(cursor, original_name, parent_path):
+def create_thumbnail_key(parent_path, original_name):
+    normalized_path = original_name if parent_path == "root" else f"{parent_path}/{original_name}"
+    normalized_path = normalized_path.replace(os.sep, '/')
+    return hashlib.sha256(normalized_path.encode('utf-8')).hexdigest()
+
+def insert_item(cursor, original_name, parent_path, thumbnail_key):
     now = datetime.datetime.now()
     created_date = extract_date_from_filename_or_path(original_name, parent_path)
 
     cursor.execute("""
-        INSERT INTO Items (original_name, parent_path, uploaded, created, display_index, type, metadata)
-        VALUES (%s, %s, %s, %s, %s, %s, %s)
-    """, (original_name, parent_path, now, created_date, None, 'image', '{}'))
+        INSERT INTO Items (original_name, parent_path, thumbnail_key, uploaded, created, display_index, type, metadata)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    """, (original_name, parent_path, thumbnail_key, now, created_date, None, 'image', '{}'))
     return cursor.lastrowid
 
 def extract_blog_title(text):
@@ -288,8 +294,8 @@ def process_blogs(cursor):
 
     return inserted_blogs
 
-def process_image(file_path, item_id):
-    print(f"Processing image: {file_path} → ID {item_id}", flush=True)
+def process_image(file_path, thumbnail_key):
+    print(f"Generating thumbnail: {file_path}", flush=True)
     try:
         with Image.open(file_path) as img:
             img = img.convert("RGB")
@@ -299,7 +305,7 @@ def process_image(file_path, item_id):
             thumb_with_bg.paste(
                 thumb, ((MAX_THUMBNAIL_SIZE[0] - thumb.width) // 2, (MAX_THUMBNAIL_SIZE[1] - thumb.height) // 2)
             )
-            thumb_path = os.path.join(THUMB_DIR, f"{item_id}.png")
+            thumb_path = os.path.join(THUMB_DIR, f"{thumbnail_key}.png")
             thumb_with_bg.save(thumb_path, format="PNG", optimize=True, quality=85)
     except Exception as e:
         print(f"Error processing image {file_path}: {e}", flush=True)
@@ -309,11 +315,14 @@ def traverse_and_insert(cursor):
     total_images = 0
     cursor.execute("SELECT path, id FROM Paths")
     existing_paths = {row[0]: row[1] for row in cursor.fetchall()}
-    cursor.execute("SELECT id, parent_path, original_name FROM Items")
-    existing_items = {(row[1], row[2]): row[0] for row in cursor.fetchall()}
+    cursor.execute("SELECT id, parent_path, original_name, thumbnail_key FROM Items")
+    existing_items = {
+        (row[1], row[2]): {'id': row[0], 'thumbnail_key': row[3]}
+        for row in cursor.fetchall()
+    }
     existing_items_by_path = {}
-    for (item_path, filename), item_id in existing_items.items():
-        existing_items_by_path.setdefault(item_path, {})[filename] = item_id
+    for (item_path, filename), item in existing_items.items():
+        existing_items_by_path.setdefault(item_path, {})[filename] = item['id']
 
     for current_path, dirs, files in os.walk(ROOT_DIR):
         print(f"Processing folder: {current_path}", flush=True)
@@ -343,12 +352,29 @@ def traverse_and_insert(cursor):
         for file in files:
             ext = os.path.splitext(file)[1].lower()
             item_key = (path, file)
-            if ext in VALID_EXTENSIONS and item_key not in existing_items:
+            if ext not in VALID_EXTENSIONS:
+                continue
+
+            thumbnail_key = create_thumbnail_key(path, file)
+            if item_key not in existing_items:
                 full_path = os.path.join(current_path, file)
-                item_id = insert_item(cursor, file, path)
-                existing_items[item_key] = item_id
+                item_id = insert_item(cursor, file, path, thumbnail_key)
+                existing_items[item_key] = {'id': item_id, 'thumbnail_key': thumbnail_key}
                 existing_items_by_path.setdefault(path, {})[file] = item_id
-                image_tasks.append((full_path, item_id))
+                total_images += 1
+            else:
+                item = existing_items[item_key]
+                item_id = item['id']
+                if item['thumbnail_key'] != thumbnail_key:
+                    cursor.execute(
+                        "UPDATE Items SET thumbnail_key = %s WHERE id = %s",
+                        (thumbnail_key, item_id)
+                    )
+                    item['thumbnail_key'] = thumbnail_key
+
+            thumb_path = os.path.join(THUMB_DIR, f"{thumbnail_key}.png")
+            if not os.path.isfile(thumb_path):
+                image_tasks.append((os.path.join(current_path, file), thumbnail_key))
 
         directory_items = existing_items_by_path.get(path, {})
         cursor.execute("""
@@ -384,11 +410,11 @@ def traverse_and_insert(cursor):
             for tag_name in auto_tags:
                 cursor.execute("INSERT IGNORE INTO Tags (name) VALUES (%s)", (tag_name,))
 
-        total_images += len(image_tasks)
-
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
-            futures = [executor.submit(process_image, file_path, item_id)
-                       for file_path, item_id in image_tasks]
+            futures = [
+                executor.submit(process_image, file_path, thumbnail_key)
+                for file_path, thumbnail_key in image_tasks
+            ]
             for future in as_completed(futures):
                 try:
                     future.result()

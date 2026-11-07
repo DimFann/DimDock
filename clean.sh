@@ -3,6 +3,20 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 
+clear_thumbs=false
+case "${1:-}" in
+  "" ) ;;
+  /thumbs|--thumbs) clear_thumbs=true ;;
+  *)
+    echo "Usage: $0 [--thumbs]" >&2
+    exit 2
+    ;;
+esac
+if [[ "$#" -gt 1 ]]; then
+  echo "Usage: $0 [--thumbs]" >&2
+  exit 2
+fi
+
 if [[ ! -f "$SCRIPT_DIR/.env" ]]; then
   echo "Missing $SCRIPT_DIR/.env. Copy .env.example to .env and set DATA_DIR." >&2
   exit 1
@@ -43,8 +57,12 @@ clean_contents() {
   fi
 }
 
-echo "Clearing app_state, img_db_thumbs, and db_data..."
+echo "Clearing app_state and db_data..."
 clean_contents "$DATA_DIR/app_state"
-clean_contents "$DATA_DIR/img_db_thumbs"
 clean_contents "$DATA_DIR/db_data"
+if [[ "$clear_thumbs" == true ]]; then
+  clean_contents "$DATA_DIR/img_db_thumbs"
+else
+  echo "Keeping $DATA_DIR/img_db_thumbs. Use $0 --thumbs to clear it."
+fi
 echo "Done."

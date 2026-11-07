@@ -1,6 +1,18 @@
 @echo off
 setlocal
 
+set "CLEAR_THUMBS="
+if /I "%~1"=="/thumbs" set "CLEAR_THUMBS=1"
+if /I "%~1"=="--thumbs" set "CLEAR_THUMBS=1"
+if not "%~1"=="" if not defined CLEAR_THUMBS (
+    echo Usage: %~nx0 [/thumbs]
+    exit /b 2
+)
+if not "%~2"=="" (
+    echo Usage: %~nx0 [/thumbs]
+    exit /b 2
+)
+
 set "SCRIPT_DIR=%~dp0"
 set "DATA_DIR="
 
@@ -29,13 +41,18 @@ if not exist "%DATA_DIR%\" (
     exit /b 1
 )
 
-echo Clearing app_state, img_db_thumbs, and db_data...
+echo Clearing app_state and db_data...
 call :clean "%DATA_DIR%\app_state"
-if errorlevel 1 exit /b 1
-call :clean "%DATA_DIR%\img_db_thumbs"
 if errorlevel 1 exit /b 1
 call :clean "%DATA_DIR%\db_data"
 if errorlevel 1 exit /b 1
+
+if defined CLEAR_THUMBS (
+    call :clean "%DATA_DIR%\img_db_thumbs"
+    if errorlevel 1 exit /b 1
+) else (
+    echo Keeping "%DATA_DIR%\img_db_thumbs". Use %~nx0 /thumbs to clear it.
+)
 
 echo Done.
 exit /b 0

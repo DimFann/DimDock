@@ -13,12 +13,14 @@ CREATE TABLE Items (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY, -- Unique identifier (PK)
     original_name VARCHAR(255) NOT NULL, -- Original file name
     parent_path VARCHAR(1024), -- Original full parent path e.g. /2025/2025-10
+    thumbnail_key CHAR(64) NOT NULL,
     description TEXT, -- Markdown description
     uploaded DATETIME, -- Date uploaded
     created DATETIME, -- Date created
     display_index INT, -- Display order override
     type VARCHAR(32), -- Type of item, image, text, video, etc.
-    metadata JSON -- Metadata, unused currently
+    metadata JSON, -- Metadata, unused currently
+    UNIQUE KEY uq_items_thumbnail_key (thumbnail_key)
 ) AUTO_INCREMENT = 0;
 
 CREATE TABLE Shortcuts (
@@ -69,6 +71,11 @@ CREATE TABLE PathTags (
     CONSTRAINT fk_path_tags_tag
         FOREIGN KEY (tag_id) REFERENCES Tags(id) ON DELETE CASCADE,
     KEY ix_path_tags_tag (tag_id)
+);
+
+CREATE TABLE AdminOnlyTagSettings (
+    id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
+    tags JSON NOT NULL
 );
 
 CREATE TABLE Blogs (

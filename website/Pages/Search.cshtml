@@ -45,7 +45,7 @@
             var adminOnly = item.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
             <div class="search-image-result @(adminOnly ? "admin-only-tagged" : "")">
                 <a href="@($"/image/{item.Id}")" class="search-image-link">
-                    <img src="@($"/img_db_thumbs/{item.Id}.png")" alt="@item.OriginalName"
+                    <img src="@($"/img_db_thumbs/{item.ThumbnailKey}.png")" alt="@item.OriginalName"
                          class="search-image-thumbnail" />
                 </a>
                 <div class="search-image-tags">

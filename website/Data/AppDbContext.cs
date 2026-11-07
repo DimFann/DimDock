@@ -15,6 +15,7 @@ namespace Website.Data
         public DbSet<Tag> Tags { get; set; }
         public DbSet<ItemTag> ItemTags { get; set; }
         public DbSet<PathTag> PathTags { get; set; }
+        public DbSet<AdminOnlyTagSettings> AdminOnlyTagSettings { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -27,6 +28,7 @@ namespace Website.Data
             modelBuilder.Entity<Tag>().ToTable("Tags");
             modelBuilder.Entity<ItemTag>().ToTable("ItemTags");
             modelBuilder.Entity<PathTag>().ToTable("PathTags");
+            modelBuilder.Entity<AdminOnlyTagSettings>().ToTable("AdminOnlyTagSettings");
             modelBuilder.Entity<ItemTag>().HasKey(link => new { link.ItemId, link.TagId });
             modelBuilder.Entity<ItemTag>()
                 .HasOne(link => link.Item)

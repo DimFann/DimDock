@@ -12,7 +12,7 @@ builder.Services.AddRazorPages(options =>
 {
     options.Conventions.ConfigureFilter(new IgnoreAntiforgeryTokenAttribute());
 });
-builder.Services.AddSingleton<AdminOnlyTagsProvider>();
+builder.Services.AddScoped<AdminOnlyTagsProvider>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(

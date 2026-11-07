@@ -6,6 +6,17 @@
 
 <h1>Admin</h1>
 
+<section>
+    <h2>Admin-only tags</h2>
+    <form method="post" asp-page-handler="SaveAdminOnlyTags" data-save-admin-only-tags>
+        @Html.AntiForgeryToken()
+        <label for="adminOnlyTags">Comma-separated tags</label>
+        <input id="adminOnlyTags" name="AdminOnlyTagsInput" value="@Model.AdminOnlyTagsInput" maxlength="4000" />
+        <button type="submit">Save admin-only tags</button>
+    </form>
+    <p data-admin-only-tags-status role="status"></p>
+</section>
+
 <form method="post" asp-page-handler="SyncDescriptions" data-sync-descriptions>
     @Html.AntiForgeryToken()
     <button type="submit">Sync DB to disk</button>
@@ -31,6 +42,32 @@
 
             const result = await response.json();
             status.textContent = `Sync complete: ${result.written} descriptions written, ${result.deleted} deleted, ${result.unchanged} unchanged; ${result.manifestsWritten} tag manifests written, ${result.manifestsDeleted} removed; ${result.unusedTagsRemoved} unused tags removed, ${result.skipped} missing paths skipped.`;
+        } catch (error) {
+            status.textContent = error.message;
+        }
+    });
+</script>
+
+<script>
+    document.querySelector("[data-save-admin-only-tags]").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const status = document.querySelector("[data-admin-only-tags-status]");
+        status.textContent = "Saving admin-only tags...";
+
+        try {
+            const response = await fetch(form.action, {
+                method: "POST",
+                body: new FormData(form),
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Saving admin-only tags failed.");
+            }
+
+            const result = await response.json();
+            form.elements.AdminOnlyTagsInput.value = result.tags.join(", ");
+            status.textContent = "Admin-only tags saved to the database.";
         } catch (error) {
             status.textContent = error.message;
         }

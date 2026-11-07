@@ -18,6 +18,11 @@ namespace Website.Models
         [Column("parent_path")]
         public string? ParentPath { get; set; }
 
+        [Required]
+        [Column("thumbnail_key")]
+        [MaxLength(64)]
+        public string ThumbnailKey { get; set; } = string.Empty;
+
         [Column("description")]
         public string? Description { get; set; }
 

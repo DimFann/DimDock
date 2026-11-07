@@ -1,13 +1,25 @@
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Website.Data;
 
 namespace Website.Services;
 
-public sealed class AdminOnlyTagsProvider(IWebHostEnvironment environment)
+public sealed class AdminOnlyTagsProvider(AppDbContext context, IWebHostEnvironment environment)
 {
     private readonly string _tagFilePath = Path.Combine(environment.ContentRootPath, "admin", "admin-only-tags.json");
 
     public async Task<HashSet<string>> GetTagsAsync(CancellationToken cancellationToken = default)
     {
+        var settings = await context.AdminOnlyTagSettings
+            .AsNoTracking()
+            .FirstOrDefaultAsync(settings => settings.Id == 1, cancellationToken);
+        if (settings is not null)
+        {
+            var configuredTags = JsonSerializer.Deserialize<string[]>(settings.TagsJson)
+                ?? throw new InvalidDataException("Admin-only tags stored in the database must be a JSON array.");
+            return ValidateTags(configuredTags);
+        }
+
         await using var stream = File.OpenRead(_tagFilePath);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         if (!document.RootElement.TryGetProperty("admin-only-tags", out var tagsElement) ||
@@ -16,7 +28,7 @@ public sealed class AdminOnlyTagsProvider(IWebHostEnvironment environment)
             throw new InvalidDataException($"Admin-only tag configuration must contain an 'admin-only-tags' array: {_tagFilePath}");
         }
 
-        var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var configuredFileTags = new List<string>();
         foreach (var tagElement in tagsElement.EnumerateArray())
         {
             if (tagElement.ValueKind != JsonValueKind.String ||
@@ -25,7 +37,23 @@ public sealed class AdminOnlyTagsProvider(IWebHostEnvironment environment)
                 throw new InvalidDataException($"Admin-only tag configuration contains an invalid tag: {_tagFilePath}");
             }
 
-            tags.Add(tagElement.GetString()!.Trim());
+            configuredFileTags.Add(tagElement.GetString()!);
+        }
+
+        return ValidateTags(configuredFileTags);
+    }
+
+    private static HashSet<string> ValidateTags(IEnumerable<string> configuredTags)
+    {
+        var tags = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var tag in configuredTags)
+        {
+            if (string.IsNullOrWhiteSpace(tag))
+            {
+                throw new InvalidDataException("Admin-only tag configuration contains an invalid tag.");
+            }
+
+            tags.Add(tag.Trim());
         }
 
         return tags;

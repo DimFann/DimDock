@@ -293,10 +293,17 @@ footer.footer {
   text-decoration: none;
 }
 
+.gallery-image-link {
+  display: block;
+}
+
 .gallery-image-result,
 .search-image-result {
   border: 1px solid #ccc;
-  padding: 4px;
+}
+
+.gallery-image-result {
+  padding: 0;
 }
 
 .gallery-image-result.admin-only-tagged,
@@ -334,10 +341,11 @@ footer.footer {
 }
 
 .gallery-image-thumbnail {
-  border: 1px solid #ccc;
+  border: 0;
+  box-sizing: border-box;
+  display: block;
   height: 256px;
   object-fit: cover;
-  padding: 4px;
   width: 256px;
 }
 

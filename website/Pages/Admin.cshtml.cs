@@ -14,21 +14,59 @@ public class AdminModel : PageModel
     private readonly IConfiguration _configuration;
     private readonly AppDbContext _context;
     private readonly IAntiforgery _antiforgery;
+    private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
 
     public AdminModel(
         IConfiguration configuration,
         AppDbContext context,
-        IAntiforgery antiforgery)
+        IAntiforgery antiforgery,
+        AdminOnlyTagsProvider adminOnlyTagsProvider)
     {
         _configuration = configuration;
         _context = context;
         _antiforgery = antiforgery;
+        _adminOnlyTagsProvider = adminOnlyTagsProvider;
     }
 
-    public IActionResult OnGet()
+    [BindProperty]
+    public string AdminOnlyTagsInput { get; set; } = string.Empty;
+
+    public async Task<IActionResult> OnGetAsync()
     {
         var isAdminEnabled = _configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
-        return isAdminEnabled ? Page() : NotFound();
+        if (!isAdminEnabled)
+        {
+            return NotFound();
+        }
+
+        var tags = await _adminOnlyTagsProvider.GetTagsAsync(HttpContext.RequestAborted);
+        AdminOnlyTagsInput = string.Join(", ", tags.OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase));
+        return Page();
+    }
+
+    public async Task<IActionResult> OnPostSaveAdminOnlyTagsAsync()
+    {
+        if (!IsAdminEnabled())
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        if (!TagNameNormalizer.TryNormalize(AdminOnlyTagsInput, out var tags, out var error))
+        {
+            return BadRequest(error ?? "Invalid admin-only tags.");
+        }
+
+        var tagsJson = JsonSerializer.Serialize(tags);
+        await _context.Database.ExecuteSqlInterpolatedAsync(
+            $"INSERT INTO AdminOnlyTagSettings (id, tags) VALUES (1, {tagsJson}) ON DUPLICATE KEY UPDATE tags = VALUES(tags)",
+            HttpContext.RequestAborted);
+
+        return new JsonResult(new { tags });
     }
 
     public async Task<IActionResult> OnPostSyncDescriptionsAsync()
