@@ -13,8 +13,8 @@ services:
     volumes:
       - ./db_data:/var/lib/mysql
       - ./init:/docker-entrypoint-initdb.d
-    ports:
-      - "43306:3306"
+    #ports:
+    #  - "3306:3306"
 
   # db-console:
   #   image: mariadb:latest
@@ -31,9 +31,15 @@ services:
     depends_on:
       - db
     volumes:
-      - ./app_state:/app_state
-      - ./img_src:/img_src
-      - ./img_db_thumbs:/img_db_thumbs
+      - type: bind
+        source: ${DATA_DIR}/app_state
+        target: /app_state
+      - type: bind
+        source: ${DATA_DIR}/img_src
+        target: /img_src
+      - type: bind
+        source: ${DATA_DIR}/img_db_thumbs
+        target: /img_db_thumbs
     environment:
       DB_HOST: db
       DB_USER: myuser
@@ -47,11 +53,17 @@ services:
     depends_on:
       - path-loader
     ports:
-      - "8080:80"
+      - "18080:80"
     environment:
       ASPNETCORE_URLS: http://+:80
-      ConnectionStrings__DefaultConnection: "Server=db;Port=43306;Database=mydb;User=myuser;Password=mypassword;"
+      ConnectionStrings__DefaultConnection: "Server=db;Port=3306;Database=mydb;User=myuser;Password=mypassword;"
     volumes:
-      - ./app_state:/app_state
-      - ./img_src:/img_src
-      - ./img_db_thumbs:/img_db_thumbs
+      - type: bind
+        source: ${DATA_DIR}/app_state
+        target: /app_state
+      - type: bind
+        source: ${DATA_DIR}/img_src
+        target: /img_src
+      - type: bind
+        source: ${DATA_DIR}/img_db_thumbs
+        target: /img_db_thumbs
