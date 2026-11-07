@@ -35,5 +35,7 @@ namespace Website.Models
 
         [Column("metadata")]
         public string? Metadata { get; set; }
+
+        public ICollection<ItemTag> TagLinks { get; set; } = new List<ItemTag>();
     }
 }

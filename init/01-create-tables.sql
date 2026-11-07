@@ -43,6 +43,34 @@ CREATE TABLE Paths (
     metadata JSON
 ) AUTO_INCREMENT = 0;
 
+CREATE TABLE Tags (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    UNIQUE KEY uq_tags_name (name)
+) AUTO_INCREMENT = 0;
+
+CREATE TABLE ItemTags (
+    item_id BIGINT UNSIGNED NOT NULL,
+    tag_id BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY (item_id, tag_id),
+    CONSTRAINT fk_item_tags_item
+        FOREIGN KEY (item_id) REFERENCES Items(id) ON DELETE CASCADE,
+    CONSTRAINT fk_item_tags_tag
+        FOREIGN KEY (tag_id) REFERENCES Tags(id) ON DELETE CASCADE,
+    KEY ix_item_tags_tag (tag_id)
+);
+
+CREATE TABLE PathTags (
+    path_id BIGINT UNSIGNED NOT NULL,
+    tag_id BIGINT UNSIGNED NOT NULL,
+    PRIMARY KEY (path_id, tag_id),
+    CONSTRAINT fk_path_tags_path
+        FOREIGN KEY (path_id) REFERENCES Paths(id) ON DELETE CASCADE,
+    CONSTRAINT fk_path_tags_tag
+        FOREIGN KEY (tag_id) REFERENCES Tags(id) ON DELETE CASCADE,
+    KEY ix_path_tags_tag (tag_id)
+);
+
 CREATE TABLE Blogs (
     id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
     source_filename VARCHAR(255) NOT NULL,

@@ -7,7 +7,8 @@ are currently unauthenticated.
 
 1. Copy `.env.example` to `.env` and set `DATA_DIR` to an absolute writable
    directory. Configure `WSL_DATA_DIR` and `WSL_PROJECT_DIR` if Docker runs in
-   WSL and cannot access Windows paths directly.
+   WSL and cannot access Windows paths directly. Ensure
+   `DATA_DIR/admin/admin-only-tags.json` exists.
 2. Build and start the services:
 
    ```sh

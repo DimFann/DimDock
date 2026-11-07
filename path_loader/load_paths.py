@@ -21,6 +21,8 @@ ROOT_DIR = '/img_src'
 THUMB_DIR = '/img_db_thumbs'
 BLOG_DIR = '/blogs'
 BLOGS_INITIALIZED_FILE = '/app_state/.blogs_initialized'
+TAG_MANIFEST_FILENAME = '.dimdock.json'
+TAG_NAME_MAX_LENGTH = 100
 VALID_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif'}
 BLOG_FILENAME_PATTERN = re.compile(r'^([A-Z]{2,5})_(\d{8})_(\d{6})\.md$')
 BLOG_TIMEZONE_OFFSETS = {
@@ -76,6 +78,84 @@ def insert_path(cursor, path, parent, description):
         INSERT INTO Paths (path, parent_path, description, type, metadata)
         VALUES (%s, %s, %s, %s, %s)
     """, (path, parent, description, 'directory', '{}'))
+    return cursor.lastrowid
+
+def normalize_tags(raw_tags, source):
+    if not isinstance(raw_tags, list):
+        raise ValueError(f"{source} must be a list of tag strings")
+
+    tags = set()
+    for raw_tag in raw_tags:
+        if not isinstance(raw_tag, str):
+            raise ValueError(f"{source} contains a non-string tag")
+        tag = raw_tag.strip().lower()
+        if not tag:
+            continue
+        if len(tag) > TAG_NAME_MAX_LENGTH or ',' in tag or any(ord(char) < 32 for char in tag):
+            raise ValueError(f"Invalid tag in {source}: {raw_tag!r}")
+        tags.add(tag)
+    return sorted(tags)
+
+def date_path_tags(path):
+    tags = set()
+    for segment in path.split('/'):
+        if re.fullmatch(r'\d{4}', segment):
+            tags.add(segment)
+        elif re.fullmatch(r'\d{4}-\d{2}', segment):
+            year, month = segment.split('-')
+            if 1 <= int(month) <= 12:
+                tags.add(year)
+                tags.add(segment)
+    return sorted(tags)
+
+def read_tag_manifest(directory):
+    manifest_path = os.path.join(directory, TAG_MANIFEST_FILENAME)
+    if not os.path.isfile(manifest_path):
+        return {'tags': [], 'items': {}}
+
+    try:
+        with open(manifest_path, 'r', encoding='utf-8') as manifest_file:
+            manifest = json.load(manifest_file)
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        raise ValueError(f"Unable to read tag manifest {manifest_path}: {error}") from error
+
+    if not isinstance(manifest, dict) or type(manifest.get('version')) is not int or manifest['version'] != 1:
+        raise ValueError(f"Unsupported or missing version in tag manifest {manifest_path}")
+
+    directory_tags = normalize_tags(manifest.get('tags', []), f"{manifest_path}: tags")
+    raw_items = manifest.get('items', {})
+    if not isinstance(raw_items, dict):
+        raise ValueError(f"{manifest_path}: items must be an object")
+
+    items = {}
+    for filename, item_metadata in raw_items.items():
+        if (not isinstance(filename, str) or not filename or filename in ('.', '..') or
+                '/' in filename or '\\' in filename):
+            raise ValueError(f"Invalid item filename in tag manifest {manifest_path}: {filename!r}")
+        if not isinstance(item_metadata, dict):
+            raise ValueError(f"{manifest_path}: metadata for {filename!r} must be an object")
+        items[filename] = normalize_tags(item_metadata.get('tags', []), f"{manifest_path}: {filename!r} tags")
+    return {'tags': directory_tags, 'items': items}
+
+def replace_entity_tags(cursor, table, entity_column, entity_id, tag_names):
+    cursor.execute(f"DELETE FROM {table} WHERE {entity_column} = %s", (entity_id,))
+    for tag_name in tag_names:
+        cursor.execute("INSERT IGNORE INTO Tags (name) VALUES (%s)", (tag_name,))
+        cursor.execute("SELECT id FROM Tags WHERE name = %s", (tag_name,))
+        tag_id = cursor.fetchone()[0]
+        cursor.execute(
+            f"INSERT INTO {table} ({entity_column}, tag_id) VALUES (%s, %s)",
+            (entity_id, tag_id)
+        )
+
+def get_entity_tags(cursor, table, entity_column, entity_id):
+    cursor.execute(f"""
+        SELECT Tags.name
+        FROM {table}
+        JOIN Tags ON Tags.id = {table}.tag_id
+        WHERE {table}.{entity_column} = %s
+    """, (entity_id,))
+    return {row[0] for row in cursor.fetchall()}
 
 def extract_date_from_filename_or_path(filename, folder_path):
     now = datetime.datetime.now()
@@ -227,10 +307,13 @@ def process_image(file_path, item_id):
 
 def traverse_and_insert(cursor):
     total_images = 0
-    cursor.execute("SELECT path FROM Paths")
-    existing_paths = {row[0] for row in cursor.fetchall()}
-    cursor.execute("SELECT parent_path, original_name FROM Items")
-    existing_items = set(cursor.fetchall())
+    cursor.execute("SELECT path, id FROM Paths")
+    existing_paths = {row[0]: row[1] for row in cursor.fetchall()}
+    cursor.execute("SELECT id, parent_path, original_name FROM Items")
+    existing_items = {(row[1], row[2]): row[0] for row in cursor.fetchall()}
+    existing_items_by_path = {}
+    for (item_path, filename), item_id in existing_items.items():
+        existing_items_by_path.setdefault(item_path, {})[filename] = item_id
 
     for current_path, dirs, files in os.walk(ROOT_DIR):
         print(f"Processing folder: {current_path}", flush=True)
@@ -238,6 +321,7 @@ def traverse_and_insert(cursor):
         path = "root" if rel_path == "." else rel_path
         parent_dir = os.path.dirname(rel_path)
         parent = "root" if parent_dir in ("", ".") else parent_dir
+        tag_manifest = read_tag_manifest(current_path)
 
         # 🔍 Check for description.md
         description_path = os.path.join(current_path, "description.md")
@@ -250,8 +334,10 @@ def traverse_and_insert(cursor):
                 print(f"Error reading description.md in {current_path}: {e}", flush=True)
 
         if path not in existing_paths:
-            insert_path(cursor, path, parent, description)
-            existing_paths.add(path)
+            existing_paths[path] = insert_path(cursor, path, parent, description)
+        path_id = existing_paths[path]
+        if get_entity_tags(cursor, 'PathTags', 'path_id', path_id) != set(tag_manifest['tags']):
+            replace_entity_tags(cursor, 'PathTags', 'path_id', path_id, tag_manifest['tags'])
 
         image_tasks = []
         for file in files:
@@ -260,8 +346,43 @@ def traverse_and_insert(cursor):
             if ext in VALID_EXTENSIONS and item_key not in existing_items:
                 full_path = os.path.join(current_path, file)
                 item_id = insert_item(cursor, file, path)
-                existing_items.add(item_key)
+                existing_items[item_key] = item_id
+                existing_items_by_path.setdefault(path, {})[file] = item_id
                 image_tasks.append((full_path, item_id))
+
+        directory_items = existing_items_by_path.get(path, {})
+        cursor.execute("""
+            SELECT ItemTags.item_id, Tags.name
+            FROM ItemTags
+            JOIN Tags ON Tags.id = ItemTags.tag_id
+            JOIN Items ON Items.id = ItemTags.item_id
+            WHERE Items.parent_path = %s
+        """, (path,))
+        item_tags_by_id = {}
+        for item_id, tag_name in cursor.fetchall():
+            item_tags_by_id.setdefault(item_id, set()).add(tag_name)
+
+        for filename, item_id in directory_items.items():
+            desired_tags = sorted(
+                set(tag_manifest['items'].get(filename, [])) | set(date_path_tags(path))
+            )
+            if item_tags_by_id.get(item_id, set()) != set(desired_tags):
+                replace_entity_tags(cursor, 'ItemTags', 'item_id', item_id, desired_tags)
+
+        for filename in tag_manifest['items']:
+            if filename not in directory_items:
+                print(
+                    f"Tag manifest entry has no indexed item in {current_path}: {filename}",
+                    flush=True
+                )
+
+        for filename, item_id in directory_items.items():
+            explicit_tags = tag_manifest['items'].get(filename, [])
+            auto_tags = date_path_tags(path)
+            for tag_name in explicit_tags:
+                cursor.execute("INSERT IGNORE INTO Tags (name) VALUES (%s)", (tag_name,))
+            for tag_name in auto_tags:
+                cursor.execute("INSERT IGNORE INTO Tags (name) VALUES (%s)", (tag_name,))
 
         total_images += len(image_tasks)
 

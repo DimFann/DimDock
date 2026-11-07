@@ -1,15 +1,16 @@
 @page
-@model SearchModel
+@model Website.Pages.SearchModel
+@using Website.Models
 @{
     ViewData["Title"] = "Search";
 }
 
-<h2>Search</h2>
+<h1>Search by tag</h1>
 
-<form method="post">
-    <label for="InputPath">Enter Path:</label>
-    <input type="text" id="InputPath" name="InputPath" value="@Model.InputPath" />
-    <button type="submit">Submit</button>
+<form method="get" class="tag-search-form">
+    <label for="tag">Tag</label>
+    <input id="tag" name="tag" value="@Model.Tag" />
+    <button type="submit">Search</button>
 </form>
 
 @if (!string.IsNullOrEmpty(Model.Message))
@@ -17,17 +18,40 @@
     <p class="search-message">@Model.Message</p>
 }
 
-@if (Model.Results.Any())
+@if (Model.DirectoryResults.Count > 0)
 {
-    <h3>Results for "@Model.InputPath"</h3>
+    <h2>Directories</h2>
+    <ul class="tag-search-directories">
+        @foreach (var path in Model.DirectoryResults)
+        {
+            var displayPath = path.Path == "root" ? "/" : path.Path;
+            var adminOnly = path.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
+            <li>
+                <a class="@(adminOnly ? "admin-only-tagged" : "")"
+                   href="@(path.Path == "root" ? "/Gallery" : $"/Gallery/{path.Path}")">@displayPath</a>
+                <span>— </span>
+                @await Html.PartialAsync("_TagLinks", new TagListModel(Model.GetPathTags(path)))
+            </li>
+        }
+    </ul>
+}
+
+@if (Model.Results.Count > 0)
+{
+    <h2>Images</h2>
     <div class="search-image-grid">
         @foreach (var item in Model.Results)
         {
-            var ext = Model.GetExtension(item.OriginalName);
-            <a href="@($"/img_db/{item.Id}.{ext}")" target="_blank" class="search-image-link">
-                <img src="@($"/img_db_thumbs/{item.Id}.png")" alt="@item.OriginalName"
-                    class="search-image-thumbnail" />
-            </a>
+            var adminOnly = item.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
+            <div class="search-image-result @(adminOnly ? "admin-only-tagged" : "")">
+                <a href="@($"/image/{item.Id}")" class="search-image-link">
+                    <img src="@($"/img_db_thumbs/{item.Id}.png")" alt="@item.OriginalName"
+                         class="search-image-thumbnail" />
+                </a>
+                <div class="search-image-tags">
+                    @await Html.PartialAsync("_TagLinks", new TagListModel(Model.GetItemTags(item)))
+                </div>
+            </div>
         }
     </div>
 }

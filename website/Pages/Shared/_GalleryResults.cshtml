@@ -24,15 +24,47 @@
                 var segments = path.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 var lastSegment = segments.Length > 0 ? segments[^1] : path.Path;
                 var rowClass = rowIndex % 2 == 0 ? "gallery-directory-row-even" : "gallery-directory-row-odd";
+                var isAdminOnly = path.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
                 <tr class="@rowClass">
                     <td>
-                        <a href="@($"/Gallery/{path.Path}")">@Html.Encode(lastSegment)</a>
+                        <a class="@(isAdminOnly ? "admin-only-tagged" : "")"
+                           href="@($"/Gallery/{path.Path}")">@Html.Encode(lastSegment)</a>
                     </td>
                 </tr>
                 rowIndex++;
             }
         }
     </table>
+    @if (Model.AdminEnabled ||
+         (Model.PathEntry?.TagLinks.Any(link => !Model.AdminOnlyTags.Contains(link.Tag.Name)) ?? false))
+    {
+        var directoryTags = Model.PathEntry?.TagLinks
+            .Select(link => link.Tag.Name)
+            .Where(tag => Model.AdminEnabled || !Model.AdminOnlyTags.Contains(tag))
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToList() ?? new List<string>();
+        <section class="path-tags-section">
+            <h3>Directory tags</h3>
+            <p class="tag-links" data-directory-tag-list>
+                @await Html.PartialAsync("_TagLinks", new Website.Models.TagListModel(directoryTags))
+            </p>
+            @if (Model.AdminEnabled)
+            {
+                <button type="button" class="description-editor-button" data-open-directory-tags>Edit tags</button>
+                <form method="post" class="directory-tag-editor" data-directory-tags-form hidden>
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="path" value="@Model.CurrentPath" />
+                    <label for="directoryTags">Tags (comma-separated)</label>
+                    <input id="directoryTags" name="tags" maxlength="4000" value="@string.Join(", ", directoryTags)" />
+                    <p class="description-editor-error" data-directory-tag-error role="alert"></p>
+                    <div class="description-editor-actions">
+                        <button type="button" class="description-editor-button" data-cancel-directory-tags>Cancel</button>
+                        <button type="submit" class="description-editor-button">Save</button>
+                    </div>
+                </form>
+            }
+        </section>
+    }
     @if (Model.AdminEnabled || !string.IsNullOrWhiteSpace(Model.PathEntry?.Description))
     {
         <div class="path-description-section">
@@ -86,12 +118,17 @@
     <div class="gallery-image-grid">
         @foreach (var item in Model.Items)
         {
-            var fullPath = $"/img_src/{item.ParentPath}/{item.OriginalName}";
-            <a href="@fullPath" target="_blank" class="gallery-image-link">
-                <img src="@($"/img_db_thumbs/{item.Id}.png")"
-                     alt="@item.OriginalName ?? $"Image {item.Id}""
-                     class="gallery-image-thumbnail" />
-            </a>
+            var adminOnlyItem = item.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
+            <div class="gallery-image-result @(adminOnlyItem ? "admin-only-tagged" : "")">
+                <a href="@($"/image/{item.Id}")" class="gallery-image-link">
+                    <img src="@($"/img_db_thumbs/{item.Id}.png")"
+                         alt="@item.OriginalName ?? $"Image {item.Id}""
+                         class="gallery-image-thumbnail" />
+                </a>
+                <p class="tag-links">
+                    @await Html.PartialAsync("_TagLinks", new Website.Models.TagListModel(Model.GetItemTags(item)))
+                </p>
+            </div>
         }
     </div>
 }

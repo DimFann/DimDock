@@ -1,0 +1,9 @@
+@model Website.Models.TagListModel
+@for (var index = 0; index < Model.Tags.Count; index++)
+{
+    if (index > 0)
+    {
+        @:,
+    }
+    <a href="@($"/Search?tag={Uri.EscapeDataString(Model.Tags.ElementAt(index))}")">@Model.Tags.ElementAt(index)</a>
+}

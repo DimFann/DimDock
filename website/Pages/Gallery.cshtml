@@ -66,9 +66,59 @@
                 error.textContent = requestError.message;
             }
         }
+
+        if (event.target.closest("[data-open-directory-tags]")) {
+            const form = document.querySelector("[data-directory-tags-form]");
+            form.hidden = false;
+            form.querySelector("input[name='tags']").focus();
+            return;
+        }
+
+        if (event.target.closest("[data-cancel-directory-tags]")) {
+            document.querySelector("[data-directory-tags-form]").hidden = true;
+        }
     });
 
     document.addEventListener("submit", async (event) => {
+        const tagForm = event.target.closest("[data-directory-tags-form]");
+        if (tagForm) {
+            event.preventDefault();
+            const error = tagForm.querySelector("[data-directory-tag-error]");
+            error.textContent = "";
+            const url = new URL(window.location.href);
+            url.searchParams.set("handler", "SaveDirectoryTags");
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    body: new FormData(tagForm),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (!response.ok) {
+                    throw new Error(await response.text() || "Saving directory tags failed.");
+                }
+
+                const result = await response.json();
+                const list = document.querySelector("[data-directory-tag-list]");
+                const fragments = [];
+                result.tags.forEach((tag, index) => {
+                    if (index > 0) {
+                        fragments.push(document.createTextNode(", "));
+                    }
+                    const link = document.createElement("a");
+                    link.href = `/Search?tag=${encodeURIComponent(tag)}`;
+                    link.textContent = tag;
+                    fragments.push(link);
+                });
+                list.replaceChildren(...fragments);
+                document.querySelector("[data-directory-tags-form] input[name='tags']").value = result.tags.join(", ");
+                tagForm.hidden = true;
+            } catch (requestError) {
+                error.textContent = requestError.message;
+            }
+            return;
+        }
+
         const form = event.target.closest("[data-description-form]");
         if (!form) {
             return;

@@ -28,5 +28,7 @@ namespace Website.Models
 
         [Column("metadata")]
         public string? Metadata { get; set; }
+
+        public ICollection<PathTag> TagLinks { get; set; } = new List<PathTag>();
     }
 }

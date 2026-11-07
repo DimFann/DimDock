@@ -1,69 +1,111 @@
-using System.Text;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
-using Microsoft.Extensions.Logging;
+using Microsoft.EntityFrameworkCore;
 using Website.Data;
 using Website.Models;
+using Website.Services;
 
-[IgnoreAntiforgeryToken]
+namespace Website.Pages;
+
 public class SearchModel : PageModel
 {
     private readonly AppDbContext _context;
-    private readonly ILogger<SearchModel> _logger;
+    private readonly IConfiguration _configuration;
+    private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
 
-    public SearchModel(AppDbContext context, ILogger<SearchModel> logger)
+    public SearchModel(
+        AppDbContext context,
+        IConfiguration configuration,
+        AdminOnlyTagsProvider adminOnlyTagsProvider)
     {
         _context = context;
-        _logger = logger;
+        _configuration = configuration;
+        _adminOnlyTagsProvider = adminOnlyTagsProvider;
     }
 
-    [BindProperty]
-    public string? InputPath { get; set; }
+    [BindProperty(SupportsGet = true, Name = "tag")]
+    public string? Tag { get; set; }
 
-    public List<Item> Results { get; set; } = new();
-    public string? Message { get; set; }
+    public List<Item> Results { get; private set; } = new();
+    public List<PathEntry> DirectoryResults { get; private set; } = new();
+    public string? Message { get; private set; }
+    public bool AdminEnabled => _configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
+    public HashSet<string> AdminOnlyTags { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
-    public void OnPost()
+    public async Task OnGetAsync(CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(InputPath))
+        AdminOnlyTags = await _adminOnlyTagsProvider.GetTagsAsync(cancellationToken);
+        Tag = Tag?.Trim().ToLowerInvariant();
+        if (string.IsNullOrWhiteSpace(Tag))
         {
-            Message = "Please enter a valid path.";
+            Tag = null;
             return;
         }
 
-        var sanitized = SanitizePath(InputPath).TrimStart('/');
-        _logger.LogInformation("Sanitized path: {Path}", sanitized);
-
-        Results = _context.Items
-            .Where(i => i.ParentPath == sanitized)
-            .OrderBy(i => i.DisplayIndex)
-            .ToList();
-
-        if (!Results.Any())
+        if (!AdminEnabled && AdminOnlyTags.Contains(Tag))
         {
-            Message = $"No items found for path '{sanitized}'.";
+            Message = $"No results found for tag '{Tag}'.";
+            return;
+        }
+
+        var hiddenPaths = AdminEnabled
+            ? []
+            : await _context.Paths
+                .Where(path => path.TagLinks.Any(link => AdminOnlyTags.Contains(link.Tag.Name)))
+                .Select(path => path.Path)
+                .ToListAsync(cancellationToken);
+
+        DirectoryResults = await _context.Paths
+            .Include(path => path.TagLinks)
+            .ThenInclude(link => link.Tag)
+            .Where(path => path.TagLinks.Any(link => link.Tag.Name == Tag))
+            .OrderBy(path => path.Path)
+            .ToListAsync(cancellationToken);
+
+        Results = await _context.Items
+            .Include(item => item.TagLinks)
+            .ThenInclude(link => link.Tag)
+            .Where(item => item.TagLinks.Any(link => link.Tag.Name == Tag))
+            .OrderBy(item => item.DisplayIndex)
+            .ThenBy(item => item.OriginalName)
+            .ToListAsync(cancellationToken);
+
+        if (!AdminEnabled)
+        {
+            DirectoryResults = DirectoryResults
+                .Where(path =>
+                    !path.TagLinks.Any(link => AdminOnlyTags.Contains(link.Tag.Name)) &&
+                    !hiddenPaths.Any(hidden => IsSameOrChildPath(path.Path, hidden)))
+                .ToList();
+            Results = Results
+                .Where(item =>
+                    !item.TagLinks.Any(link => AdminOnlyTags.Contains(link.Tag.Name)) &&
+                    !hiddenPaths.Any(hidden => IsSameOrChildPath(item.ParentPath ?? string.Empty, hidden)))
+                .ToList();
+        }
+
+        if (Results.Count == 0 && DirectoryResults.Count == 0)
+        {
+            Message = $"No results found for tag '{Tag}'.";
         }
     }
 
-    public string SanitizePath(string path)
-    {
-        if (string.IsNullOrWhiteSpace(path))
-            return string.Empty;
+    public IReadOnlyCollection<string> GetItemTags(Item item) =>
+        item.TagLinks.Select(link => link.Tag.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(tag => AdminEnabled || !AdminOnlyTags.Contains(tag))
+            .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-        var sb = new StringBuilder(path.Length + 1);
-        foreach (char c in path)
-        {
-            if (char.IsDigit(c) || char.IsAsciiLetter(c) || c == '-' || c == '_' || c == '/')
-                sb.Append(c);
-        }
-        return sb.ToString();
-    }
+    public IReadOnlyCollection<string> GetPathTags(PathEntry path) =>
+        path.TagLinks.Select(link => link.Tag.Name)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(tag => AdminEnabled || !AdminOnlyTags.Contains(tag))
+            .OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
 
-    public string GetExtension(string originalName)
-    {
-        var dotIndex = originalName.LastIndexOf('.');
-        return (dotIndex >= 0 && dotIndex < originalName.Length - 1)
-            ? originalName.Substring(dotIndex + 1)
-            : "bin";
-    }
+    private static bool IsSameOrChildPath(string candidate, string parent) =>
+        string.Equals(parent, "root", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(candidate, parent, StringComparison.OrdinalIgnoreCase) ||
+        candidate.StartsWith(parent + "/", StringComparison.OrdinalIgnoreCase);
 }

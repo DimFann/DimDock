@@ -72,3 +72,7 @@ services:
       - type: bind
         source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_db_thumbs
         target: /img_db_thumbs
+      - type: bind
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}/admin
+        target: /app/admin
+        read_only: true

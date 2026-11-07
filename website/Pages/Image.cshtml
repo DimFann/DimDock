@@ -1,0 +1,67 @@
+@page "/image/{id:long}"
+@model Website.Pages.ImageModel
+@{
+    ViewData["Title"] = Model.Item.OriginalName;
+}
+
+<main class="image-viewer @(Model.Item.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name)) ? "admin-only-tagged" : "")">
+    <div class="image-viewer-heading">
+        <h1>@Model.Item.OriginalName</h1>
+        <a href="@Model.GalleryUrl">Back to gallery</a>
+    </div>
+    <div class="image-viewer-controls">
+        <a class="description-editor-button" href="@Model.SourceUrl" download>Download</a>
+        <a class="description-editor-button" href="@Model.SourceUrl">View source</a>
+        @if (Model.AdminEnabled)
+        {
+            <button type="button" class="description-editor-button" data-open-image-tags>Edit tags</button>
+        }
+    </div>
+    <div class="image-viewer-content">
+        <img src="@Model.SourceUrl" alt="@Model.Item.OriginalName" />
+    </div>
+    <section class="image-viewer-tags" aria-label="Image tags">
+        <h2>Tags</h2>
+        @if (Model.Tags.Any())
+        {
+            <p class="tag-links">
+                @await Html.PartialAsync("_TagLinks", new Website.Models.TagListModel(Model.Tags.ToArray()))
+            </p>
+        }
+        else
+        {
+            <p>No tags.</p>
+        }
+    </section>
+
+    @if (Model.AdminEnabled)
+    {
+        <form method="post" asp-page-handler="SaveTags" class="image-tag-editor" data-image-tag-editor hidden="@(!Model.TagEditorOpen)">
+            @Html.AntiForgeryToken()
+            <label for="imageTags">Tags (comma-separated)</label>
+            <input id="imageTags" name="tags" value="@Model.TagsInput" maxlength="4000" />
+            @if (!string.IsNullOrEmpty(Model.TagError))
+            {
+                <p class="description-editor-error" role="alert">@Model.TagError</p>
+            }
+            <div class="description-editor-actions">
+                <button type="button" class="description-editor-button" data-cancel-image-tags>Cancel</button>
+                <button type="submit" class="description-editor-button">Save</button>
+            </div>
+        </form>
+    }
+</main>
+
+@if (Model.AdminEnabled)
+{
+    <script>
+        const imageTagEditor = document.querySelector("[data-image-tag-editor]");
+        document.querySelector("[data-open-image-tags]").addEventListener("click", () => {
+            imageTagEditor.hidden = false;
+            imageTagEditor.querySelector("input").focus();
+        });
+        document.querySelector("[data-cancel-image-tags]").addEventListener("click", () => {
+            imageTagEditor.hidden = true;
+        });
+    </script>
+}

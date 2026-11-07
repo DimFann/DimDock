@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 using Website.Data;
+using Website.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,6 +12,7 @@ builder.Services.AddRazorPages(options =>
 {
     options.Conventions.ConfigureFilter(new IgnoreAntiforgeryTokenAttribute());
 });
+builder.Services.AddSingleton<AdminOnlyTagsProvider>();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(

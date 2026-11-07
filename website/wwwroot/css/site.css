@@ -293,6 +293,46 @@ footer.footer {
   text-decoration: none;
 }
 
+.gallery-image-result,
+.search-image-result {
+  border: 1px solid #ccc;
+  padding: 4px;
+}
+
+.gallery-image-result.admin-only-tagged,
+.search-image-result.admin-only-tagged,
+.image-viewer.admin-only-tagged {
+  border: 2px solid #c00;
+}
+
+.admin-only-tagged {
+  color: #b00;
+}
+
+.tag-links {
+  margin: 0.35rem 0 0;
+  overflow-wrap: anywhere;
+}
+
+.tag-search-form {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.tag-search-form input {
+  max-width: 100%;
+  padding: 0.35rem;
+  width: 20rem;
+}
+
+.tag-search-directories {
+  list-style: none;
+  padding-left: 0;
+}
+
 .gallery-image-thumbnail {
   border: 1px solid #ccc;
   height: 256px;
@@ -306,6 +346,128 @@ footer.footer {
   height: auto;
   padding: 4px;
   width: 150px;
+}
+
+.image-viewer {
+  background: #fff;
+  border: 1px solid #607878;
+  box-sizing: border-box;
+  margin: 0 auto;
+  max-width: 1024px;
+  padding: 1rem;
+  width: 100%;
+}
+
+.image-viewer-heading {
+  align-items: center;
+  border-bottom: 1px solid #607878;
+  display: flex;
+  justify-content: space-between;
+  overflow-wrap: anywhere;
+}
+
+.image-viewer-heading h1 {
+  font-size: 1.5rem;
+  font-weight: normal;
+  margin: 0;
+  padding: 0.5rem 0;
+}
+
+.image-viewer-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0.75rem 0;
+}
+
+.image-viewer-controls a {
+  text-decoration: none;
+}
+
+.image-viewer-content {
+  border: 1px solid #ccd3d3;
+  padding: 0.5rem;
+  text-align: center;
+}
+
+.image-viewer-content img {
+  height: auto;
+  max-height: 75vh;
+  max-width: 100%;
+  object-fit: contain;
+  width: auto;
+}
+
+.image-viewer-tags {
+  border-top: 1px solid #ccd3d3;
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+}
+
+.image-viewer-tags h2 {
+  font-size: 1.1rem;
+}
+
+.image-viewer-tags-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.image-viewer-tags-list li {
+  background: #f0f3f3;
+  border: 1px solid #9aa;
+  padding: 0.2rem 0.5rem;
+}
+
+.image-tag-editor {
+  border-top: 1px solid #ccd3d3;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding-top: 1rem;
+}
+
+.image-tag-editor input {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 0.4rem;
+  width: 40rem;
+}
+
+.image-tag-editor[hidden] {
+  display: none !important;
+}
+
+.path-tags-section {
+  margin: 0.75rem 0;
+}
+
+.path-tags-section h3 {
+  font-size: 1rem;
+}
+
+.directory-tag-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0.5rem 0;
+  max-width: 40rem;
+}
+
+.directory-tag-editor[hidden] {
+  display: none !important;
+}
+
+.directory-tag-editor input[name="tags"] {
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: 0.4rem;
+  width: 40rem;
 }
 
 .form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
