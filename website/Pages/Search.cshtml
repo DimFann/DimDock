@@ -14,19 +14,19 @@
 
 @if (!string.IsNullOrEmpty(Model.Message))
 {
-    <p style="color: gray;">@Model.Message</p>
+    <p class="search-message">@Model.Message</p>
 }
 
 @if (Model.Results.Any())
 {
     <h3>Results for "@Model.InputPath"</h3>
-    <div style="display: flex; flex-wrap: wrap; gap: 12px;">
+    <div class="search-image-grid">
         @foreach (var item in Model.Results)
         {
             var ext = Model.GetExtension(item.OriginalName);
-            <a href="@($"/img_db/{item.Id}.{ext}")" target="_blank" style="text-decoration: none;">
+            <a href="@($"/img_db/{item.Id}.{ext}")" target="_blank" class="search-image-link">
                 <img src="@($"/img_db_thumbs/{item.Id}.png")" alt="@item.OriginalName"
-                    style="border: 1px solid #ccc; padding: 4px; width: 150px; height: auto;" />
+                    class="search-image-thumbnail" />
             </a>
         }
     </div>

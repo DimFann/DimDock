@@ -7,7 +7,10 @@ db_data/*
 app_state/*
 img_src/*
 img_db_thumbs/*
+website/wwwroot/lib/
 .env
+TODO.md
+FORDEV.md
 
 # User-specific files
 *.rsuser

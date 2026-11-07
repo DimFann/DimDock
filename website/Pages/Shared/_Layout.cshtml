@@ -4,6 +4,7 @@
     var siteTitle = Configuration["SiteTitle"] ?? "DimDock";
     var currentPage = ViewContext.RouteData.Values["page"]?.ToString();
     var isBlogPage = currentPage is "/Blog" or "/BlogPost";
+    var isAdminEnabled = Configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
 }
 <html lang="en">
 <head>
@@ -46,6 +47,14 @@
                                aria-current="@(isBlogPage ? "page" : null)"
                                asp-area="" asp-page="/Blog">Blog</a>
                         </li>
+                        @if (isAdminEnabled)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark @(currentPage == "/Admin" ? "active" : "")"
+                                   aria-current="@(currentPage == "/Admin" ? "page" : null)"
+                                   asp-area="" asp-page="/Admin">Admin</a>
+                            </li>
+                        }
                     </ul>
                 </div>
             </div>
@@ -63,7 +72,6 @@
         </div>
     </footer>
 
-    <script src="~/lib/jquery/dist/jquery.min.js"></script>
     <script src="~/lib/bootstrap/dist/js/bootstrap.bundle.min.js"></script>
     <script src="~/js/site.js" asp-append-version="true"></script>
 

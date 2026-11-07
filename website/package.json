@@ -1,0 +1,10 @@
+{
+  "name": "dimdock-website-assets",
+  "private": true,
+  "scripts": {
+    "build": "node scripts/build-assets.mjs"
+  },
+  "dependencies": {
+    "bootstrap": "5.3.3"
+  }
+}

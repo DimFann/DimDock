@@ -2,17 +2,17 @@
 
 @if (!string.IsNullOrEmpty(Model.Message))
 {
-    <p style="color: gray;">@Model.Message</p>
+    <p class="gallery-message">@Model.Message</p>
 }
 
 <!-- Path table wrapper -->
-<div style="max-width: 400px; margin-left: 0; font-family: 'Courier New', monospace;">
-    <table style="width: 100%; border-collapse: collapse; border: 1px solid #e0f0ff;">
-        <tr style="background-color: #f0f0f0;">
-            <td style="border: 1px solid #e0f0ff;"><a href="/Gallery">/</a></td>
+<div class="gallery-directory">
+    <table class="gallery-directory-table">
+        <tr>
+            <td><a href="/Gallery">/</a></td>
         </tr>
-        <tr style="background-color: #ffffff;">
-            <td style="border: 1px solid #e0f0ff;">
+        <tr>
+            <td>
                 <a href="@($"/Gallery/{(Model.ParentPath == "root" ? "" : Model.ParentPath)}")">..</a>
             </td>
         </tr>
@@ -23,9 +23,9 @@
             {
                 var segments = path.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
                 var lastSegment = segments.Length > 0 ? segments[^1] : path.Path;
-                var bg = rowIndex % 2 == 0 ? "#f0f0f0" : "#ffffff";
-                <tr style="background-color: @bg;">
-                    <td style="border: 1px solid #e0f0ff;">
+                var rowClass = rowIndex % 2 == 0 ? "gallery-directory-row-even" : "gallery-directory-row-odd";
+                <tr class="@rowClass">
+                    <td>
                         <a href="@($"/Gallery/{path.Path}")">@Html.Encode(lastSegment)</a>
                     </td>
                 </tr>
@@ -33,27 +33,64 @@
             }
         }
     </table>
-    @if (!string.IsNullOrWhiteSpace(Model.PathEntry?.Description))
+    @if (Model.AdminEnabled || !string.IsNullOrWhiteSpace(Model.PathEntry?.Description))
     {
-        <div style="max-width: 600px; margin: 16px 0; border: 1px solid #e0f0ff; font-size: 12px; background-color: #e8e8e8">
-            @Html.Raw(Markdig.Markdown.ToHtml(Model.PathEntry.Description))
+        <div class="path-description-section">
+            @if (Model.AdminEnabled)
+            {
+                <button type="button" class="description-editor-button" data-open-description-editor>
+                    @(string.IsNullOrWhiteSpace(Model.PathEntry?.Description) ? "Add Description" : "Edit Description")
+                </button>
+            }
+            <div class="path-description-content"
+                 data-path-description
+                 hidden="@string.IsNullOrWhiteSpace(Model.PathEntry?.Description)">
+                @Html.Raw(Model.RenderMarkdown(Model.PathEntry?.Description))
+            </div>
         </div>
     }
 </div>
 
-<hr style="margin: 24px 0; border: none; border-top: 1px solid #ccc;" />
+@if (Model.AdminEnabled)
+{
+    <dialog class="description-editor" data-description-editor aria-labelledby="descriptionEditorTitle">
+        <form method="post" data-description-form>
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="path" value="@Model.CurrentPath" />
+            <section class="description-editor-pane" data-description-edit-pane>
+                <h2 id="descriptionEditorTitle">Edit path description</h2>
+                <div class="description-editor-actions">
+                    <button type="button" class="description-editor-button" data-preview-description>Preview</button>
+                    <button type="button" class="description-editor-button" data-close-description-editor>Cancel</button>
+                    <button type="submit" class="description-editor-button">Save</button>
+                </div>
+                <textarea name="description" data-description-markdown aria-label="Description Markdown">@Model.PathEntry?.Description</textarea>
+            </section>
+            <section class="description-editor-pane description-editor-preview-pane" data-description-preview-pane hidden>
+                <div class="description-editor-actions">
+                    <button type="button" class="description-editor-button" data-edit-description>Edit</button>
+                    <button type="submit" class="description-editor-button">Save</button>
+                </div>
+                <div class="description-editor-preview blog-post-content" data-description-preview aria-live="polite"></div>
+            </section>
+            <p class="description-editor-error" data-description-error role="alert"></p>
+        </form>
+    </dialog>
+}
+
+<hr class="gallery-separator" />
 
 <!-- Image grid -->
 @if (Model.Items.Any())
 {
-    <div style="width: 100%; display: flex; flex-wrap: wrap; gap: 12px;">
+    <div class="gallery-image-grid">
         @foreach (var item in Model.Items)
         {
             var fullPath = $"/img_src/{item.ParentPath}/{item.OriginalName}";
-            <a href="@fullPath" target="_blank" style="text-decoration: none;">
+            <a href="@fullPath" target="_blank" class="gallery-image-link">
                 <img src="@($"/img_db_thumbs/{item.Id}.png")"
                      alt="@item.OriginalName ?? $"Image {item.Id}""
-                     style="border: 1px solid #ccc; padding: 4px; width: 256px; height: 256px; object-fit: cover;" />
+                     class="gallery-image-thumbnail" />
             </a>
         }
     </div>

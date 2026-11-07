@@ -5,8 +5,8 @@
 }
 
 <!-- Title and spinner aligned left -->
-<div style="max-width: 400px; margin-left: 0;">
-    <h4 style="text-align: left;">@Model.Path</h4>
+<div class="gallery-heading">
+    <h4>@Model.Path</h4>
     <div id="loadingSpinner"></div>
 </div>
 
@@ -15,19 +15,90 @@
     @await Html.PartialAsync("_GalleryResults", Model)
 </div>
 
-<style>
-#loadingSpinner {
-    display: none;
-    margin: 16px 0;
-    width: 32px;
-    height: 32px;
-    border: 4px solid #cce6ff;
-    border-top: 4px solid #3399ff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-@@keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-}
-</style>
+<script>
+    document.addEventListener("click", async (event) => {
+        const openButton = event.target.closest("[data-open-description-editor]");
+        if (openButton) {
+            const dialog = document.querySelector("[data-description-editor]");
+            dialog.querySelector("[data-description-preview-pane]").hidden = true;
+            dialog.querySelector("[data-description-edit-pane]").hidden = false;
+            dialog.querySelector("[data-description-error]").textContent = "";
+            dialog.showModal();
+            dialog.querySelector("[data-description-markdown]").focus();
+            return;
+        }
+
+        if (event.target.closest("[data-close-description-editor]")) {
+            document.querySelector("[data-description-editor]").close();
+            return;
+        }
+
+        if (event.target.closest("[data-edit-description]")) {
+            const dialog = document.querySelector("[data-description-editor]");
+            dialog.querySelector("[data-description-preview-pane]").hidden = true;
+            dialog.querySelector("[data-description-edit-pane]").hidden = false;
+            dialog.querySelector("[data-description-markdown]").focus();
+            return;
+        }
+
+        if (event.target.closest("[data-preview-description]")) {
+            const dialog = event.target.closest("[data-description-editor]");
+            const form = dialog.querySelector("[data-description-form]");
+            const preview = form.querySelector("[data-description-preview]");
+            const error = form.querySelector("[data-description-error]");
+            const url = new URL(window.location.href);
+            url.searchParams.set("handler", "PreviewDescription");
+            error.textContent = "";
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    body: new FormData(form),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (!response.ok) {
+                    throw new Error(await response.text() || "Preview failed.");
+                }
+                preview.innerHTML = await response.text();
+                form.querySelector("[data-description-edit-pane]").hidden = true;
+                form.querySelector("[data-description-preview-pane]").hidden = false;
+            } catch (requestError) {
+                error.textContent = requestError.message;
+            }
+        }
+    });
+
+    document.addEventListener("submit", async (event) => {
+        const form = event.target.closest("[data-description-form]");
+        if (!form) {
+            return;
+        }
+
+        event.preventDefault();
+        const error = form.querySelector("[data-description-error]");
+        error.textContent = "";
+        const url = new URL(window.location.href);
+        url.searchParams.set("handler", "SaveDescription");
+
+        try {
+            const response = await fetch(url, {
+                method: "POST",
+                body: new FormData(form),
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Save failed.");
+            }
+
+            const result = await response.json();
+            const content = document.querySelector("[data-path-description]");
+            const button = document.querySelector("[data-open-description-editor]");
+            content.innerHTML = result.html;
+            content.hidden = !result.hasDescription;
+            button.textContent = result.hasDescription ? "Edit Description" : "Add Description";
+            document.querySelector("[data-description-editor]").close();
+        } catch (requestError) {
+            error.textContent = requestError.message;
+        }
+    });
+</script>

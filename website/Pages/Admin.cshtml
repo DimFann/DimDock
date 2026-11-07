@@ -1,0 +1,38 @@
+@page
+@model Website.Pages.AdminModel
+@{
+    ViewData["Title"] = "Admin";
+}
+
+<h1>Admin</h1>
+
+<form method="post" asp-page-handler="SyncDescriptions" data-sync-descriptions>
+    @Html.AntiForgeryToken()
+    <button type="submit">Sync DB to disk</button>
+</form>
+<p data-sync-status role="status"></p>
+
+<script>
+    document.querySelector("[data-sync-descriptions]").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const status = document.querySelector("[data-sync-status]");
+        status.textContent = "Syncing descriptions...";
+
+        try {
+            const response = await fetch(form.action, {
+                method: "POST",
+                body: new FormData(form),
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Description sync failed.");
+            }
+
+            const result = await response.json();
+            status.textContent = `Sync complete: ${result.written} written, ${result.deleted} deleted, ${result.unchanged} unchanged, ${result.skipped} missing paths skipped.`;
+        } catch (error) {
+            status.textContent = error.message;
+        }
+    });
+</script>

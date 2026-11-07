@@ -27,8 +27,40 @@
         <div class="blog-post-content">
             @Html.Raw(Model.RenderMarkdown(Model.Post.Text))
         </div>
+        @if (Model.AdminEnabled)
+        {
+            <div class="blog-post-admin">
+                <button type="button" class="description-editor-button" data-open-blog-editor>Edit Post</button>
+            </div>
+        }
     </article>
 </div>
+
+@if (Model.AdminEnabled)
+{
+    <dialog class="description-editor" data-blog-editor aria-labelledby="blogEditorTitle">
+        <form method="post" data-blog-form>
+            @Html.AntiForgeryToken()
+            <section class="description-editor-pane" data-blog-edit-pane>
+                <h2 id="blogEditorTitle">Edit blog post Markdown</h2>
+                <div class="description-editor-actions">
+                    <button type="button" class="description-editor-button" data-preview-blog>Preview</button>
+                    <button type="button" class="description-editor-button" data-close-blog-editor>Cancel</button>
+                    <button type="submit" class="description-editor-button">Save</button>
+                </div>
+                <textarea name="markdown" data-blog-markdown aria-label="Blog post Markdown">@Model.Post.Text</textarea>
+            </section>
+            <section class="description-editor-pane description-editor-preview-pane" data-blog-preview-pane hidden>
+                <div class="description-editor-actions">
+                    <button type="button" class="description-editor-button" data-edit-blog>Edit</button>
+                    <button type="submit" class="description-editor-button">Save</button>
+                </div>
+                <div class="description-editor-preview blog-post-content" data-blog-preview aria-live="polite"></div>
+            </section>
+            <p class="description-editor-error" data-blog-error role="alert"></p>
+        </form>
+    </dialog>
+}
 
 @section Scripts {
     <script>
@@ -38,5 +70,73 @@
                 element.textContent = date.toLocaleString();
             }
         });
+
+        const blogEditor = document.querySelector("[data-blog-editor]");
+        if (blogEditor) {
+            document.addEventListener("click", async (event) => {
+                if (event.target.closest("[data-open-blog-editor]")) {
+                    blogEditor.querySelector("[data-blog-preview-pane]").hidden = true;
+                    blogEditor.querySelector("[data-blog-edit-pane]").hidden = false;
+                    blogEditor.querySelector("[data-blog-error]").textContent = "";
+                    blogEditor.showModal();
+                    blogEditor.querySelector("[data-blog-markdown]").focus();
+                } else if (event.target.closest("[data-close-blog-editor]")) {
+                    blogEditor.close();
+                } else if (event.target.closest("[data-edit-blog]")) {
+                    blogEditor.querySelector("[data-blog-preview-pane]").hidden = true;
+                    blogEditor.querySelector("[data-blog-edit-pane]").hidden = false;
+                    blogEditor.querySelector("[data-blog-markdown]").focus();
+                } else if (event.target.closest("[data-preview-blog]")) {
+                    const form = blogEditor.querySelector("[data-blog-form]");
+                    const error = form.querySelector("[data-blog-error]");
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("handler", "Preview");
+                    error.textContent = "";
+
+                    try {
+                        const response = await fetch(url, {
+                            method: "POST",
+                            body: new FormData(form),
+                            headers: { "X-Requested-With": "XMLHttpRequest" }
+                        });
+                        if (!response.ok) {
+                            throw new Error(await response.text() || "Preview failed.");
+                        }
+                        form.querySelector("[data-blog-preview]").innerHTML = await response.text();
+                        form.querySelector("[data-blog-edit-pane]").hidden = true;
+                        form.querySelector("[data-blog-preview-pane]").hidden = false;
+                    } catch (requestError) {
+                        error.textContent = requestError.message;
+                    }
+                }
+            });
+
+            blogEditor.querySelector("[data-blog-form]").addEventListener("submit", async (event) => {
+                event.preventDefault();
+                const form = event.currentTarget;
+                const error = form.querySelector("[data-blog-error]");
+                const url = new URL(window.location.href);
+                url.searchParams.set("handler", "Save");
+                error.textContent = "";
+
+                try {
+                    const response = await fetch(url, {
+                        method: "POST",
+                        body: new FormData(form),
+                        headers: { "X-Requested-With": "XMLHttpRequest" }
+                    });
+                    if (!response.ok) {
+                        throw new Error(await response.text() || "Save failed.");
+                    }
+
+                    const result = await response.json();
+                    document.querySelector(".blog-post-title").textContent = result.title;
+                    document.querySelector(".blog-post-content").innerHTML = result.html;
+                    blogEditor.close();
+                } catch (requestError) {
+                    error.textContent = requestError.message;
+                }
+            });
+        }
     </script>
 }
