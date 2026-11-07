@@ -46,5 +46,5 @@ clean_contents() {
 echo "Clearing app_state, img_db_thumbs, and db_data..."
 clean_contents "$DATA_DIR/app_state"
 clean_contents "$DATA_DIR/img_db_thumbs"
-clean_contents "$SCRIPT_DIR/db_data"
+clean_contents "$DATA_DIR/db_data"
 echo "Done."

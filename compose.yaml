@@ -9,8 +9,12 @@ services:
       MYSQL_USER: myuser
       MYSQL_PASSWORD: mypassword
     volumes:
-      - ./db_data:/var/lib/mysql
-      - ./init:/docker-entrypoint-initdb.d
+      - type: bind
+        source: ${DATA_DIR}/db_data
+        target: /var/lib/mysql
+      - type: bind
+        source: ./init
+        target: /docker-entrypoint-initdb.d
     #ports:
     #  - "3306:3306"
 

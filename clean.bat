@@ -34,7 +34,7 @@ call :clean "%DATA_DIR%\app_state"
 if errorlevel 1 exit /b 1
 call :clean "%DATA_DIR%\img_db_thumbs"
 if errorlevel 1 exit /b 1
-call :clean "%SCRIPT_DIR%db_data"
+call :clean "%DATA_DIR%\db_data"
 if errorlevel 1 exit /b 1
 
 echo Done.
