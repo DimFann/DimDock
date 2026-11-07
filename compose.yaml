@@ -53,7 +53,7 @@ services:
     depends_on:
       - path-loader
     ports:
-      - "18080:80"
+      - "${WEBSITE_PORT}:80"
     environment:
       ASPNETCORE_URLS: http://+:80
       ConnectionStrings__DefaultConnection: "Server=db;Port=3306;Database=mydb;User=myuser;Password=mypassword;"
