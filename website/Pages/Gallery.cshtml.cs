@@ -37,7 +37,7 @@ public class GalleryModel : PageModel
             : path ?? Path ?? "root";
 
         var sanitized = SanitizePath(input).TrimStart('/');
-        _logger.LogInformation("Gallery path: {Path}", sanitized);
+        _logger.LogDebug("Gallery path: {Path}", sanitized);
 
         CurrentPath = sanitized;
 
@@ -55,7 +55,7 @@ public class GalleryModel : PageModel
             .Where(i => i.ShortcutPath == sanitized)
             .ToListAsync();
 
-        _logger.LogInformation($"Path: {sanitized}\nItems: {Items.Count}\nPaths: {Paths.Count}\nShortcuts: {Shortcuts.Count}\n{string.Join('\n',Shortcuts)}");
+        _logger.LogDebug($"Path: {sanitized}\nItems: {Items.Count}\nPaths: {Paths.Count}\nShortcuts: {Shortcuts.Count}\n{string.Join('\n',Shortcuts)}");
 
         // Add Shortcuts to Items as Item for display purposes
         foreach (var shortcut in Shortcuts)

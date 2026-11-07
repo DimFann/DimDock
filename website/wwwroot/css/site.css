@@ -21,6 +21,97 @@ body {
   margin-bottom: 60px;
 }
 
+body.blog-background {
+  background: #aabbbb;
+}
+
+footer.footer {
+  background: #fff;
+}
+
+.blog-page {
+  margin: 0 auto;
+  max-width: 1024px;
+  width: 100%;
+}
+
+.blog-post {
+  background: #fff;
+  border: 1px solid #607878;
+  margin-bottom: 1.5rem;
+}
+
+.blog-post-link {
+  color: inherit;
+  display: block;
+  text-decoration: none;
+}
+
+.blog-post-link:hover .blog-post-title,
+.blog-post-link:focus .blog-post-title {
+  background: #f0f3f3;
+  text-decoration: underline;
+}
+
+.blog-post-title {
+  font-size: 2rem;
+  font-weight: normal;
+  margin: 0;
+  padding: 0.5rem 1rem;
+}
+
+.blog-post-heading {
+  align-items: center;
+  border-bottom: 1px solid #607878;
+  display: flex;
+  justify-content: space-between;
+}
+
+.blog-post-heading > a {
+  margin-right: 1rem;
+  white-space: nowrap;
+}
+
+.blog-post-date {
+  border-bottom: 1px solid #607878;
+  padding: 0.25rem 1rem;
+}
+
+.blog-post-excerpt {
+  background: #fff;
+  box-sizing: border-box;
+  max-height: 12rem;
+  overflow: hidden;
+  padding: 1rem 1.5rem 2rem;
+  position: relative;
+}
+
+.blog-post-excerpt::after {
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0), #fff);
+  bottom: 0;
+  content: "";
+  height: 3rem;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+.blog-post-content {
+  background: #fff;
+  min-height: 20rem;
+  overflow-wrap: anywhere;
+  padding: 1rem 1.5rem;
+}
+
+.blog-post-content > :first-child {
+  margin-top: 0;
+}
+
+.blog-post-content > :last-child {
+  margin-bottom: 0;
+}
+
 .form-floating > .form-control-plaintext::placeholder, .form-floating > .form-control::placeholder {
   color: var(--bs-secondary-color);
   text-align: end;

@@ -10,10 +10,10 @@ services:
       MYSQL_PASSWORD: mypassword
     volumes:
       - type: bind
-        source: ${DATA_DIR}/db_data
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}/db_data
         target: /var/lib/mysql
       - type: bind
-        source: ./init
+        source: ${WSL_PROJECT_DIR:-.}/init
         target: /docker-entrypoint-initdb.d
     #ports:
     #  - "3306:3306"
@@ -34,14 +34,17 @@ services:
       - db
     volumes:
       - type: bind
-        source: ${DATA_DIR}/app_state
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}/app_state
         target: /app_state
       - type: bind
-        source: ${DATA_DIR}/img_src
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_src
         target: /img_src
       - type: bind
-        source: ${DATA_DIR}/img_db_thumbs
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_db_thumbs
         target: /img_db_thumbs
+      - type: bind
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}/blogs
+        target: /blogs
     environment:
       DB_HOST: db
       DB_USER: myuser
@@ -61,11 +64,11 @@ services:
       ConnectionStrings__DefaultConnection: "Server=db;Port=3306;Database=mydb;User=myuser;Password=mypassword;"
     volumes:
       - type: bind
-        source: ${DATA_DIR}/app_state
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}/app_state
         target: /app_state
       - type: bind
-        source: ${DATA_DIR}/img_src
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_src
         target: /img_src
       - type: bind
-        source: ${DATA_DIR}/img_db_thumbs
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_db_thumbs
         target: /img_db_thumbs

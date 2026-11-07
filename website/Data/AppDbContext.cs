@@ -11,6 +11,7 @@ namespace Website.Data
         public DbSet<Item> Items { get; set; }
         public DbSet<PathEntry> Paths { get; set; }
         public DbSet<Shortcut> Shortcuts { get; set; }
+        public DbSet<Blog> Blogs { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -19,6 +20,7 @@ namespace Website.Data
             modelBuilder.Entity<Item>().ToTable("Items");
             modelBuilder.Entity<PathEntry>().ToTable("Paths");
             modelBuilder.Entity<Shortcut>().ToTable("Shortcuts");
+            modelBuilder.Entity<Blog>().ToTable("Blogs");
             modelBuilder.Entity<Shortcut>()
                 .HasOne(s => s.OriginalItem)
                 .WithMany() // or .WithMany(i => i.Shortcuts) if you add a collection to Item

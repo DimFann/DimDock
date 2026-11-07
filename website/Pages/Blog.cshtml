@@ -1,0 +1,45 @@
+@page "/blog"
+@model Website.Pages.BlogModel
+@using System.Globalization
+@{
+    ViewData["Title"] = "Blog";
+    ViewData["BodyClass"] = "blog-background";
+}
+
+<div class="blog-page">
+@foreach (var post in Model.Posts)
+{
+    var timestamp = post.Timestamp.HasValue
+        ? DateTime.SpecifyKind(post.Timestamp.Value, DateTimeKind.Utc)
+            .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)
+        : null;
+
+    <article class="blog-post">
+        <a class="blog-post-link" href="@($"/blog/{post.Id}")">
+            <h2 class="blog-post-title">@(string.IsNullOrWhiteSpace(post.Title) ? "Untitled" : post.Title)</h2>
+            <div class="blog-post-date">
+                @if (timestamp is not null)
+                {
+                    <time datetime="@timestamp" data-local-time>
+                        @post.Timestamp!.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                    </time>
+                }
+            </div>
+        </a>
+        <div class="blog-post-excerpt">
+            @Html.Raw(Model.RenderExcerpt(post.Text))
+        </div>
+    </article>
+}
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll("time[data-local-time]").forEach((element) => {
+            const date = new Date(element.dateTime);
+            if (!Number.isNaN(date.getTime())) {
+                element.textContent = date.toLocaleString();
+            }
+        });
+    </script>
+}

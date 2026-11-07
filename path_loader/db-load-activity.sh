@@ -7,20 +7,30 @@ until nc -z "$DB_HOST" 3306; do
   sleep 1
 done
 
-# Check for path-loader initialization
+# Scan the data directories on each run; the loader only inserts new records.
 if [ ! -f "/app_state/.initialized" ]; then
   echo "Running path-loader for the first time..."
-  python load_paths.py
-  touch /app_state/.initialized
 else
-  echo "Path-loader already initialized. Skipping."
+  echo "Path-loader already initialized. Scanning for new files..."
+fi
+python load_paths.py
+
+# The blog importer rebuilds Blogs when this marker is absent. Only mark it
+# initialized after the loader has completed successfully.
+if [ ! -f "/app_state/.blogs_initialized" ]; then
+  touch /app_state/.blogs_initialized
+  echo "Blog table rebuilt and initialized."
+else
+  echo "Blogs already initialized."
 fi
 
+touch /app_state/.initialized
+
 # Check for shortcut initialization
-if [ ! -f "/app_shared/.shortcuts_initialized" ]; then
+if [ ! -f "/app_state/.shortcuts_initialized" ]; then
   echo "Running shortcut builder for the first time..."
   python build_shortcuts.py
-  touch /app_shared/.shortcuts_initialized
+  touch /app_state/.shortcuts_initialized
 else
   echo "Shortcuts already initialized. Skipping."
 fi

@@ -1,0 +1,42 @@
+@page "/blog/{id:long}"
+@model Website.Pages.BlogPostModel
+@using System.Globalization
+@{
+    ViewData["Title"] = string.IsNullOrWhiteSpace(Model.Post.Title) ? "Untitled" : Model.Post.Title;
+    ViewData["BodyClass"] = "blog-background";
+    var timestamp = Model.Post.Timestamp.HasValue
+        ? DateTime.SpecifyKind(Model.Post.Timestamp.Value, DateTimeKind.Utc)
+            .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)
+        : null;
+}
+
+<div class="blog-page">
+    <article class="blog-post blog-post-full">
+        <div class="blog-post-heading">
+            <h1 class="blog-post-title">@(string.IsNullOrWhiteSpace(Model.Post.Title) ? "Untitled" : Model.Post.Title)</h1>
+            <a href="/blog">Back to blog</a>
+        </div>
+        <div class="blog-post-date">
+            @if (timestamp is not null)
+            {
+                <time datetime="@timestamp" data-local-time>
+                    @Model.Post.Timestamp!.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                </time>
+            }
+        </div>
+        <div class="blog-post-content">
+            @Html.Raw(Model.RenderMarkdown(Model.Post.Text))
+        </div>
+    </article>
+</div>
+
+@section Scripts {
+    <script>
+        document.querySelectorAll("time[data-local-time]").forEach((element) => {
+            const date = new Date(element.dateTime);
+            if (!Number.isNaN(date.getTime())) {
+                element.textContent = date.toLocaleString();
+            }
+        });
+    </script>
+}

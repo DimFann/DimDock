@@ -42,3 +42,18 @@ CREATE TABLE Paths (
     type VARCHAR(32),
     metadata JSON
 ) AUTO_INCREMENT = 0;
+
+CREATE TABLE Blogs (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    source_filename VARCHAR(255) NOT NULL,
+    title VARCHAR(1024),
+    timestamp DATETIME,
+    `text` TEXT,
+    UNIQUE KEY uq_blogs_source_filename (source_filename)
+) AUTO_INCREMENT = 0;
+
+-- Create Paths table with auto-incrementing id
+CREATE TABLE About (
+    id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    description TEXT
+) AUTO_INCREMENT = 0;

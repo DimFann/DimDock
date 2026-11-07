@@ -18,7 +18,22 @@ DB_PASSWORD = os.environ['DB_PASSWORD']
 DB_NAME = os.environ['DB_NAME']
 ROOT_DIR = '/img_src'
 THUMB_DIR = '/img_db_thumbs'
+BLOG_DIR = '/blogs'
+BLOGS_INITIALIZED_FILE = '/app_state/.blogs_initialized'
 VALID_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif'}
+BLOG_FILENAME_PATTERN = re.compile(r'^([A-Z]{2,5})_(\d{8})_(\d{6})\.md$')
+BLOG_TIMEZONE_OFFSETS = {
+    'PST': -8,
+    'PDT': -7,
+    'MST': -7,
+    'MDT': -6,
+    'CST': -6,
+    'CDT': -5,
+    'EST': -5,
+    'EDT': -4,
+    'UTC': 0,
+    'GMT': 0,
+}
 
 # def process_shortcuts(cursor):
 #     shortcuts_path = os.path.join(ROOT_DIR, "shortcuts.json")
@@ -95,6 +110,77 @@ def insert_item(cursor, original_name, parent_path):
     """, (original_name, parent_path, now, created_date, None, 'image', '{}'))
     return cursor.lastrowid
 
+def extract_blog_title(text):
+    first_line = text.splitlines()[0] if text else ''
+    match = re.match(r'^ {0,3}#(?!#)[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$', first_line)
+    if match:
+        title = match.group(1).strip()
+        return title or None
+    return None
+
+def process_blogs(cursor):
+    if os.path.exists(BLOGS_INITIALIZED_FILE):
+        print("Blogs already initialized. Skipping blog import.", flush=True)
+        return 0
+
+    if not os.path.isdir(BLOG_DIR):
+        raise FileNotFoundError(f"Blogs directory not found: {BLOG_DIR}")
+
+    cursor.execute("DROP TABLE IF EXISTS Blogs")
+    cursor.execute("""
+        CREATE TABLE Blogs (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+            source_filename VARCHAR(255) NOT NULL,
+            title VARCHAR(1024),
+            timestamp DATETIME,
+            `text` TEXT,
+            UNIQUE KEY uq_blogs_source_filename (source_filename)
+        )
+    """)
+
+    inserted_blogs = 0
+    for filename in sorted(os.listdir(BLOG_DIR)):
+        match = BLOG_FILENAME_PATTERN.fullmatch(filename)
+        if not match:
+            continue
+
+        timezone_abbrev, date_part, time_part = match.groups()
+        offset_hours = BLOG_TIMEZONE_OFFSETS.get(timezone_abbrev)
+        if offset_hours is None:
+            print(f"Unsupported timezone abbreviation in blog filename {filename}; skipping.", flush=True)
+            continue
+
+        try:
+            local_timestamp = datetime.datetime.strptime(
+                f"{date_part}_{time_part}", "%Y%m%d_%H%M%S"
+            ).replace(tzinfo=datetime.timezone(datetime.timedelta(hours=offset_hours)))
+            # MySQL DATETIME has no timezone, so store the UTC value as a naive datetime.
+            utc_timestamp = local_timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
+        except (OverflowError, ValueError) as e:
+            print(f"Invalid date in blog filename {filename}: {e}; skipping.", flush=True)
+            continue
+
+        file_path = os.path.join(BLOG_DIR, filename)
+        if not os.path.isfile(file_path):
+            continue
+
+        try:
+            with open(file_path, "r", encoding="utf-8") as blog_file:
+                blog_text = blog_file.read()
+        except (OSError, UnicodeError) as e:
+            print(f"Error reading blog file {file_path}: {e}; skipping.", flush=True)
+            continue
+
+        title = extract_blog_title(blog_text)
+        cursor.execute("""
+            INSERT INTO Blogs (source_filename, title, timestamp, `text`)
+            VALUES (%s, %s, %s, %s)
+        """, (filename, title, utc_timestamp, blog_text))
+        inserted_blogs += 1
+        print(f"Imported blog: {filename}", flush=True)
+
+    return inserted_blogs
+
 def process_image(file_path, item_id):
     print(f"Processing image: {file_path} → ID {item_id}", flush=True)
     try:
@@ -114,6 +200,11 @@ def process_image(file_path, item_id):
 
 def traverse_and_insert(cursor):
     total_images = 0
+    cursor.execute("SELECT path FROM Paths")
+    existing_paths = {row[0] for row in cursor.fetchall()}
+    cursor.execute("SELECT parent_path, original_name FROM Items")
+    existing_items = set(cursor.fetchall())
+
     for current_path, dirs, files in os.walk(ROOT_DIR):
         print(f"Processing folder: {current_path}", flush=True)
         rel_path = os.path.relpath(current_path, ROOT_DIR)
@@ -131,14 +222,18 @@ def traverse_and_insert(cursor):
             except Exception as e:
                 print(f"Error reading description.md in {current_path}: {e}", flush=True)
 
-        insert_path(cursor, path, parent, description)
+        if path not in existing_paths:
+            insert_path(cursor, path, parent, description)
+            existing_paths.add(path)
 
         image_tasks = []
         for file in files:
             ext = os.path.splitext(file)[1].lower()
-            if ext in VALID_EXTENSIONS:
+            item_key = (path, file)
+            if ext in VALID_EXTENSIONS and item_key not in existing_items:
                 full_path = os.path.join(current_path, file)
                 item_id = insert_item(cursor, file, path)
+                existing_items.add(item_key)
                 image_tasks.append((full_path, item_id))
 
         total_images += len(image_tasks)
@@ -158,6 +253,8 @@ def traverse_and_insert(cursor):
     return total_images
 
 def main():
+    conn = None
+    cursor = None
     try:
         conn = mysql.connector.connect(
             host=DB_HOST,
@@ -167,14 +264,25 @@ def main():
         )
         cursor = conn.cursor()
         total_images = traverse_and_insert(cursor)
+        inserted_blogs = process_blogs(cursor)
         # process_shortcuts(cursor)
         conn.commit()
-        cursor.close()
-        conn.close()
-        print(f"Finished processing {total_images} images.", flush=True)
-    except Exception as e:
+        print(
+            f"Finished scanning: {total_images} new images, "
+            f"{inserted_blogs} new blogs.",
+            flush=True
+        )
+    except Exception:
+        if conn is not None:
+            conn.rollback()
         print("Fatal error occurred:", flush=True)
         traceback.print_exc()
+        raise
+    finally:
+        if cursor is not None:
+            cursor.close()
+        if conn is not None:
+            conn.close()
 
 if __name__ == "__main__":
     main()
