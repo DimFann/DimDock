@@ -7,7 +7,7 @@
 
 @if (Model.AdminEnabled)
 {
-    <div class="admin-options-toolbar">
+    <div class="admin-options-toolbar image-admin-options-toolbar">
         <strong class="admin-options-toolbar-title">Admin Options</strong>
         @if (Model.CurrentShortcutId.HasValue)
         {
@@ -35,20 +35,30 @@
             <a class="icon-action-button soft-shadow" href="@Model.GalleryUrl" data-back-to-gallery aria-label="Back to gallery" title="Back to gallery">
                 <img src="/img/prev.png" alt="" />
             </a>
-            <a class="icon-action-button soft-shadow" href="@Model.SourceUrl" aria-label="View source" title="View source">
+            <a class="icon-action-button soft-shadow" href="@Model.SourceUrl" aria-label="@(Model.Item.IsImage ? "View source" : "Open file")" title="@(Model.Item.IsImage ? "View source" : "Open file")">
                 <img src="/img/goto.png" alt="" />
             </a>
         </div>
-        <a class="icon-action-button soft-shadow" href="@Model.SourceUrl" download aria-label="Download image" title="Download">
+        <a class="icon-action-button soft-shadow" href="@Model.SourceUrl" download aria-label="Download file" title="Download">
             <img src="/img/save.png" alt="" />
         </a>
     </div>
     <div class="image-viewer-content">
-        <button type="button" class="image-viewer-image-toggle" aria-pressed="false" aria-label="Expand image">
-            <img src="@Model.SourceUrl" alt="@Model.Item.OriginalName" />
-        </button>
+        @if (Model.Item.IsImage)
+        {
+            <button type="button" class="image-viewer-image-toggle" aria-pressed="false" aria-label="Expand image">
+                <img src="@Model.SourceUrl" alt="@Model.Item.OriginalName" />
+            </button>
+        }
+        else
+        {
+            <a class="image-viewer-file" href="@Model.SourceUrl" target="_blank" rel="noopener">
+                <img src="/img/file.png" alt="" />
+                <span>Download @Model.Item.OriginalName</span>
+            </a>
+        }
     </div>
-    <section class="image-viewer-tags" aria-label="Image tags">
+    <section class="image-viewer-tags" aria-label="Item tags">
         @if (Model.AdminEnabled)
         {
             <form method="post" asp-page-handler="SaveTags" class="directory-tag-editor image-tag-editor" data-image-tag-editor>
@@ -59,7 +69,7 @@
                            value="@Model.TagsInput"
                            maxlength="4000"
                            placeholder="Tags..."
-                           aria-label="Image tags, comma-separated" />
+                           aria-label="Item tags, comma-separated" />
                     <button type="submit" class="icon-action-button directory-tag-save" aria-label="Save tags" title="Save tags">
                         <img src="/img/save.png" alt="" />
                     </button>
@@ -78,8 +88,86 @@
         }
     </section>
 
+    @if (Model.AdminEnabled || !string.IsNullOrWhiteSpace(Model.Item.Description))
+    {
+        var hasDescription = !string.IsNullOrWhiteSpace(Model.Item.Description);
+        <section class="image-item-description-section" aria-label="Item description">
+            <div class="path-description-wrapper image-item-description-wrapper @(hasDescription ? "has-description" : "")"
+                 data-item-description-wrapper>
+                @if (Model.AdminEnabled)
+                {
+                    <button type="button"
+                            class="@(hasDescription ? "description-editor-button description-edit-icon" : "icon-action-button description-add-icon")"
+                            data-open-item-description-editor
+                            aria-label="@(hasDescription ? "Edit description" : "Add description")"
+                            title="@(hasDescription ? "Edit description" : "Add description")">
+                        @if (hasDescription)
+                        {
+                            <img src="/img/edit.png" alt="" />
+                        }
+                        else
+                        {
+                            <img src="/img/add.png" alt="" />
+                        }
+                    </button>
+                }
+                <div class="image-item-description"
+                     data-item-description
+                     hidden="@(!hasDescription)">
+                    @Html.Raw(Model.RenderDescription(Model.Item.Description))
+                </div>
+            </div>
+        </section>
+    }
+
     @if (Model.AdminEnabled)
     {
+        <dialog class="description-editor" data-item-description-editor aria-labelledby="itemDescriptionEditorTitle">
+            <form method="post" data-item-description-form>
+                @Html.AntiForgeryToken()
+                <h2 id="itemDescriptionEditorTitle" data-item-description-editor-title>Edit Description</h2>
+                <section class="description-editor-pane" data-item-description-edit-pane>
+                    <div class="description-editor-actions">
+                        <div class="description-editor-actions-left">
+                            <button type="button" class="icon-action-button" data-preview-item-description aria-label="Preview description" title="Preview">
+                                <img src="/img/preview.png" alt="" />
+                            </button>
+                        </div>
+                        <div class="description-editor-actions-right">
+                            <button type="button" class="icon-action-button" data-close-item-description-editor aria-label="Cancel editing" title="Cancel">
+                                <img src="/img/cancel.png" alt="" />
+                            </button>
+                            <button type="submit" class="icon-action-button" aria-label="Save description" title="Save">
+                                <img src="/img/save.png" alt="" />
+                            </button>
+                        </div>
+                    </div>
+                    <textarea name="description"
+                              data-item-description-markdown
+                              aria-label="Image description Markdown">@Model.Item.Description</textarea>
+                </section>
+                <section class="description-editor-pane description-editor-preview-pane" data-item-description-preview-pane hidden>
+                    <div class="description-editor-actions">
+                        <div class="description-editor-actions-left">
+                            <button type="button" class="icon-action-button" data-edit-item-description aria-label="Edit description" title="Edit">
+                                <img src="/img/edit.png" alt="" />
+                            </button>
+                        </div>
+                        <div class="description-editor-actions-right">
+                            <button type="button" class="icon-action-button" data-close-item-description-editor aria-label="Cancel editing" title="Cancel">
+                                <img src="/img/cancel.png" alt="" />
+                            </button>
+                            <button type="submit" class="icon-action-button" aria-label="Save description" title="Save">
+                                <img src="/img/save.png" alt="" />
+                            </button>
+                        </div>
+                    </div>
+                    <div class="description-editor-preview blog-post-content" data-item-description-preview aria-live="polite"></div>
+                </section>
+                <p class="description-editor-error" data-item-description-error role="alert"></p>
+            </form>
+        </dialog>
+
         <dialog class="shortcut-dialog" data-shortcut-to-dialog aria-labelledby="shortcutToTitle">
             <div class="path-description-dialog-header">
                 <h2 id="shortcutToTitle">Shortcut To</h2>
@@ -175,40 +263,54 @@
 </main>
 
 <script>
-    const imageContent = document.querySelector(".image-viewer-content");
-    const imageViewer = document.querySelector(".image-viewer");
-    const mainContent = document.querySelector("main[role='main']");
     const imageToggle = document.querySelector(".image-viewer-image-toggle");
-    const viewerImage = imageToggle.querySelector("img");
-    function syncViewerImageSize() {
-        if (imageToggle.classList.contains("expanded") ||
-            !viewerImage.naturalWidth ||
-            !viewerImage.naturalHeight) {
-            return;
+    if (imageToggle) {
+        const imageContent = document.querySelector(".image-viewer-content");
+        const imageViewer = document.querySelector(".image-viewer");
+        const mainContent = document.querySelector("main[role='main']");
+        const viewerImage = imageToggle.querySelector("img");
+        function syncViewerImageSize() {
+            if (imageToggle.classList.contains("expanded") ||
+                !viewerImage.naturalWidth ||
+                !viewerImage.naturalHeight) {
+                return;
+            }
+
+            const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+            const imageRect = viewerImage.getBoundingClientRect();
+            const viewerRect = imageViewer.getBoundingClientRect();
+            const mainRect = mainContent.getBoundingClientRect();
+            const belowImageHeight = viewerRect.bottom - imageRect.bottom;
+            const afterViewerHeight = mainRect.bottom - viewerRect.bottom;
+            const availableHeight = Math.max(
+                0,
+                viewportHeight - (imageRect.top + window.scrollY) - belowImageHeight - afterViewerHeight - 8);
+            const availableWidth = Math.max(0, imageContent.clientWidth - 18);
+            const scale = Math.min(
+                availableHeight / viewerImage.naturalHeight,
+                availableWidth / viewerImage.naturalWidth);
+            viewerImage.style.height = `${viewerImage.naturalHeight * scale}px`;
+            viewerImage.style.width = `${viewerImage.naturalWidth * scale}px`;
         }
 
-        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
-        const imageRect = viewerImage.getBoundingClientRect();
-        const viewerRect = imageViewer.getBoundingClientRect();
-        const mainRect = mainContent.getBoundingClientRect();
-        const belowImageHeight = viewerRect.bottom - imageRect.bottom;
-        const afterViewerHeight = mainRect.bottom - viewerRect.bottom;
-        const availableHeight = Math.max(
-            0,
-            viewportHeight - (imageRect.top + window.scrollY) - belowImageHeight - afterViewerHeight - 8);
-        const availableWidth = Math.max(0, imageContent.clientWidth - 18);
-        const scale = Math.min(
-            availableHeight / viewerImage.naturalHeight,
-            availableWidth / viewerImage.naturalWidth);
-        viewerImage.style.height = `${viewerImage.naturalHeight * scale}px`;
-        viewerImage.style.width = `${viewerImage.naturalWidth * scale}px`;
-    }
+        viewerImage.addEventListener("load", syncViewerImageSize);
+        window.addEventListener("resize", syncViewerImageSize);
+        window.visualViewport?.addEventListener("resize", syncViewerImageSize);
+        window.addEventListener("load", syncViewerImageSize, { once: true });
+        syncViewerImageSize();
 
-    viewerImage.addEventListener("load", syncViewerImageSize);
-    window.addEventListener("resize", syncViewerImageSize);
-    window.visualViewport?.addEventListener("resize", syncViewerImageSize);
-    window.addEventListener("load", syncViewerImageSize, { once: true });
-    syncViewerImageSize();
+        imageToggle.addEventListener("click", () => {
+            const expanded = imageToggle.classList.toggle("expanded");
+            if (expanded) {
+                viewerImage.style.height = "";
+                viewerImage.style.width = "";
+            } else {
+                syncViewerImageSize();
+            }
+            imageToggle.setAttribute("aria-pressed", String(expanded));
+            imageToggle.setAttribute("aria-label", expanded ? "Restore image size" : "Expand image");
+        });
+    }
 
     const backToGallery = document.querySelector("[data-back-to-gallery]");
     backToGallery.addEventListener("click", (event) => {
@@ -216,18 +318,6 @@
             event.preventDefault();
             window.history.back();
         }
-    });
-
-    imageToggle.addEventListener("click", () => {
-        const expanded = imageToggle.classList.toggle("expanded");
-        if (expanded) {
-            viewerImage.style.height = "";
-            viewerImage.style.width = "";
-        } else {
-            syncViewerImageSize();
-        }
-        imageToggle.setAttribute("aria-pressed", String(expanded));
-        imageToggle.setAttribute("aria-label", expanded ? "Restore image size" : "Expand image");
     });
 
     const shortcutToDialog = document.querySelector("[data-shortcut-to-dialog]");
@@ -250,6 +340,79 @@
         url.searchParams.set("handler", handler);
         return url;
     }
+
+    const itemDescriptionDialog = document.querySelector("[data-item-description-editor]");
+    const itemDescriptionForm = document.querySelector("[data-item-description-form]");
+    const itemDescriptionTextarea = document.querySelector("[data-item-description-markdown]");
+    const itemDescriptionEditPane = document.querySelector("[data-item-description-edit-pane]");
+    const itemDescriptionPreviewPane = document.querySelector("[data-item-description-preview-pane]");
+    const itemDescriptionPreview = document.querySelector("[data-item-description-preview]");
+    const itemDescriptionError = document.querySelector("[data-item-description-error]");
+    document.querySelector("[data-open-item-description-editor]")?.addEventListener("click", () => {
+        itemDescriptionError.textContent = "";
+        itemDescriptionPreviewPane.hidden = true;
+        itemDescriptionEditPane.hidden = false;
+        itemDescriptionDialog.showModal();
+        itemDescriptionTextarea.focus();
+    });
+
+    document.querySelectorAll("[data-close-item-description-editor]").forEach((button) => {
+        button.addEventListener("click", () => itemDescriptionDialog.close());
+    });
+    document.querySelector("[data-edit-item-description]")?.addEventListener("click", () => {
+        itemDescriptionPreviewPane.hidden = true;
+        itemDescriptionEditPane.hidden = false;
+        itemDescriptionTextarea.focus();
+    });
+    document.querySelector("[data-preview-item-description]")?.addEventListener("click", async () => {
+        itemDescriptionError.textContent = "";
+        const formData = new FormData(itemDescriptionForm);
+        const url = handlerUrl("PreviewDescription");
+        try {
+            const response = await fetch(url, { method: "POST", body: formData });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Previewing description failed.");
+            }
+            itemDescriptionPreview.innerHTML = await response.text();
+            itemDescriptionEditPane.hidden = true;
+            itemDescriptionPreviewPane.hidden = false;
+        } catch (error) {
+            itemDescriptionError.textContent = error.message;
+        }
+    });
+    itemDescriptionForm?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        itemDescriptionError.textContent = "Saving description...";
+        try {
+            const response = await fetch(handlerUrl("SaveDescription"), {
+                method: "POST",
+                body: new FormData(itemDescriptionForm)
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Saving description failed.");
+            }
+            const result = await response.json();
+            const description = document.querySelector("[data-item-description]");
+            description.innerHTML = result.html;
+            description.hidden = !result.hasDescription;
+            document.querySelector("[data-item-description-wrapper]")
+                .classList.toggle("has-description", result.hasDescription);
+            const editButton = document.querySelector("[data-open-item-description-editor]");
+            editButton.classList.toggle("description-editor-button", result.hasDescription);
+            editButton.classList.toggle("description-edit-icon", result.hasDescription);
+            editButton.classList.toggle("icon-action-button", !result.hasDescription);
+            editButton.classList.toggle("description-add-icon", !result.hasDescription);
+            editButton.setAttribute("aria-label", result.hasDescription ? "Edit description" : "Add description");
+            editButton.title = result.hasDescription ? "Edit description" : "Add description";
+            const icon = document.createElement("img");
+            icon.src = result.hasDescription ? "/img/edit.png" : "/img/add.png";
+            icon.alt = "";
+            editButton.replaceChildren(icon);
+            itemDescriptionDialog.close();
+        } catch (error) {
+            itemDescriptionError.textContent = error.message;
+        }
+    });
 
     document.querySelector("[data-open-shortcut-to]")?.addEventListener("click", () => {
         shortcutToDialog.showModal();

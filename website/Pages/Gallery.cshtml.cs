@@ -571,6 +571,41 @@ public class GalleryModel : PageModel
         });
     }
 
+    public async Task<IActionResult> OnPostRenamePathAsync(
+        [FromForm] string? path,
+        [FromForm] string? newName)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal) ||
+            string.IsNullOrEmpty(sanitizedPath))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+
+        try
+        {
+            var renamedPath = await _filesystemPersistence.RenamePathAsync(
+                sanitizedPath,
+                newName ?? string.Empty,
+                HttpContext.RequestAborted);
+            return new JsonResult(new { path = renamedPath });
+        }
+        catch (GalleryPathRenameException error)
+        {
+            return StatusCode(StatusCodes.Status409Conflict, error.Message);
+        }
+    }
+
     public async Task<IActionResult> OnPostBulkDeleteAsync(
         [FromForm] string? path,
         [FromForm] List<ulong>? itemIds,

@@ -10,18 +10,23 @@ DB_USER = os.environ['DB_USER']
 DB_PASSWORD = os.environ['DB_PASSWORD']
 DB_NAME = os.environ['DB_NAME']
 ROOT_DIR = '/img_src'
+SHORTCUTS_FILENAME = '.shortcuts.json'
+LEGACY_SHORTCUTS_FILENAME = 'shortcuts.json'
 
 def process_shortcuts(cursor):
-    shortcuts_path = os.path.join(ROOT_DIR, "shortcuts.json")
+    shortcuts_path = os.path.join(ROOT_DIR, SHORTCUTS_FILENAME)
+    legacy_path = os.path.join(ROOT_DIR, LEGACY_SHORTCUTS_FILENAME)
+    if not os.path.isfile(shortcuts_path) and os.path.isfile(legacy_path):
+        os.replace(legacy_path, shortcuts_path)
     if not os.path.isfile(shortcuts_path):
-        logging.info("No shortcuts.json found, skipping shortcut processing.")
+        logging.info("No %s found, skipping shortcut processing.", SHORTCUTS_FILENAME)
         return
 
     try:
         with open(shortcuts_path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
-        logging.error("Error reading shortcuts.json: %s", e)
+        logging.error("Error reading %s: %s", SHORTCUTS_FILENAME, e)
         return
 
     shortcuts = data.get("shortcuts", {})

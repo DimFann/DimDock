@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
+using Markdig;
 using Website.Data;
 using Website.Models;
 using Website.Services;
@@ -10,6 +11,8 @@ namespace Website.Pages;
 
 public class ImageModel : PageModel
 {
+    private static readonly MarkdownPipeline DescriptionMarkdownPipeline =
+        new MarkdownPipelineBuilder().DisableHtml().Build();
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _environment;
@@ -39,6 +42,9 @@ public class ImageModel : PageModel
     public ulong? CurrentShortcutId { get; private set; }
     public string TagsInput { get; set; } = string.Empty;
     public string? TagError { get; private set; }
+    public string RenderDescription(string? markdown) =>
+        Markdown.ToHtml(markdown ?? string.Empty, DescriptionMarkdownPipeline);
+
     public bool AdminEnabled => AdminAccess.IsAdmin(
         _configuration,
         User,
@@ -77,6 +83,39 @@ public class ImageModel : PageModel
 
         TagsInput = string.Join(", ", Tags);
         return Page();
+    }
+
+    public async Task<IActionResult> OnGetFileAsync(ulong id)
+    {
+        if (!await LoadItemAsync(id))
+        {
+            return NotFound();
+        }
+        if (Item.IsImage)
+        {
+            return NotFound();
+        }
+
+        AdminOnlyTags = await _adminOnlyTagsProvider.GetTagsAsync(HttpContext.RequestAborted);
+        if (!AdminEnabled &&
+            (Item.TagLinks.Any(link => AdminOnlyTags.Contains(link.Tag.Name)) ||
+             await IsInAdminOnlyPathAsync(Item.ParentPath)))
+        {
+            return NotFound();
+        }
+
+        var filePath = _filesystemPersistence.GetItemFilePath(
+            Item.ParentPath ?? "root",
+            Item.OriginalName);
+        if (!System.IO.File.Exists(filePath))
+        {
+            return NotFound();
+        }
+
+        return PhysicalFile(
+            filePath,
+            "application/octet-stream",
+            Item.OriginalName);
     }
 
     public async Task<IActionResult> OnGetSearchPathsAsync(ulong id, [FromQuery] string? query)
@@ -528,6 +567,61 @@ public class ImageModel : PageModel
         return RedirectToPage("/Image", new { id });
     }
 
+    public async Task<IActionResult> OnPostPreviewDescriptionAsync(
+        ulong id,
+        [FromForm] string? description)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        if (!await _context.Items.AnyAsync(item => item.Id == id, HttpContext.RequestAborted))
+        {
+            return NotFound();
+        }
+
+        return Content(RenderDescription(description), "text/html");
+    }
+
+    public async Task<IActionResult> OnPostSaveDescriptionAsync(
+        ulong id,
+        [FromForm] string? description)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        var item = await _context.Items
+            .FirstOrDefaultAsync(entry => entry.Id == id, HttpContext.RequestAborted);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        item.Description = string.IsNullOrWhiteSpace(description) ? null : description;
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistPathAsync(
+            item.ParentPath ?? "root",
+            HttpContext.RequestAborted);
+
+        return new JsonResult(new
+        {
+            hasDescription = !string.IsNullOrWhiteSpace(item.Description),
+            html = RenderDescription(item.Description)
+        });
+    }
+
     private async Task<bool> LoadItemAsync(ulong id)
     {
         var item = await _context.Items
@@ -540,11 +634,18 @@ public class ImageModel : PageModel
         }
 
         Item = item;
-        var segments = (item.ParentPath ?? string.Empty)
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Append(item.OriginalName)
-            .Select(Uri.EscapeDataString);
-        SourceUrl = "/img_src/" + string.Join('/', segments);
+        if (item.IsImage)
+        {
+            var segments = (item.ParentPath ?? string.Empty)
+                .Split('/', StringSplitOptions.RemoveEmptyEntries)
+                .Append(item.OriginalName)
+                .Select(Uri.EscapeDataString);
+            SourceUrl = "/img_src/" + string.Join('/', segments);
+        }
+        else
+        {
+            SourceUrl = $"/image/{item.Id}?handler=File";
+        }
         GalleryUrl = CreateGalleryUrl(item.ParentPath ?? "root");
         return true;
     }

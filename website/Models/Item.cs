@@ -44,6 +44,9 @@ namespace Website.Models
         [NotMapped]
         public ulong? ShortcutId { get; set; }
 
+        [NotMapped]
+        public bool IsImage => string.Equals(Type, "image", StringComparison.OrdinalIgnoreCase);
+
         public ICollection<ItemTag> TagLinks { get; set; } = new List<ItemTag>();
     }
 }

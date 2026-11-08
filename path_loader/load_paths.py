@@ -25,6 +25,10 @@ BLOG_DIR = '/blogs'
 ABOUT_FILE = '/about/about.md'
 BLOGS_INITIALIZED_FILE = '/app_state/.blogs_initialized'
 TAG_MANIFEST_FILENAME = '.dimdock.json'
+DESCRIPTION_FILENAME = '.description.md'
+LEGACY_DESCRIPTION_FILENAME = 'description.md'
+SHORTCUTS_FILENAME = '.shortcuts.json'
+LEGACY_SHORTCUTS_FILENAME = 'shortcuts.json'
 TAG_NAME_MAX_LENGTH = 100
 VALID_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif'}
 BLOG_FILENAME_PATTERN = re.compile(r'^([A-Z]{2,5})_(\d{8})_(\d{6})\.md$')
@@ -42,16 +46,16 @@ BLOG_TIMEZONE_OFFSETS = {
 }
 
 # def process_shortcuts(cursor):
-#     shortcuts_path = os.path.join(ROOT_DIR, "shortcuts.json")
+#     shortcuts_path = os.path.join(ROOT_DIR, SHORTCUTS_FILENAME)
 #     if not os.path.isfile(shortcuts_path):
-#         print("No shortcuts.json found, skipping shortcut processing.", flush=True)
+#         print(f"No {SHORTCUTS_FILENAME} found, skipping shortcut processing.", flush=True)
 #         return
 
 #     try:
 #         with open(shortcuts_path, "r", encoding="utf-8") as f:
 #             data = json.load(f)
 #     except Exception as e:
-#         print(f"Error reading shortcuts.json: {e}", flush=True)
+#         print(f"Error reading {SHORTCUTS_FILENAME}: {e}", flush=True)
 #         return
 
 #     shortcuts = data.get("shortcuts", [])
@@ -144,7 +148,17 @@ def read_tag_manifest(directory):
             raise ValueError(f"Invalid item filename in tag manifest {manifest_path}: {filename!r}")
         if not isinstance(item_metadata, dict):
             raise ValueError(f"{manifest_path}: metadata for {filename!r} must be an object")
-        items[filename] = normalize_tags(item_metadata.get('tags', []), f"{manifest_path}: {filename!r} tags")
+        normalized_item = {
+            'tags': normalize_tags(item_metadata.get('tags', []), f"{manifest_path}: {filename!r} tags")
+        }
+        if 'description' in item_metadata:
+            description = item_metadata['description']
+            if description is not None and not isinstance(description, str):
+                raise ValueError(
+                    f"{manifest_path}: description for {filename!r} must be a string or null"
+                )
+            normalized_item['description'] = description
+        items[filename] = normalized_item
     return {'type': path_type, 'tags': directory_tags, 'items': items}
 
 def replace_entity_tags(cursor, table, entity_column, entity_id, tag_names):
@@ -196,14 +210,14 @@ def create_thumbnail_key(parent_path, original_name):
     normalized_path = normalized_path.replace(os.sep, '/')
     return hashlib.sha256(normalized_path.encode('utf-8')).hexdigest()
 
-def insert_item(cursor, original_name, parent_path, thumbnail_key):
+def insert_item(cursor, original_name, parent_path, thumbnail_key, file_type):
     now = datetime.datetime.now()
     created_date = extract_date_from_filename_or_path(original_name, parent_path)
 
     cursor.execute("""
         INSERT INTO Items (original_name, parent_path, thumbnail_key, uploaded, created, display_index, type, metadata)
         VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-    """, (original_name, parent_path, thumbnail_key, now, created_date, None, 'image', '{}'))
+    """, (original_name, parent_path, thumbnail_key, now, created_date, None, file_type, '{}'))
     return cursor.lastrowid
 
 def extract_blog_title(text):
@@ -317,6 +331,23 @@ def process_about(cursor):
     """, (description,))
     logging.info("Loaded About content from %s", ABOUT_FILE)
 
+def migrate_legacy_metadata(directory):
+    for legacy_name, hidden_name in (
+        (LEGACY_DESCRIPTION_FILENAME, DESCRIPTION_FILENAME),
+        (LEGACY_SHORTCUTS_FILENAME, SHORTCUTS_FILENAME),
+    ):
+        legacy_path = os.path.join(directory, legacy_name)
+        hidden_path = os.path.join(directory, hidden_name)
+        if os.path.isfile(legacy_path):
+            if os.path.exists(hidden_path):
+                logging.error(
+                    "Both legacy and hidden metadata files exist in %s; keeping %s.",
+                    directory,
+                    hidden_name
+                )
+                continue
+            os.replace(legacy_path, hidden_path)
+
 def process_image(file_path, thumbnail_key):
     logging.info("Generating thumbnail: %s", file_path)
     try:
@@ -334,14 +365,14 @@ def process_image(file_path, thumbnail_key):
         logging.error("Error processing image %s", file_path, exc_info=e)
 
 def traverse_and_insert(cursor):
-    total_images = 0
+    total_files = 0
     cursor.execute("SELECT path, id, type FROM Paths")
     path_rows = cursor.fetchall()
     existing_paths = {row[0]: row[1] for row in path_rows}
     existing_path_types = {row[0]: row[2] for row in path_rows}
-    cursor.execute("SELECT id, parent_path, original_name, thumbnail_key FROM Items")
+    cursor.execute("SELECT id, parent_path, original_name, thumbnail_key, type FROM Items")
     existing_items = {
-        (row[1], row[2]): {'id': row[0], 'thumbnail_key': row[3]}
+        (row[1], row[2]): {'id': row[0], 'thumbnail_key': row[3], 'type': row[4]}
         for row in cursor.fetchall()
     }
     existing_items_by_path = {}
@@ -350,6 +381,8 @@ def traverse_and_insert(cursor):
 
     for current_path, dirs, files in os.walk(ROOT_DIR):
         logging.info("Processing folder: %s", current_path)
+        dirs[:] = sorted(directory for directory in dirs if not directory.startswith('.'))
+        migrate_legacy_metadata(current_path)
         rel_path = os.path.relpath(current_path, ROOT_DIR)
         path = "root" if rel_path == "." else rel_path
         parent_dir = os.path.dirname(rel_path)
@@ -361,15 +394,14 @@ def traverse_and_insert(cursor):
         if directory_name.casefold().startswith('wip_'):
             path_tags.add('hidden')
 
-        # 🔍 Check for description.md
-        description_path = os.path.join(current_path, "description.md")
+        description_path = os.path.join(current_path, DESCRIPTION_FILENAME)
         description = None
         if os.path.isfile(description_path):
             try:
                 with open(description_path, "r", encoding="utf-8") as f:
                     description = f.read()
             except Exception as e:
-                logging.error("Error reading description.md in %s: %s", current_path, e)
+                logging.error("Error reading %s in %s: %s", DESCRIPTION_FILENAME, current_path, e)
 
         if path not in existing_paths:
             existing_paths[path] = insert_path(cursor, path, parent, description)
@@ -386,21 +418,32 @@ def traverse_and_insert(cursor):
 
         image_tasks = []
         for file in files:
+            if file.startswith('.'):
+                continue
+            if file in (LEGACY_DESCRIPTION_FILENAME, LEGACY_SHORTCUTS_FILENAME):
+                continue
             ext = os.path.splitext(file)[1].lower()
             item_key = (path, file)
-            if ext not in VALID_EXTENSIONS:
-                continue
-
             thumbnail_key = create_thumbnail_key(path, file)
+            file_type = 'image' if ext in VALID_EXTENSIONS else 'file'
             if item_key not in existing_items:
-                full_path = os.path.join(current_path, file)
-                item_id = insert_item(cursor, file, path, thumbnail_key)
-                existing_items[item_key] = {'id': item_id, 'thumbnail_key': thumbnail_key}
+                item_id = insert_item(cursor, file, path, thumbnail_key, file_type)
+                existing_items[item_key] = {
+                    'id': item_id,
+                    'thumbnail_key': thumbnail_key,
+                    'type': file_type
+                }
                 existing_items_by_path.setdefault(path, {})[file] = item_id
-                total_images += 1
+                total_files += 1
             else:
                 item = existing_items[item_key]
                 item_id = item['id']
+                if item.get('type') != file_type:
+                    cursor.execute(
+                        "UPDATE Items SET type = %s WHERE id = %s",
+                        (file_type, item_id)
+                    )
+                    item['type'] = file_type
                 if item['thumbnail_key'] != thumbnail_key:
                     cursor.execute(
                         "UPDATE Items SET thumbnail_key = %s WHERE id = %s",
@@ -409,7 +452,7 @@ def traverse_and_insert(cursor):
                     item['thumbnail_key'] = thumbnail_key
 
             thumb_path = os.path.join(THUMB_DIR, f"{thumbnail_key}.png")
-            if not os.path.isfile(thumb_path):
+            if file_type == 'image' and not os.path.isfile(thumb_path):
                 image_tasks.append((os.path.join(current_path, file), thumbnail_key))
 
         directory_items = existing_items_by_path.get(path, {})
@@ -425,11 +468,17 @@ def traverse_and_insert(cursor):
             item_tags_by_id.setdefault(item_id, set()).add(tag_name)
 
         for filename, item_id in directory_items.items():
+            item_metadata = tag_manifest['items'].get(filename, {'tags': []})
             desired_tags = sorted(
-                set(tag_manifest['items'].get(filename, [])) | set(date_path_tags(path))
+                set(item_metadata['tags']) | set(date_path_tags(path))
             )
             if item_tags_by_id.get(item_id, set()) != set(desired_tags):
                 replace_entity_tags(cursor, 'ItemTags', 'item_id', item_id, desired_tags)
+            if 'description' in item_metadata:
+                cursor.execute(
+                    "UPDATE Items SET description = %s WHERE id = %s",
+                    (item_metadata['description'], item_id)
+                )
 
         for filename in tag_manifest['items']:
             if filename not in directory_items:
@@ -440,7 +489,7 @@ def traverse_and_insert(cursor):
                 )
 
         for filename, item_id in directory_items.items():
-            explicit_tags = tag_manifest['items'].get(filename, [])
+            explicit_tags = tag_manifest['items'].get(filename, {'tags': []})['tags']
             auto_tags = date_path_tags(path)
             for tag_name in explicit_tags:
                 cursor.execute("INSERT IGNORE INTO Tags (name) VALUES (%s)", (tag_name,))
@@ -460,7 +509,7 @@ def traverse_and_insert(cursor):
 
         logging.info("Finished processing folder: %s", current_path)
 
-    return total_images
+    return total_files
 
 def main():
     conn = None
@@ -473,14 +522,14 @@ def main():
             database=DB_NAME
         )
         cursor = conn.cursor()
-        total_images = traverse_and_insert(cursor)
+        total_files = traverse_and_insert(cursor)
         inserted_blogs = process_blogs(cursor)
         process_about(cursor)
         # process_shortcuts(cursor)
         conn.commit()
         logging.info(
-            "Finished scanning: %s new images, %s new blogs.",
-            total_images,
+            "Finished scanning: %s new files, %s new blogs.",
+            total_files,
             inserted_blogs
         )
     except Exception:

@@ -196,7 +196,12 @@ public class AdminModel : PageModel
                 continue;
             }
 
-            var descriptionPath = Path.Combine(directory, "description.md");
+            var descriptionPath = Path.Combine(directory, ".description.md");
+            var legacyDescriptionPath = Path.Combine(directory, "description.md");
+            if (System.IO.File.Exists(legacyDescriptionPath) && !System.IO.File.Exists(descriptionPath))
+            {
+                System.IO.File.Move(legacyDescriptionPath, descriptionPath);
+            }
             if (string.IsNullOrWhiteSpace(entry.Description))
             {
                 if (System.IO.File.Exists(descriptionPath))
@@ -230,10 +235,11 @@ public class AdminModel : PageModel
                         .Select(link => link.Tag.Name)
                         .Where(name => !DatePathTags.ForPath(item.ParentPath).Contains(name, StringComparer.Ordinal))
                         .OrderBy(name => name, StringComparer.Ordinal)
-                        .ToArray()
+                        .ToArray(),
+                    item.Description
                 })
-                .Where(item => item.Tags.Length > 0)
-                .ToDictionary(item => item.OriginalName, item => new { item.Tags }, StringComparer.Ordinal);
+                .Where(item => item.Tags.Length > 0 || !string.IsNullOrWhiteSpace(item.Description))
+                .ToDictionary(item => item.OriginalName, item => new { item.Tags, item.Description }, StringComparer.Ordinal);
             var directoryTags = entry.TagLinks
                 .Select(link => link.Tag.Name)
                 .OrderBy(name => name, StringComparer.Ordinal)
