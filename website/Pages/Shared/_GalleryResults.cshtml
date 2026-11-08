@@ -98,6 +98,11 @@
                 }
                 <div class="path-description-content"
                      data-path-description
+                     data-open-description-viewer
+                     role="button"
+                     tabindex="0"
+                     aria-haspopup="dialog"
+                     aria-label="View full description"
                      hidden="@(!hasDescription)">
                     @Html.Raw(Model.RenderMarkdown(Model.PathEntry?.Description))
                 </div>
@@ -105,6 +110,16 @@
         </div>
     }
 </div>
+
+<dialog class="path-description-dialog" data-description-viewer aria-labelledby="pathDescriptionViewerTitle">
+    <div class="path-description-dialog-header">
+        <h2 id="pathDescriptionViewerTitle">Description</h2>
+        <button type="button" class="icon-action-button" data-close-description-viewer aria-label="Close description" title="Close">
+            <img src="/img/cancel.png" alt="" />
+        </button>
+    </div>
+    <div class="path-description-dialog-content" data-full-description></div>
+</dialog>
 
 @if (Model.AdminEnabled)
 {
@@ -159,12 +174,12 @@
 <!-- Image grid -->
 @if (Model.Items.Any())
 {
-    <div class="gallery-image-grid">
+    <div class="gallery-image-grid" data-gallery-grid hidden="@(string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase))">
         @foreach (var item in Model.Items)
         {
             var adminOnlyItem = item.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
             <div class="gallery-image-result @(adminOnlyItem ? "admin-only-tagged" : "")">
-                <a href="@($"/image/{item.Id}")" class="gallery-image-link">
+                <a href="@(item.ShortcutId is ulong shortcutId ? $"/image/{item.Id}?shortcutId={shortcutId}" : $"/image/{item.Id}")" class="gallery-image-link">
                     <img src="@($"/img_db_thumbs/{item.ThumbnailKey}.png")"
                          alt="@item.OriginalName ?? $"Image {item.Id}""
                          class="gallery-image-thumbnail" />
@@ -172,4 +187,62 @@
             </div>
         }
     </div>
+}
+
+@if (Model.AdminEnabled || string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase))
+{
+    var comicItems = Model.Items
+        .Select(item => new { Item = item, LeadingNumber = Model.GetComicLeadingNumber(item.OriginalName) })
+        .OrderBy(entry => entry.LeadingNumber is null)
+        .ThenBy(entry => entry.LeadingNumber)
+        .ThenBy(entry => entry.Item.OriginalName, StringComparer.OrdinalIgnoreCase)
+        .Select(entry => entry.Item)
+        .ToList();
+    var firstItem = comicItems.FirstOrDefault();
+    <section class="comic-viewer"
+             data-comic-viewer
+             data-comic-count="@comicItems.Count"
+             hidden="@(!string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase))">
+        <div class="comic-image-pane">
+            @if (firstItem is not null)
+            {
+                <img data-comic-image alt="@firstItem.OriginalName" />
+            }
+            else
+            {
+                <p>No images in this directory.</p>
+            }
+        </div>
+        <div class="comic-pages" hidden>
+            @foreach (var item in comicItems)
+            {
+                <span data-source="@Model.GetSourceUrl(item)" data-name="@item.OriginalName"></span>
+            }
+        </div>
+        @if (comicItems.Count > 0)
+        {
+            <div class="comic-controls">
+                <a class="icon-action-button comic-source-link" href="@Model.GetSourceUrl(firstItem!)" aria-label="View source" title="View source">
+                    <img src="/img/goto.png" alt="" />
+                </a>
+                <div class="comic-page-navigation" aria-label="Comic page navigation">
+                    <button type="button" class="icon-action-button" data-comic-first aria-label="First page" title="First page">
+                        <img src="/img/first.png" alt="" />
+                    </button>
+                    <button type="button" class="icon-action-button" data-comic-prev aria-label="Previous page" title="Previous page">
+                        <img src="/img/prev.png" alt="" />
+                    </button>
+                    <button type="button" class="icon-action-button" data-comic-next aria-label="Next page" title="Next page">
+                        <img src="/img/next.png" alt="" />
+                    </button>
+                    <button type="button" class="icon-action-button" data-comic-last aria-label="Last page" title="Last page">
+                        <img src="/img/last.png" alt="" />
+                    </button>
+                </div>
+                <a class="icon-action-button comic-download-link" href="@Model.GetSourceUrl(firstItem!)" download aria-label="Download image" title="Download">
+                    <img src="/img/save.png" alt="" />
+                </a>
+            </div>
+        }
+    </section>
 }

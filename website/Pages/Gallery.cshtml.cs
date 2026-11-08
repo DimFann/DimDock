@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Numerics;
 using System.Text;
 using Markdig;
 using Microsoft.AspNetCore.Antiforgery;
@@ -135,6 +137,8 @@ public class GalleryModel : PageModel
                     Metadata = shortcut.OriginalItem.Metadata,
                     Type = shortcut.OriginalItem.Type,
                     Uploaded = shortcut.OriginalItem.Uploaded,
+                    ThumbnailKey = shortcut.OriginalItem.ThumbnailKey,
+                    ShortcutId = shortcut.Id,
                     TagLinks = shortcut.OriginalItem.TagLinks
                 };
                 if (AdminEnabled || !clone.TagLinks.Any(link => AdminOnlyTags.Contains(link.Tag.Name)))
@@ -194,6 +198,33 @@ public class GalleryModel : PageModel
         return (dotIndex >= 0 && dotIndex < originalName.Length - 1)
             ? originalName.Substring(dotIndex + 1)
             : "bin";
+    }
+
+    public string GetSourceUrl(Item item)
+    {
+        var shortcut = Shortcuts.FirstOrDefault(entry =>
+            entry.OriginalId == item.Id &&
+            string.Equals(entry.ShortcutPath, item.ParentPath, StringComparison.Ordinal));
+        var parentPath = shortcut?.OriginalItem?.ParentPath ?? item.ParentPath;
+        var fileName = shortcut?.OriginalItem?.OriginalName ?? item.OriginalName;
+        var segments = (parentPath ?? string.Empty)
+            .Split('/', StringSplitOptions.RemoveEmptyEntries)
+            .Append(fileName)
+            .Select(Uri.EscapeDataString);
+        return "/img_src/" + string.Join('/', segments);
+    }
+
+    public BigInteger? GetComicLeadingNumber(string fileName)
+    {
+        var digitCount = fileName.TakeWhile(char.IsAsciiDigit).Count();
+        return digitCount > 0 &&
+            BigInteger.TryParse(
+                fileName.AsSpan(0, digitCount),
+                NumberStyles.None,
+                CultureInfo.InvariantCulture,
+                out var number)
+            ? number
+            : null;
     }
 
     public string RenderMarkdown(string? markdown) =>

@@ -21,6 +21,7 @@ DB_NAME = os.environ['DB_NAME']
 ROOT_DIR = '/img_src'
 THUMB_DIR = '/img_db_thumbs'
 BLOG_DIR = '/blogs'
+ABOUT_FILE = '/about/about.md'
 BLOGS_INITIALIZED_FILE = '/app_state/.blogs_initialized'
 TAG_MANIFEST_FILENAME = '.dimdock.json'
 TAG_NAME_MAX_LENGTH = 100
@@ -301,6 +302,20 @@ def process_blogs(cursor):
 
     return inserted_blogs
 
+def process_about(cursor):
+    try:
+        with open(ABOUT_FILE, 'r', encoding='utf-8') as about_file:
+            description = about_file.read()
+    except (OSError, UnicodeError) as error:
+        raise RuntimeError(f"Unable to load About content from {ABOUT_FILE}: {error}") from error
+
+    cursor.execute("""
+        INSERT INTO About (id, description)
+        VALUES (1, %s)
+        ON DUPLICATE KEY UPDATE description = VALUES(description)
+    """, (description,))
+    print(f"Loaded About content from {ABOUT_FILE}", flush=True)
+
 def process_image(file_path, thumbnail_key):
     print(f"Generating thumbnail: {file_path}", flush=True)
     try:
@@ -340,6 +355,11 @@ def traverse_and_insert(cursor):
         parent_dir = os.path.dirname(rel_path)
         parent = "root" if parent_dir in ("", ".") else parent_dir
         tag_manifest = read_tag_manifest(current_path)
+        directory_name = os.path.basename(path)
+        path_type = 'comic' if directory_name.casefold().startswith('comic_') else tag_manifest['type']
+        path_tags = set(tag_manifest['tags'])
+        if directory_name.casefold().startswith('wip_'):
+            path_tags.add('hidden')
 
         # 🔍 Check for description.md
         description_path = os.path.join(current_path, "description.md")
@@ -355,14 +375,14 @@ def traverse_and_insert(cursor):
             existing_paths[path] = insert_path(cursor, path, parent, description)
             existing_path_types[path] = None
         path_id = existing_paths[path]
-        if existing_path_types[path] != tag_manifest['type']:
+        if existing_path_types[path] != path_type:
             cursor.execute(
                 "UPDATE Paths SET type = %s WHERE id = %s",
-                (tag_manifest['type'], path_id)
+                (path_type, path_id)
             )
-            existing_path_types[path] = tag_manifest['type']
-        if get_entity_tags(cursor, 'PathTags', 'path_id', path_id) != set(tag_manifest['tags']):
-            replace_entity_tags(cursor, 'PathTags', 'path_id', path_id, tag_manifest['tags'])
+            existing_path_types[path] = path_type
+        if get_entity_tags(cursor, 'PathTags', 'path_id', path_id) != path_tags:
+            replace_entity_tags(cursor, 'PathTags', 'path_id', path_id, sorted(path_tags))
 
         image_tasks = []
         for file in files:
@@ -455,6 +475,7 @@ def main():
         cursor = conn.cursor()
         total_images = traverse_and_insert(cursor)
         inserted_blogs = process_blogs(cursor)
+        process_about(cursor)
         # process_shortcuts(cursor)
         conn.commit()
         print(

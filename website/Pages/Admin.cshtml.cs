@@ -207,6 +207,27 @@ public class AdminModel : PageModel
             }
         }
 
+        const string aboutFile = "/about/about.md";
+        var aboutContent = await _context.About
+            .AsNoTracking()
+            .Where(entry => entry.Id == 1)
+            .Select(entry => entry.Description)
+            .FirstOrDefaultAsync(HttpContext.RequestAborted) ?? string.Empty;
+        var aboutWritten = false;
+        if (!System.IO.File.Exists(aboutFile) ||
+            !string.Equals(
+                await System.IO.File.ReadAllTextAsync(aboutFile, HttpContext.RequestAborted),
+                aboutContent,
+                StringComparison.Ordinal))
+        {
+            await System.IO.File.WriteAllTextAsync(
+                aboutFile,
+                aboutContent,
+                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+                HttpContext.RequestAborted);
+            aboutWritten = true;
+        }
+
         var unusedTags = await _context.Tags
             .Where(tag => !tag.ItemLinks.Any() && !tag.PathLinks.Any())
             .ToListAsync();
@@ -221,6 +242,7 @@ public class AdminModel : PageModel
             skipped,
             manifestsWritten,
             manifestsDeleted,
+            aboutWritten,
             unusedTagsRemoved = unusedTags.Count
         });
     }

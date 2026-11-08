@@ -6,12 +6,26 @@
 }
 
 <main class="image-viewer soft-shadow @(Model.Item.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name)) ? "admin-only-tagged" : "")">
+    @if (Model.AdminEnabled)
+    {
+        <div class="admin-options-toolbar">
+            <strong class="admin-options-toolbar-title">Admin Options</strong>
+            @if (Model.CurrentShortcutId.HasValue)
+            {
+                <button type="button" class="shortcut-toolbar-button" data-open-remove-shortcut>Remove Shortcut</button>
+            }
+            else
+            {
+                <button type="button" class="shortcut-toolbar-button" data-open-shortcut-to>Shortcut To</button>
+            }
+        </div>
+    }
     <div class="image-viewer-heading">
         <h1>@Model.Item.OriginalName</h1>
     </div>
     <div class="image-viewer-controls">
         <div class="image-viewer-navigation">
-            <a class="icon-action-button soft-shadow" href="@Model.GalleryUrl" aria-label="Back to gallery" title="Back to gallery">
+            <a class="icon-action-button soft-shadow" href="@Model.GalleryUrl" data-back-to-gallery aria-label="Back to gallery" title="Back to gallery">
                 <img src="/img/prev.png" alt="" />
             </a>
             <a class="icon-action-button soft-shadow" href="@Model.SourceUrl" aria-label="View source" title="View source">
@@ -56,13 +70,243 @@
             </p>
         }
     </section>
+
+    @if (Model.AdminEnabled)
+    {
+        <dialog class="shortcut-dialog" data-shortcut-to-dialog aria-labelledby="shortcutToTitle">
+            <div class="path-description-dialog-header">
+                <h2 id="shortcutToTitle">Shortcut To</h2>
+                <button type="button" class="icon-action-button" data-close-shortcut-dialog aria-label="Close" title="Close">
+                    <img src="/img/cancel.png" alt="" />
+                </button>
+            </div>
+            <label for="shortcutPathSearch">Search existing directories</label>
+            <input id="shortcutPathSearch" type="search" autocomplete="off" data-shortcut-path-search />
+            <p class="shortcut-dialog-status" data-shortcut-search-status role="status"></p>
+            <ul class="shortcut-path-results" data-shortcut-path-results></ul>
+            <form method="post" asp-page-handler="CreateShortcut" data-create-shortcut-form>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="targetPath" data-shortcut-target-path />
+                <button type="submit" disabled data-create-shortcut-submit>Link to selected directory</button>
+                <span class="shortcut-dialog-status" data-create-shortcut-status role="status"></span>
+            </form>
+        </dialog>
+
+        <dialog class="shortcut-dialog" data-remove-shortcut-dialog aria-labelledby="removeShortcutTitle">
+            <div class="path-description-dialog-header">
+                <h2 id="removeShortcutTitle">Remove Shortcuts</h2>
+                <button type="button" class="icon-action-button" data-close-shortcut-dialog aria-label="Close" title="Close">
+                    <img src="/img/cancel.png" alt="" />
+                </button>
+            </div>
+            <p>Select the shortcut locations to remove.</p>
+            <form method="post" asp-page-handler="DeleteShortcuts" data-delete-shortcuts-form>
+                @Html.AntiForgeryToken()
+                <div class="shortcut-location-list" data-shortcut-location-list></div>
+                <p class="shortcut-dialog-status" data-delete-shortcuts-status role="status"></p>
+                <button type="submit">Remove selected shortcuts</button>
+            </form>
+        </dialog>
+    }
 </main>
 
 <script>
+    const imageContent = document.querySelector(".image-viewer-content");
+    const imageViewer = document.querySelector(".image-viewer");
+    const mainContent = document.querySelector("main[role='main']");
     const imageToggle = document.querySelector(".image-viewer-image-toggle");
+    const viewerImage = imageToggle.querySelector("img");
+    function syncViewerImageSize() {
+        if (imageToggle.classList.contains("expanded") ||
+            !viewerImage.naturalWidth ||
+            !viewerImage.naturalHeight) {
+            return;
+        }
+
+        const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+        const imageRect = viewerImage.getBoundingClientRect();
+        const viewerRect = imageViewer.getBoundingClientRect();
+        const mainRect = mainContent.getBoundingClientRect();
+        const belowImageHeight = viewerRect.bottom - imageRect.bottom;
+        const afterViewerHeight = mainRect.bottom - viewerRect.bottom;
+        const availableHeight = Math.max(
+            0,
+            viewportHeight - (imageRect.top + window.scrollY) - belowImageHeight - afterViewerHeight - 8);
+        const availableWidth = Math.max(0, imageContent.clientWidth - 18);
+        const scale = Math.min(
+            availableHeight / viewerImage.naturalHeight,
+            availableWidth / viewerImage.naturalWidth);
+        viewerImage.style.height = `${viewerImage.naturalHeight * scale}px`;
+        viewerImage.style.width = `${viewerImage.naturalWidth * scale}px`;
+    }
+
+    viewerImage.addEventListener("load", syncViewerImageSize);
+    window.addEventListener("resize", syncViewerImageSize);
+    window.visualViewport?.addEventListener("resize", syncViewerImageSize);
+    window.addEventListener("load", syncViewerImageSize, { once: true });
+    syncViewerImageSize();
+
+    const backToGallery = document.querySelector("[data-back-to-gallery]");
+    backToGallery.addEventListener("click", (event) => {
+        if (document.referrer && new URL(document.referrer).origin === window.location.origin) {
+            event.preventDefault();
+            window.history.back();
+        }
+    });
+
     imageToggle.addEventListener("click", () => {
         const expanded = imageToggle.classList.toggle("expanded");
+        if (expanded) {
+            viewerImage.style.height = "";
+            viewerImage.style.width = "";
+        } else {
+            syncViewerImageSize();
+        }
         imageToggle.setAttribute("aria-pressed", String(expanded));
         imageToggle.setAttribute("aria-label", expanded ? "Restore image size" : "Expand image");
+    });
+
+    const shortcutToDialog = document.querySelector("[data-shortcut-to-dialog]");
+    const removeShortcutDialog = document.querySelector("[data-remove-shortcut-dialog]");
+    const shortcutPathSearch = document.querySelector("[data-shortcut-path-search]");
+    const shortcutResults = document.querySelector("[data-shortcut-path-results]");
+    const shortcutStatus = document.querySelector("[data-shortcut-search-status]");
+    const shortcutTargetPath = document.querySelector("[data-shortcut-target-path]");
+    const createShortcutSubmit = document.querySelector("[data-create-shortcut-submit]");
+    const currentShortcutId = "@Model.CurrentShortcutId";
+
+    function handlerUrl(handler) {
+        const url = new URL(window.location.href);
+        url.searchParams.set("handler", handler);
+        return url;
+    }
+
+    document.querySelector("[data-open-shortcut-to]")?.addEventListener("click", () => {
+        shortcutToDialog.showModal();
+        shortcutPathSearch.focus();
+    });
+
+    document.querySelector("[data-open-remove-shortcut]")?.addEventListener("click", async () => {
+        const list = document.querySelector("[data-shortcut-location-list]");
+        const status = document.querySelector("[data-delete-shortcuts-status]");
+        list.replaceChildren();
+        status.textContent = "Loading shortcuts...";
+        removeShortcutDialog.showModal();
+        try {
+            const response = await fetch(handlerUrl("ShortcutLocations"));
+            if (!response.ok) {
+                throw new Error(await response.text() || "Loading shortcuts failed.");
+            }
+            const shortcuts = await response.json();
+            for (const shortcut of shortcuts) {
+                const label = document.createElement("label");
+                const checkbox = document.createElement("input");
+                checkbox.type = "checkbox";
+                checkbox.name = "shortcutIds";
+                checkbox.value = shortcut.id;
+                checkbox.checked = String(shortcut.id) === currentShortcutId;
+                label.append(checkbox, ` ${shortcut.displayPath}`);
+                list.append(label);
+            }
+            status.textContent = shortcuts.length ? "" : "No shortcuts are available.";
+        } catch (error) {
+            status.textContent = error.message;
+        }
+    });
+
+    document.querySelectorAll("[data-close-shortcut-dialog]").forEach((button) => {
+        button.addEventListener("click", () => button.closest("dialog").close());
+    });
+
+    let searchTimeout;
+    shortcutPathSearch?.addEventListener("input", () => {
+        window.clearTimeout(searchTimeout);
+        shortcutTargetPath.value = "";
+        createShortcutSubmit.disabled = true;
+        searchTimeout = window.setTimeout(searchShortcutPaths, 250);
+    });
+
+    async function searchShortcutPaths() {
+        const query = shortcutPathSearch.value.trim();
+        shortcutResults.replaceChildren();
+        if (query.length < 2) {
+            shortcutStatus.textContent = "Enter at least two characters to search.";
+            return;
+        }
+
+        shortcutStatus.textContent = "Searching...";
+        const url = handlerUrl("SearchPaths");
+        url.searchParams.set("query", query);
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(await response.text() || "Directory search failed.");
+            }
+            const paths = await response.json();
+            for (const entry of paths) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.textContent = entry.alreadyLinked ? `${entry.displayPath} (already linked)` : entry.displayPath;
+                button.disabled = entry.alreadyLinked;
+                button.addEventListener("click", () => {
+                    shortcutResults.querySelectorAll("button").forEach((result) => result.classList.remove("selected"));
+                    button.classList.add("selected");
+                    shortcutTargetPath.value = entry.path;
+                    createShortcutSubmit.disabled = false;
+                });
+                const row = document.createElement("li");
+                row.append(button);
+                shortcutResults.append(row);
+            }
+            shortcutStatus.textContent = paths.length ? "" : "No matching directories found.";
+        } catch (error) {
+            shortcutStatus.textContent = error.message;
+        }
+    }
+
+    document.querySelector("[data-create-shortcut-form]")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const status = document.querySelector("[data-create-shortcut-status]");
+        status.textContent = "Saving...";
+        try {
+            const response = await fetch(handlerUrl("CreateShortcut"), {
+                method: "POST",
+                body: new FormData(event.currentTarget)
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Creating shortcut failed.");
+            }
+            status.textContent = "Shortcut created.";
+            createShortcutSubmit.disabled = true;
+        } catch (error) {
+            status.textContent = error.message;
+        }
+    });
+
+    document.querySelector("[data-delete-shortcuts-form]")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const status = form.querySelector("[data-delete-shortcuts-status]");
+        status.textContent = "Removing shortcuts...";
+        try {
+            const response = await fetch(handlerUrl("DeleteShortcuts"), {
+                method: "POST",
+                body: new FormData(form)
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Removing shortcuts failed.");
+            }
+            const result = await response.json();
+            if (result.deletedIds.some((id) => String(id) === currentShortcutId)) {
+                window.location.replace(window.location.pathname);
+                return;
+            }
+            form.querySelectorAll("input[name='shortcutIds']:checked").forEach((checkbox) => {
+                checkbox.closest("label").remove();
+            });
+            status.textContent = `${result.deletedIds.length} shortcut(s) removed.`;
+        } catch (error) {
+            status.textContent = error.message;
+        }
     });
 </script>

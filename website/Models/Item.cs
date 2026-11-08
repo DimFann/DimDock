@@ -41,6 +41,9 @@ namespace Website.Models
         [Column("metadata")]
         public string? Metadata { get; set; }
 
+        [NotMapped]
+        public ulong? ShortcutId { get; set; }
+
         public ICollection<ItemTag> TagLinks { get; set; } = new List<ItemTag>();
     }
 }
