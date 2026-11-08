@@ -35,29 +35,103 @@
             <a class="icon-action-button soft-shadow" href="@Model.GalleryUrl" data-back-to-gallery aria-label="Back to gallery" title="Back to gallery">
                 <img src="/img/prev.png" alt="" />
             </a>
-            <a class="icon-action-button soft-shadow" href="@Model.SourceUrl" aria-label="@(Model.Item.IsImage ? "View source" : "Open file")" title="@(Model.Item.IsImage ? "View source" : "Open file")">
-                <img src="/img/goto.png" alt="" />
+            @if (Model.Item.IsImage || Model.IsTextDocument)
+            {
+                <a class="icon-action-button soft-shadow" href="@Model.SourceUrl" aria-label="View source" title="View source">
+                    <img src="/img/goto.png" alt="" />
+                </a>
+            }
+        </div>
+        <div class="image-viewer-actions">
+            @if (Model.AdminEnabled && Model.IsTextDocument)
+            {
+                <button type="button" class="icon-action-button soft-shadow" data-open-file-content-editor aria-label="Edit file" title="Edit file">
+                    <img src="/img/edit.png" alt="" />
+                </button>
+            }
+            <a class="icon-action-button soft-shadow" href="@Model.DownloadUrl" download aria-label="Download file" title="Download">
+                <img src="/img/save.png" alt="" />
             </a>
         </div>
-        <a class="icon-action-button soft-shadow" href="@Model.SourceUrl" download aria-label="Download file" title="Download">
-            <img src="/img/save.png" alt="" />
-        </a>
     </div>
-    <div class="image-viewer-content">
-        @if (Model.Item.IsImage)
+    @if (Model.Item.IsImage || Model.IsTextDocument)
+    {
+        <div class="image-viewer-content" data-file-content-display>
+            @if (Model.Item.IsImage)
+            {
+                <button type="button" class="image-viewer-image-toggle" aria-pressed="false" aria-label="Expand image">
+                    <img src="@Model.SourceUrl" alt="@Model.Item.OriginalName" />
+                </button>
+            }
+            else if (Model.IsMarkdownDocument)
+            {
+                <article class="image-viewer-text-content blog-post-content">
+                    @Html.Raw(Model.RenderDescription(Model.TextContent))
+                </article>
+            }
+            else
+            {
+                <pre class="image-viewer-text-content">@Model.TextContent</pre>
+            }
+        </div>
+        @if (Model.AdminEnabled && Model.IsTextDocument)
         {
-            <button type="button" class="image-viewer-image-toggle" aria-pressed="false" aria-label="Expand image">
-                <img src="@Model.SourceUrl" alt="@Model.Item.OriginalName" />
-            </button>
+            <section class="file-content-editor">
+                <form method="post" asp-page-handler="SaveFileContent" data-file-content-form hidden>
+                    @Html.AntiForgeryToken()
+                    <section class="file-content-editor-pane" data-file-content-edit-pane>
+                        <div class="file-content-editor-actions">
+                            <div>
+                                @if (Model.IsMarkdownDocument)
+                                {
+                                    <button type="button" class="icon-action-button" data-preview-file-content aria-label="Preview Markdown" title="Preview">
+                                        <img src="/img/preview.png" alt="" />
+                                    </button>
+                                }
+                            </div>
+                            <div class="file-content-editor-actions-right">
+                                <button type="button" class="icon-action-button" data-cancel-file-content-edit aria-label="Cancel editing" title="Cancel">
+                                    <img src="/img/cancel.png" alt="" />
+                                </button>
+                                <button type="submit" class="icon-action-button" aria-label="Save to disk" title="Save to disk">
+                                    <img src="/img/save.png" alt="" />
+                                </button>
+                            </div>
+                        </div>
+                        <label for="fileContent">Edit @Model.Item.OriginalName</label>
+                        <textarea id="fileContent" name="content" spellcheck="false">@Model.TextContent</textarea>
+                    </section>
+                    @if (Model.IsMarkdownDocument)
+                    {
+                        <section class="file-content-editor-pane file-content-preview-pane" data-file-content-preview-pane hidden>
+                            <div class="file-content-editor-actions">
+                                <div>
+                                    <button type="button" class="icon-action-button" data-edit-file-content aria-label="Edit Markdown" title="Edit">
+                                        <img src="/img/edit.png" alt="" />
+                                    </button>
+                                </div>
+                                <div class="file-content-editor-actions-right">
+                                    <button type="button" class="icon-action-button" data-cancel-file-content-edit aria-label="Cancel editing" title="Cancel">
+                                        <img src="/img/cancel.png" alt="" />
+                                    </button>
+                                    <button type="submit" class="icon-action-button" aria-label="Save to disk" title="Save to disk">
+                                        <img src="/img/save.png" alt="" />
+                                    </button>
+                                </div>
+                            </div>
+                            <article class="file-content-markdown-preview blog-post-content" data-file-content-preview></article>
+                        </section>
+                    }
+                </form>
+            </section>
         }
-        else
-        {
-            <a class="image-viewer-file" href="@Model.SourceUrl" target="_blank" rel="noopener">
-                <img src="/img/file.png" alt="" />
-                <span>Download @Model.Item.OriginalName</span>
-            </a>
-        }
-    </div>
+    }
+    else
+    {
+        <div class="image-viewer-content">
+            <a class="image-viewer-download-link" href="@Model.DownloadUrl" download>Download</a>
+        </div>
+    }
     <section class="image-viewer-tags" aria-label="Item tags">
         @if (Model.AdminEnabled)
         {
@@ -311,6 +385,52 @@
             imageToggle.setAttribute("aria-label", expanded ? "Restore image size" : "Expand image");
         });
     }
+
+    const fileContentForm = document.querySelector("[data-file-content-form]");
+    const openFileContentEditor = document.querySelector("[data-open-file-content-editor]");
+    const fileContentDisplay = document.querySelector("[data-file-content-display]");
+    const fileContentEditPane = document.querySelector("[data-file-content-edit-pane]");
+    const fileContentPreviewPane = document.querySelector("[data-file-content-preview-pane]");
+    const fileContentPreview = document.querySelector("[data-file-content-preview]");
+    const fileContentTextarea = fileContentForm?.querySelector("textarea[name='content']");
+    const imageViewer = document.querySelector(".image-viewer");
+    openFileContentEditor?.addEventListener("click", () => {
+        openFileContentEditor.hidden = true;
+        fileContentDisplay.hidden = true;
+        fileContentForm.hidden = false;
+        imageViewer.classList.add("file-content-editing");
+        fileContentTextarea.focus();
+    });
+    document.querySelectorAll("[data-cancel-file-content-edit]").forEach((button) => {
+        button.addEventListener("click", () => {
+            fileContentForm.hidden = true;
+            fileContentDisplay.hidden = false;
+            openFileContentEditor.hidden = false;
+            imageViewer.classList.remove("file-content-editing");
+        });
+    });
+    document.querySelector("[data-preview-file-content]")?.addEventListener("click", async () => {
+        const formData = new FormData(fileContentForm);
+        try {
+            const response = await fetch(handlerUrl("PreviewFileContent"), {
+                method: "POST",
+                body: formData
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Markdown preview failed.");
+            }
+            fileContentPreview.innerHTML = await response.text();
+            fileContentEditPane.hidden = true;
+            fileContentPreviewPane.hidden = false;
+        } catch (error) {
+            window.alert(error.message);
+        }
+    });
+    document.querySelector("[data-edit-file-content]")?.addEventListener("click", () => {
+        fileContentPreviewPane.hidden = true;
+        fileContentEditPane.hidden = false;
+        fileContentTextarea.focus();
+    });
 
     const backToGallery = document.querySelector("[data-back-to-gallery]");
     backToGallery.addEventListener("click", (event) => {

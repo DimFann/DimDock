@@ -35,6 +35,41 @@
                 }
             }
         </table>
+        @if (Model.AdminEnabled || !string.IsNullOrWhiteSpace(Model.PathEntry?.Description))
+        {
+            var hasDescription = !string.IsNullOrWhiteSpace(Model.PathEntry?.Description);
+            <div class="path-description-section gallery-path-description">
+                <div class="path-description-wrapper @(hasDescription ? "has-description" : "")" data-path-description-wrapper>
+                    @if (Model.AdminEnabled)
+                    {
+                        <button type="button"
+                                class="@(hasDescription ? "description-editor-button description-edit-icon" : "icon-action-button description-add-icon")"
+                                data-open-description-editor
+                                aria-label="@(hasDescription ? "Edit description" : "Add description")"
+                                title="@(hasDescription ? "Edit description" : "Add description")">
+                            @if (hasDescription)
+                            {
+                                <img src="/img/edit.png" alt="" />
+                            }
+                            else
+                            {
+                                <img src="/img/add.png" alt="" />
+                            }
+                        </button>
+                    }
+                    <div class="path-description-content"
+                         data-path-description
+                         data-open-description-viewer
+                         role="button"
+                         tabindex="0"
+                         aria-haspopup="dialog"
+                         aria-label="View full description"
+                         hidden="@(!hasDescription)">
+                        @Html.Raw(Model.RenderMarkdown(Model.PathEntry?.Description))
+                    </div>
+                </div>
+            </div>
+        }
         @if (Model.AdminEnabled ||
              (Model.PathEntry?.TagLinks.Any(link => !Model.AdminOnlyTags.Contains(link.Tag.Name)) ?? false))
         {
@@ -74,41 +109,6 @@
             </section>
         }
     </div>
-    @if (Model.AdminEnabled || !string.IsNullOrWhiteSpace(Model.PathEntry?.Description))
-    {
-        var hasDescription = !string.IsNullOrWhiteSpace(Model.PathEntry?.Description);
-        <div class="path-description-section gallery-path-description">
-            <div class="path-description-wrapper @(hasDescription ? "has-description" : "")" data-path-description-wrapper>
-                @if (Model.AdminEnabled)
-                {
-                    <button type="button"
-                            class="@(hasDescription ? "description-editor-button description-edit-icon" : "icon-action-button description-add-icon")"
-                            data-open-description-editor
-                            aria-label="@(hasDescription ? "Edit description" : "Add description")"
-                            title="@(hasDescription ? "Edit description" : "Add description")">
-                        @if (hasDescription)
-                        {
-                            <img src="/img/edit.png" alt="" />
-                        }
-                        else
-                        {
-                            <img src="/img/add.png" alt="" />
-                        }
-                    </button>
-                }
-                <div class="path-description-content"
-                     data-path-description
-                     data-open-description-viewer
-                     role="button"
-                     tabindex="0"
-                     aria-haspopup="dialog"
-                     aria-label="View full description"
-                     hidden="@(!hasDescription)">
-                    @Html.Raw(Model.RenderMarkdown(Model.PathEntry?.Description))
-                </div>
-            </div>
-        </div>
-    }
 </div>
 
 <dialog class="path-description-dialog" data-description-viewer aria-labelledby="pathDescriptionViewerTitle">

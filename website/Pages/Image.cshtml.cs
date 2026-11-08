@@ -3,6 +3,8 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Markdig;
+using System.IO;
+using System.Text;
 using Website.Data;
 using Website.Models;
 using Website.Services;
@@ -13,6 +15,30 @@ public class ImageModel : PageModel
 {
     private static readonly MarkdownPipeline DescriptionMarkdownPipeline =
         new MarkdownPipelineBuilder().DisableHtml().Build();
+    private static readonly HashSet<string> TextFileExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".txt", ".md", ".markdown", ".mdown", ".mkd", ".rst", ".adoc", ".asciidoc", ".tex",
+        ".c", ".h", ".cc", ".hh", ".cpp", ".hpp", ".cxx", ".hxx", ".inl", ".inc",
+        ".cs", ".csx", ".java", ".kt", ".kts", ".scala", ".sc", ".groovy", ".gvy",
+        ".go", ".rs", ".py", ".pyi", ".pyw", ".pyx", ".pxd", ".pxi", ".rb", ".rake", ".gemspec",
+        ".php", ".phtml", ".phar", ".swift", ".m", ".mm", ".r", ".rmd", ".jl",
+        ".pl", ".pm", ".t", ".lua", ".ex", ".exs", ".erl", ".hrl", ".hs", ".lhs", ".clj", ".cljs",
+        ".cljc", ".edn", ".elm", ".dart", ".fs", ".fsi", ".fsx", ".vb", ".vbs",
+        ".js", ".mjs", ".cjs", ".jsx", ".ts", ".mts", ".cts", ".tsx", ".vue", ".svelte",
+        ".html", ".htm", ".xhtml", ".css", ".scss", ".sass", ".less", ".styl",
+        ".xml", ".xsd", ".xsl", ".xslt", ".wsdl", ".xaml", ".svg", ".plist",
+        ".json", ".jsonc", ".json5", ".jsonl", ".ndjson", ".yaml", ".yml", ".toml",
+        ".ini", ".cfg", ".conf", ".config", ".properties",
+        ".sql", ".psql", ".graphql", ".gql", ".proto", ".thrift",
+        ".sh", ".bash", ".zsh", ".fish", ".ps1", ".psm1", ".psd1", ".bat", ".cmd",
+        ".dockerfile", ".containerfile", ".make", ".mk", ".cmake", ".gradle", ".gradle.kts",
+        ".tf", ".tfvars", ".hcl", ".nix", ".bzl", ".bazel", ".lock",
+        ".csv", ".tsv", ".log", ".diff", ".patch", ".gitignore", ".gitattributes"
+    };
+    private static readonly HashSet<string> MarkdownFileExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".md", ".markdown", ".mdown", ".mkd"
+    };
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _environment;
@@ -38,12 +64,16 @@ public class ImageModel : PageModel
 
     public Item Item { get; private set; } = null!;
     public string SourceUrl { get; private set; } = string.Empty;
+    public string DownloadUrl { get; private set; } = string.Empty;
+    public string? TextContent { get; private set; }
     public string GalleryUrl { get; private set; } = "/Gallery";
     public ulong? CurrentShortcutId { get; private set; }
     public string TagsInput { get; set; } = string.Empty;
     public string? TagError { get; private set; }
     public string RenderDescription(string? markdown) =>
         Markdown.ToHtml(markdown ?? string.Empty, DescriptionMarkdownPipeline);
+    public bool IsTextDocument => TextFileExtensions.Contains(Path.GetExtension(Item.OriginalName));
+    public bool IsMarkdownDocument => MarkdownFileExtensions.Contains(Path.GetExtension(Item.OriginalName));
 
     public bool AdminEnabled => AdminAccess.IsAdmin(
         _configuration,
@@ -73,12 +103,21 @@ public class ImageModel : PageModel
                 GalleryUrl = CreateGalleryUrl(shortcut.ShortcutPath);
             }
         }
-        AdminOnlyTags = await _adminOnlyTagsProvider.GetTagsAsync(HttpContext.RequestAborted);
-        if (!AdminEnabled &&
-            (Item.TagLinks.Any(link => AdminOnlyTags.Contains(link.Tag.Name)) ||
-             await IsInAdminOnlyPathAsync(Item.ParentPath)))
+        if (!await IsItemVisibleAsync())
         {
             return NotFound();
+        }
+
+        if (IsTextDocument)
+        {
+            var filePath = _filesystemPersistence.GetItemFilePath(
+                Item.ParentPath ?? "root",
+                Item.OriginalName);
+            if (!System.IO.File.Exists(filePath))
+            {
+                return NotFound();
+            }
+            TextContent = await System.IO.File.ReadAllTextAsync(filePath, HttpContext.RequestAborted);
         }
 
         TagsInput = string.Join(", ", Tags);
@@ -96,10 +135,7 @@ public class ImageModel : PageModel
             return NotFound();
         }
 
-        AdminOnlyTags = await _adminOnlyTagsProvider.GetTagsAsync(HttpContext.RequestAborted);
-        if (!AdminEnabled &&
-            (Item.TagLinks.Any(link => AdminOnlyTags.Contains(link.Tag.Name)) ||
-             await IsInAdminOnlyPathAsync(Item.ParentPath)))
+        if (!await IsItemVisibleAsync())
         {
             return NotFound();
         }
@@ -116,6 +152,87 @@ public class ImageModel : PageModel
             filePath,
             "application/octet-stream",
             Item.OriginalName);
+    }
+
+    public async Task<IActionResult> OnGetSourceAsync(ulong id)
+    {
+        if (!await LoadItemAsync(id) || !IsTextDocument)
+        {
+            return NotFound();
+        }
+        if (!await IsItemVisibleAsync())
+        {
+            return NotFound();
+        }
+
+        var filePath = _filesystemPersistence.GetItemFilePath(
+            Item.ParentPath ?? "root",
+            Item.OriginalName);
+        if (!System.IO.File.Exists(filePath))
+        {
+            return NotFound();
+        }
+
+        var content = await System.IO.File.ReadAllTextAsync(filePath, HttpContext.RequestAborted);
+        return Content(content, "text/plain; charset=utf-8");
+    }
+
+    public async Task<IActionResult> OnPostSaveFileContentAsync(
+        ulong id,
+        [FromForm] string? content)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        if (!await LoadItemAsync(id) || !IsTextDocument)
+        {
+            return NotFound();
+        }
+
+        var filePath = _filesystemPersistence.GetItemFilePath(
+            Item.ParentPath ?? "root",
+            Item.OriginalName);
+        if (!System.IO.File.Exists(filePath))
+        {
+            return NotFound();
+        }
+
+        await System.IO.File.WriteAllTextAsync(
+            filePath,
+            content ?? string.Empty,
+            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
+            HttpContext.RequestAborted);
+
+        return RedirectToPage("/Image", new { id });
+    }
+
+    public async Task<IActionResult> OnPostPreviewFileContentAsync(
+        ulong id,
+        [FromForm] string? content)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        if (!await LoadItemAsync(id) || !IsMarkdownDocument)
+        {
+            return NotFound();
+        }
+
+        return Content(RenderDescription(content), "text/html");
     }
 
     public async Task<IActionResult> OnGetSearchPathsAsync(ulong id, [FromQuery] string? query)
@@ -641,13 +758,28 @@ public class ImageModel : PageModel
                 .Append(item.OriginalName)
                 .Select(Uri.EscapeDataString);
             SourceUrl = "/img_src/" + string.Join('/', segments);
+            DownloadUrl = SourceUrl;
+        }
+        else if (IsTextDocument)
+        {
+            SourceUrl = $"/image/{item.Id}?handler=Source";
+            DownloadUrl = $"/image/{item.Id}?handler=File";
         }
         else
         {
-            SourceUrl = $"/image/{item.Id}?handler=File";
+            SourceUrl = string.Empty;
+            DownloadUrl = $"/image/{item.Id}?handler=File";
         }
         GalleryUrl = CreateGalleryUrl(item.ParentPath ?? "root");
         return true;
+    }
+
+    private async Task<bool> IsItemVisibleAsync()
+    {
+        AdminOnlyTags = await _adminOnlyTagsProvider.GetTagsAsync(HttpContext.RequestAborted);
+        return AdminEnabled ||
+            (!Item.TagLinks.Any(link => AdminOnlyTags.Contains(link.Tag.Name)) &&
+             !await IsInAdminOnlyPathAsync(Item.ParentPath));
     }
 
     private static string CreateGalleryUrl(string? path)

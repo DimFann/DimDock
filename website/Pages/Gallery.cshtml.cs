@@ -17,9 +17,8 @@ public class GalleryModel : PageModel
 {
     private static readonly MarkdownPipeline DescriptionMarkdownPipeline =
         new MarkdownPipelineBuilder().DisableHtml().Build();
-    private const long MaximumUploadFileBytes = 50L * 1024 * 1024;
     private const int MaximumUploadFiles = 50;
-    private static readonly HashSet<string> SupportedUploadExtensions =
+    private static readonly HashSet<string> ThumbnailImageExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".gif" };
 
     private readonly AppDbContext _context;
@@ -164,13 +163,25 @@ public class GalleryModel : PageModel
             }
         }
 
-        // Apply sorting rules
-        Items = Items
-            .OrderBy(i => i.DisplayIndex)
-            .ThenBy(i => i.OriginalName)
-            .ThenBy(i => i.Created)
-            .ThenBy(i => i.Uploaded)
-            .ToList();
+        if (string.Equals(PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase))
+        {
+            Items = Items
+                .OrderBy(item => item.DisplayIndex)
+                .ThenBy(item => item.OriginalName)
+                .ThenBy(item => item.Created)
+                .ThenBy(item => item.Uploaded)
+                .ToList();
+        }
+        else
+        {
+            Items = Items
+                .Select(item => new { Item = item, DatePrefix = ParseDatePrefix(item.OriginalName) })
+                .OrderByDescending(entry => entry.DatePrefix.HasValue)
+                .ThenByDescending(entry => entry.DatePrefix)
+                .ThenBy(entry => entry.Item.OriginalName, StringComparer.OrdinalIgnoreCase)
+                .Select(entry => entry.Item)
+                .ToList();
+        }
 
         ParentPath = sanitized.Contains('/')
             ? sanitized.Substring(0, sanitized.LastIndexOf('/'))
@@ -241,6 +252,38 @@ public class GalleryModel : PageModel
                 out var number)
             ? number
             : null;
+    }
+
+    private static DateOnly? ParseDatePrefix(string fileName)
+    {
+        if (fileName.Length >= 8 &&
+            DateOnly.TryParseExact(
+                fileName.AsSpan(0, 8),
+                "yyyyMMdd",
+                CultureInfo.InvariantCulture,
+                DateTimeStyles.None,
+                out var compactDate))
+        {
+            return compactDate;
+        }
+
+        if (fileName.Length >= 10)
+        {
+            foreach (var format in new[] { "yyyy-MM-dd", "yyyy_MM_dd", "yyyy.MM.dd" })
+            {
+                if (DateOnly.TryParseExact(
+                    fileName.AsSpan(0, 10),
+                    format,
+                    CultureInfo.InvariantCulture,
+                    DateTimeStyles.None,
+                    out var separatedDate))
+                {
+                    return separatedDate;
+                }
+            }
+        }
+
+        return null;
     }
 
     public string RenderMarkdown(string? markdown) =>
@@ -875,7 +918,7 @@ public class GalleryModel : PageModel
 
         if (files is null || files.Count == 0)
         {
-            return BadRequest("Select at least one image to upload.");
+            return BadRequest("Select at least one file to upload.");
         }
         if (files.Count > MaximumUploadFiles)
         {
@@ -911,16 +954,7 @@ public class GalleryModel : PageModel
             }
 
             var extension = System.IO.Path.GetExtension(fileName);
-            if (!SupportedUploadExtensions.Contains(extension))
-            {
-                errors.Add($"{fileName}: only JPEG, PNG, and GIF images are supported.");
-                continue;
-            }
-            if (file.Length <= 0 || file.Length > MaximumUploadFileBytes)
-            {
-                errors.Add($"{fileName}: file must be between 1 byte and 50 MB.");
-                continue;
-            }
+            var isImage = ThumbnailImageExtensions.Contains(extension);
             if (await _context.Items.AnyAsync(
                 item => item.ParentPath == sanitizedPath && item.OriginalName == fileName,
                 HttpContext.RequestAborted))
@@ -937,7 +971,9 @@ public class GalleryModel : PageModel
             }
 
             var thumbnailKey = CreateThumbnailKey(sanitizedPath, fileName);
-            var thumbnailPath = System.IO.Path.Combine(thumbnailDirectory, $"{thumbnailKey}.png");
+            var thumbnailPath = isImage
+                ? System.IO.Path.Combine(thumbnailDirectory, $"{thumbnailKey}.png")
+                : null;
             var temporarySourcePath = System.IO.Path.Combine(imageDirectory, $".{Guid.NewGuid():N}.upload");
             var sourceCreated = false;
             var thumbnailCreated = false;
@@ -957,11 +993,14 @@ public class GalleryModel : PageModel
 
                 System.IO.File.Move(temporarySourcePath, sourcePath);
                 sourceCreated = true;
-                await GenerateThumbnailAsync(
-                    sourcePath,
-                    thumbnailKey,
-                    HttpContext.RequestAborted);
-                thumbnailCreated = true;
+                if (isImage)
+                {
+                    await GenerateThumbnailAsync(
+                        sourcePath,
+                        thumbnailKey,
+                        HttpContext.RequestAborted);
+                    thumbnailCreated = true;
+                }
 
                 var now = DateTime.Now;
                 var item = new Item
@@ -971,7 +1010,7 @@ public class GalleryModel : PageModel
                     ThumbnailKey = thumbnailKey,
                     Uploaded = now,
                     Created = GetCreatedDate(fileName, sanitizedPath, now),
-                    Type = "image",
+                    Type = isImage ? "image" : "file",
                     Metadata = "{}"
                 };
                 _context.Items.Add(item);
@@ -1020,7 +1059,9 @@ public class GalleryModel : PageModel
                     {
                         System.IO.File.Delete(sourcePath);
                     }
-                    if (thumbnailCreated && System.IO.File.Exists(thumbnailPath))
+                    if (thumbnailCreated &&
+                        thumbnailPath is not null &&
+                        System.IO.File.Exists(thumbnailPath))
                     {
                         System.IO.File.Delete(thumbnailPath);
                     }

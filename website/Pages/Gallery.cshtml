@@ -34,7 +34,7 @@
         <div class="admin-options-toolbar-actions">
             <div class="admin-toolbar-action-group" aria-label="Gallery actions">
                 <button type="button" class="path-admin-button" data-open-add-path>Add Path</button>
-                <button type="button" class="path-admin-button" data-open-upload-picker>Upload Images</button>
+                <button type="button" class="path-admin-button" data-open-upload-picker>Upload</button>
                 @if (Model.Items.Count > 0)
                 {
                     <button type="button" class="path-admin-button" data-toggle-bulk-select aria-pressed="false"
@@ -58,7 +58,6 @@
             }
         </div>
         <input type="file"
-               accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
                multiple
                hidden
                data-upload-picker />
@@ -806,7 +805,7 @@
 
             uploadProgress.value = Math.round((event.loaded / event.total) * 100);
             uploadMessage.textContent = event.loaded === event.total
-                ? "Generating thumbnails and saving to the gallery..."
+                ? "Saving files to the gallery..."
                 : `Uploading files: ${uploadProgress.value}%`;
         });
         request.addEventListener("load", () => {
@@ -827,7 +826,7 @@
                     refreshGalleryButton.hidden = false;
                 }
 
-                const summary = `${successes.length} image${successes.length === 1 ? "" : "s"} uploaded.`;
+                const summary = `${successes.length} file${successes.length === 1 ? "" : "s"} uploaded.`;
                 uploadMessage.textContent = errors.length > 0
                     ? `${summary} ${errors.join(" ")}`
                     : summary;

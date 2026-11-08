@@ -570,6 +570,22 @@ body.blog-layout main {
   padding: 0.5rem 0.75rem;
 }
 
+.blog-admin-options-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.65rem;
+}
+
+.blog-admin-options-toolbar .path-admin-button {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.blog-admin-options-toolbar .admin-options-toolbar-title {
+  margin-right: auto;
+}
+
 .image-admin-options-toolbar {
   align-items: center;
   display: flex;
@@ -580,7 +596,7 @@ body.blog-layout main {
 
 .image-admin-options-toolbar .admin-options-toolbar-title {
   flex: 0 0 auto;
-  margin-right: 0.5rem;
+  margin-right: auto;
 }
 
 .image-admin-options-toolbar .shortcut-toolbar-button {
@@ -604,6 +620,7 @@ body.blog-layout main {
   display: flex;
   flex-wrap: wrap;
   gap: 0.55rem;
+  justify-content: flex-end;
 }
 
 .admin-toolbar-action-group {
@@ -611,6 +628,7 @@ body.blog-layout main {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+  justify-content: flex-end;
 }
 
 .admin-toolbar-danger {
@@ -938,6 +956,31 @@ body.blog-layout main {
   max-width: 600px;
 }
 
+.gallery-path-description .path-description-content {
+  margin-top: 0;
+}
+
+@media (min-width: 992px) {
+  .gallery-top-layout:has(.gallery-directory-table) .gallery-directory {
+    display: contents;
+  }
+
+  .gallery-top-layout .gallery-directory-table {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  .gallery-top-layout .gallery-path-description {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .gallery-top-layout .path-tags-section {
+    grid-column: 1;
+    grid-row: 2;
+  }
+}
+
 @media (max-width: 767.98px) {
   .gallery-top-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -982,7 +1025,7 @@ body.blog-layout main {
 
 .gallery-image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(256px, calc((100% - 12px) / 2)), 256px));
+  grid-template-columns: repeat(auto-fill, minmax(min(256px, calc((100% - 12px) / 2)), 1fr));
   gap: 12px;
   width: 100%;
 }
@@ -1181,6 +1224,12 @@ body.blog-layout main {
   object-fit: contain;
 }
 
+.image-viewer-download-link {
+  display: inline-block;
+  font-size: 1.25rem;
+  padding: 5rem 1rem;
+}
+
 .image-viewer {
   background: #fff;
   border: 1px solid #607878;
@@ -1234,6 +1283,12 @@ body.blog-layout main {
   margin: 0.75rem 0;
 }
 
+.image-viewer-actions {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
 .image-viewer-navigation {
   align-items: center;
   display: flex;
@@ -1254,6 +1309,98 @@ body.blog-layout main {
   border: 1px solid #ccd3d3;
   padding: 0.5rem;
   text-align: center;
+}
+
+.image-viewer-text-content {
+  margin: 0;
+  overflow-wrap: anywhere;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+.image-viewer-text-content.blog-post-content {
+  min-height: 0;
+}
+
+.file-content-editor {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  margin-top: 0.75rem;
+}
+
+.file-content-editor form {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.file-content-editor form[hidden] {
+  display: none !important;
+}
+
+.file-content-editor [hidden] {
+  display: none !important;
+}
+
+.file-content-editor-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.file-content-editor-pane > textarea,
+.file-content-markdown-preview {
+  flex: 1;
+  min-height: 0;
+}
+
+.file-content-editor-actions,
+.file-content-editor-actions-right {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.file-content-editor-actions {
+  justify-content: space-between;
+}
+
+.file-content-editor-actions-right {
+  margin-left: auto;
+}
+
+.file-content-editor textarea {
+  box-sizing: border-box;
+  font-family: "Courier New", monospace;
+  min-height: 0;
+  padding: 0.75rem;
+  resize: none;
+  width: 100%;
+}
+
+.file-content-markdown-preview {
+  border: 1px solid #ccd3d3;
+  overflow: auto;
+  text-align: left;
+}
+
+.image-viewer.file-content-editing {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 8rem);
+}
+
+.image-viewer.file-content-editing > .image-viewer-controls,
+.image-viewer.file-content-editing > [data-file-content-display],
+.image-viewer.file-content-editing > .image-viewer-tags,
+.image-viewer.file-content-editing > .image-item-description-section {
+  display: none;
 }
 
 .image-viewer-image-toggle {
