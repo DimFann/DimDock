@@ -1,14 +1,22 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Http.Features;
-using Microsoft.EntityFrameworkCore.Diagnostics;
 using Website.Data;
 using Website.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 const long maximumUploadRequestBytes = 512L * 1024 * 1024;
+
+var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
+if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
+{
+    Directory.CreateDirectory(dataProtectionKeysPath);
+    builder.Services.AddDataProtection()
+        .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
+}
 
 // Add services
 builder.Services.AddRazorPages(options =>
@@ -37,11 +45,6 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     )
     .EnableSensitiveDataLogging(false)
     .EnableDetailedErrors(false)
-    .ConfigureWarnings(warnings => warnings.Log(
-        (RelationalEventId.CommandExecuting, LogLevel.Debug),
-        (RelationalEventId.CommandExecuted, LogLevel.Debug),
-        (RelationalEventId.CommandError, LogLevel.Debug),
-        (RelationalEventId.CommandCanceled, LogLevel.Debug)))
 );
 
 var app = builder.Build();

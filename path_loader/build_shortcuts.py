@@ -1,9 +1,10 @@
 import os
 import json
 import mysql.connector
-import traceback
+import logging
 
 # 🔧 Configuration
+logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
 DB_HOST = os.environ['DB_HOST']
 DB_USER = os.environ['DB_USER']
 DB_PASSWORD = os.environ['DB_PASSWORD']
@@ -13,14 +14,14 @@ ROOT_DIR = '/img_src'
 def process_shortcuts(cursor):
     shortcuts_path = os.path.join(ROOT_DIR, "shortcuts.json")
     if not os.path.isfile(shortcuts_path):
-        print("No shortcuts.json found, skipping shortcut processing.", flush=True)
+        logging.info("No shortcuts.json found, skipping shortcut processing.")
         return
 
     try:
         with open(shortcuts_path, "r", encoding="utf-8") as f:
             data = json.load(f)
     except Exception as e:
-        print(f"Error reading shortcuts.json: {e}", flush=True)
+        logging.error("Error reading shortcuts.json: %s", e)
         return
 
     shortcuts = data.get("shortcuts", {})
@@ -28,7 +29,7 @@ def process_shortcuts(cursor):
 
     for shortcut_path, source_files in shortcuts.items():
         if not isinstance(source_files, list):
-            print(f"Skipping {shortcut_path}: value must be a list of file paths", flush=True)
+            logging.error("Skipping %s: value must be a list of file paths", shortcut_path)
             continue
 
         for full_rel_path in source_files:
@@ -42,7 +43,7 @@ def process_shortcuts(cursor):
             cursor.execute(query, (original_name, parent_path))
             result = cursor.fetchone()
             if not result:
-                print(f"Item not found for shortcut: {full_rel_path}", flush=True)
+                logging.error("Item not found for shortcut: %s", full_rel_path)
                 continue
 
             original_id, original_name_db, parent_path_db = result
@@ -50,10 +51,10 @@ def process_shortcuts(cursor):
                 INSERT INTO Shortcuts (original_id, original_name, parent_path, shortcut_path)
                 VALUES (%s, %s, %s, %s)
             """, (original_id, original_name_db, parent_path_db, shortcut_path))
-            print(f"Inserted shortcut: {shortcut_path} → {full_rel_path}", flush=True)
+            logging.info("Inserted shortcut: %s → %s", shortcut_path, full_rel_path)
             inserted += 1
 
-    print(f"Finished inserting {inserted} shortcuts.", flush=True)
+    logging.info("Finished inserting %s shortcuts.", inserted)
 
 def main():
     try:
@@ -68,9 +69,8 @@ def main():
         conn.commit()
         cursor.close()
         conn.close()
-    except Exception as e:
-        print("Fatal error occurred during shortcut processing:", flush=True)
-        traceback.print_exc()
+    except Exception:
+        logging.exception("Fatal error occurred during shortcut processing")
 
 if __name__ == "__main__":
     main()

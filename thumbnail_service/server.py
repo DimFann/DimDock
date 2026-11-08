@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 import os
 import re
 import tempfile
@@ -10,6 +11,7 @@ from urllib.parse import urlsplit
 
 from PIL import Image, UnidentifiedImageError
 
+logging.basicConfig(level=logging.ERROR, format="%(levelname)s: %(message)s")
 THUMB_DIR = Path("/img_db_thumbs")
 MAX_THUMBNAIL_SIZE = (256, 256)
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
@@ -115,7 +117,8 @@ class ThumbnailHandler(BaseHTTPRequestHandler):
     def log_message(self, format_string, *args):
         if self.path == "/health":
             return
-        print(f"{self.address_string()} - {format_string % args}", flush=True)
+        if len(args) > 1 and str(args[1]).isdigit() and int(args[1]) >= 400:
+            logging.error("%s - %s", self.address_string(), format_string % args)
 
 
 def main():
@@ -128,7 +131,6 @@ def main():
 
     THUMB_DIR.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer(("0.0.0.0", port), ThumbnailHandler)
-    print(f"Thumbnail service listening on port {port}.", flush=True)
     server.serve_forever()
 
 

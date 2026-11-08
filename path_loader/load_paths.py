@@ -4,12 +4,13 @@ import hashlib
 import mysql.connector
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from PIL import Image
-import traceback
 import re
 import json
 import unicodedata
+import logging
 
 # 🔧 Configuration
+logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
 MAX_THUMBNAIL_SIZE = (256, 256)
 MAX_WORKERS = 8
 
@@ -237,7 +238,7 @@ def create_blog_alias(title, timestamp, used_aliases):
 
 def process_blogs(cursor):
     if os.path.exists(BLOGS_INITIALIZED_FILE):
-        print("Blogs already initialized. Skipping blog import.", flush=True)
+        logging.info("Blogs already initialized. Skipping blog import.")
         return 0
 
     if not os.path.isdir(BLOG_DIR):
@@ -267,7 +268,7 @@ def process_blogs(cursor):
         timezone_abbrev, date_part, time_part = match.groups()
         offset_hours = BLOG_TIMEZONE_OFFSETS.get(timezone_abbrev)
         if offset_hours is None:
-            print(f"Unsupported timezone abbreviation in blog filename {filename}; skipping.", flush=True)
+            logging.error("Unsupported timezone abbreviation in blog filename %s; skipping.", filename)
             continue
 
         try:
@@ -277,7 +278,7 @@ def process_blogs(cursor):
             # MySQL DATETIME has no timezone, so store the UTC value as a naive datetime.
             utc_timestamp = local_timestamp.astimezone(datetime.timezone.utc).replace(tzinfo=None)
         except (OverflowError, ValueError) as e:
-            print(f"Invalid date in blog filename {filename}: {e}; skipping.", flush=True)
+            logging.error("Invalid date in blog filename %s: %s; skipping.", filename, e)
             continue
 
         file_path = os.path.join(BLOG_DIR, filename)
@@ -288,7 +289,7 @@ def process_blogs(cursor):
             with open(file_path, "r", encoding="utf-8") as blog_file:
                 blog_text = blog_file.read()
         except (OSError, UnicodeError) as e:
-            print(f"Error reading blog file {file_path}: {e}; skipping.", flush=True)
+            logging.error("Error reading blog file %s: %s; skipping.", file_path, e)
             continue
 
         title = extract_blog_title(blog_text)
@@ -298,7 +299,7 @@ def process_blogs(cursor):
             VALUES (%s, %s, %s, %s, %s)
         """, (filename, alias, title, utc_timestamp, blog_text))
         inserted_blogs += 1
-        print(f"Imported blog: {filename}", flush=True)
+        logging.info("Imported blog: %s", filename)
 
     return inserted_blogs
 
@@ -314,10 +315,10 @@ def process_about(cursor):
         VALUES (1, %s)
         ON DUPLICATE KEY UPDATE description = VALUES(description)
     """, (description,))
-    print(f"Loaded About content from {ABOUT_FILE}", flush=True)
+    logging.info("Loaded About content from %s", ABOUT_FILE)
 
 def process_image(file_path, thumbnail_key):
-    print(f"Generating thumbnail: {file_path}", flush=True)
+    logging.info("Generating thumbnail: %s", file_path)
     try:
         with Image.open(file_path) as img:
             img = img.convert("RGB")
@@ -330,8 +331,7 @@ def process_image(file_path, thumbnail_key):
             thumb_path = os.path.join(THUMB_DIR, f"{thumbnail_key}.png")
             thumb_with_bg.save(thumb_path, format="PNG", optimize=True, quality=85)
     except Exception as e:
-        print(f"Error processing image {file_path}: {e}", flush=True)
-        traceback.print_exc()
+        logging.error("Error processing image %s", file_path, exc_info=e)
 
 def traverse_and_insert(cursor):
     total_images = 0
@@ -349,7 +349,7 @@ def traverse_and_insert(cursor):
         existing_items_by_path.setdefault(item_path, {})[filename] = item['id']
 
     for current_path, dirs, files in os.walk(ROOT_DIR):
-        print(f"Processing folder: {current_path}", flush=True)
+        logging.info("Processing folder: %s", current_path)
         rel_path = os.path.relpath(current_path, ROOT_DIR)
         path = "root" if rel_path == "." else rel_path
         parent_dir = os.path.dirname(rel_path)
@@ -369,7 +369,7 @@ def traverse_and_insert(cursor):
                 with open(description_path, "r", encoding="utf-8") as f:
                     description = f.read()
             except Exception as e:
-                print(f"Error reading description.md in {current_path}: {e}", flush=True)
+                logging.error("Error reading description.md in %s: %s", current_path, e)
 
         if path not in existing_paths:
             existing_paths[path] = insert_path(cursor, path, parent, description)
@@ -433,9 +433,10 @@ def traverse_and_insert(cursor):
 
         for filename in tag_manifest['items']:
             if filename not in directory_items:
-                print(
-                    f"Tag manifest entry has no indexed item in {current_path}: {filename}",
-                    flush=True
+                logging.error(
+                    "Tag manifest entry has no indexed item in %s: %s",
+                    current_path,
+                    filename
                 )
 
         for filename, item_id in directory_items.items():
@@ -455,10 +456,9 @@ def traverse_and_insert(cursor):
                 try:
                     future.result()
                 except Exception as e:
-                    print(f"Unhandled thread error: {e}", flush=True)
-                    traceback.print_exc()
+                    logging.error("Unhandled thumbnail worker error: %s", e, exc_info=e)
 
-        print(f"Finished processing folder: {current_path}", flush=True)
+        logging.info("Finished processing folder: %s", current_path)
 
     return total_images
 
@@ -478,16 +478,15 @@ def main():
         process_about(cursor)
         # process_shortcuts(cursor)
         conn.commit()
-        print(
-            f"Finished scanning: {total_images} new images, "
-            f"{inserted_blogs} new blogs.",
-            flush=True
+        logging.info(
+            "Finished scanning: %s new images, %s new blogs.",
+            total_images,
+            inserted_blogs
         )
     except Exception:
         if conn is not None:
             conn.rollback()
-        print("Fatal error occurred:", flush=True)
-        traceback.print_exc()
+        logging.exception("Fatal error occurred")
         raise
     finally:
         if cursor is not None:

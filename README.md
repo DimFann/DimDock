@@ -11,7 +11,10 @@ are currently unauthenticated.
    `DATA_DIR/admin/admin-only-tags.json` and `DATA_DIR/about/about.md` exist.
    About Markdown is imported into the database on path-loader startup, edited
    from the Home page in admin mode, and synced back to disk with the Admin
-   page's “Sync DB to disk” control.
+   page's “Sync DB to disk” control. ASP.NET Data Protection keys are stored in
+   `DATA_DIR/app_state/data-protection-keys` so antiforgery tokens remain valid
+   across website container restarts; preserve this directory with the rest of
+   the application data.
 2. Build and start the services:
 
    ```sh
