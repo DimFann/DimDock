@@ -11,15 +11,18 @@ public class SearchModel : PageModel
 {
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
     private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
 
     public SearchModel(
         AppDbContext context,
         IConfiguration configuration,
+        IWebHostEnvironment environment,
         AdminOnlyTagsProvider adminOnlyTagsProvider)
     {
         _context = context;
         _configuration = configuration;
+        _environment = environment;
         _adminOnlyTagsProvider = adminOnlyTagsProvider;
     }
 
@@ -29,7 +32,10 @@ public class SearchModel : PageModel
     public List<Item> Results { get; private set; } = new();
     public List<PathEntry> DirectoryResults { get; private set; } = new();
     public string? Message { get; private set; }
-    public bool AdminEnabled => AdminAccess.IsAdmin(_configuration, User);
+    public bool AdminEnabled => AdminAccess.IsAdmin(
+        _configuration,
+        User,
+        AdminAccess.IsDevelopmentPasswordBypassEnabled(_configuration, _environment));
     public HashSet<string> AdminOnlyTags { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task OnGetAsync(CancellationToken cancellationToken)

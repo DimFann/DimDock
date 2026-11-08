@@ -12,17 +12,20 @@ public class ImageModel : PageModel
 {
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
     private readonly IAntiforgery _antiforgery;
     private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
 
     public ImageModel(
         AppDbContext context,
         IConfiguration configuration,
+        IWebHostEnvironment environment,
         IAntiforgery antiforgery,
         AdminOnlyTagsProvider adminOnlyTagsProvider)
     {
         _context = context;
         _configuration = configuration;
+        _environment = environment;
         _antiforgery = antiforgery;
         _adminOnlyTagsProvider = adminOnlyTagsProvider;
     }
@@ -33,7 +36,10 @@ public class ImageModel : PageModel
     public ulong? CurrentShortcutId { get; private set; }
     public string TagsInput { get; set; } = string.Empty;
     public string? TagError { get; private set; }
-    public bool AdminEnabled => AdminAccess.IsAdmin(_configuration, User);
+    public bool AdminEnabled => AdminAccess.IsAdmin(
+        _configuration,
+        User,
+        AdminAccess.IsDevelopmentPasswordBypassEnabled(_configuration, _environment));
     public HashSet<string> AdminOnlyTags { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
     public IEnumerable<string> Tags =>
         Item.TagLinks.Select(link => link.Tag.Name)

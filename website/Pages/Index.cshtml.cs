@@ -12,13 +12,17 @@ namespace website.Pages;
 public class IndexModel(
     AppDbContext context,
     IConfiguration configuration,
+    IWebHostEnvironment environment,
     IAntiforgery antiforgery) : PageModel
 {
     private static readonly MarkdownPipeline MarkdownPipeline =
         new MarkdownPipelineBuilder().DisableHtml().Build();
 
     public string AboutMarkdown { get; private set; } = string.Empty;
-    public bool AdminEnabled => AdminAccess.IsAdmin(configuration, User);
+    public bool AdminEnabled => AdminAccess.IsAdmin(
+        configuration,
+        User,
+        AdminAccess.IsDevelopmentPasswordBypassEnabled(configuration, environment));
 
     public async Task OnGetAsync()
     {

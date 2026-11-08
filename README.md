@@ -37,6 +37,13 @@ for remote deployments, use HTTPS and a deployment secret manager or Docker
 secrets. MariaDB's root and application-user credentials are also read from
 `.env`; keep these secrets private as well.
 
+The local `http` and `https` launch profiles enable the development-only
+`Development__AllowAnyAdminPassword` switch, which accepts any password for
+the configured admin username. This bypass is honored only when
+`ASPNETCORE_ENVIRONMENT` is `Development`. Docker Compose defaults to
+`Production` and leaves `DEV_ALLOW_ANY_ADMIN_PASSWORD` disabled; do not enable
+the bypass for a deployment.
+
 MariaDB only uses `DB_ROOT_PASSWORD`, `DB_NAME`, `DB_USER`, and `DB_PASSWORD`
 when initializing an empty database directory. Changing these values later
 does not update users inside an existing database; update the MariaDB users

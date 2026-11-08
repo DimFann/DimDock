@@ -12,17 +12,20 @@ namespace Website.Pages;
 public class AdminModel : PageModel
 {
     private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
     private readonly AppDbContext _context;
     private readonly IAntiforgery _antiforgery;
     private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
 
     public AdminModel(
         IConfiguration configuration,
+        IWebHostEnvironment environment,
         AppDbContext context,
         IAntiforgery antiforgery,
         AdminOnlyTagsProvider adminOnlyTagsProvider)
     {
         _configuration = configuration;
+        _environment = environment;
         _context = context;
         _antiforgery = antiforgery;
         _adminOnlyTagsProvider = adminOnlyTagsProvider;
@@ -38,7 +41,9 @@ public class AdminModel : PageModel
         {
             return NotFound();
         }
-        if (!AdminAccess.IsConfigured(_configuration))
+        if (!AdminAccess.IsConfigured(
+                _configuration,
+                AdminAccess.IsDevelopmentPasswordBypassEnabled(_configuration, _environment)))
         {
             return RedirectToPage("/Login");
         }
@@ -462,7 +467,10 @@ public class AdminModel : PageModel
     }
 
     private bool IsAdminEnabled() =>
-        AdminAccess.IsAdmin(_configuration, User);
+        AdminAccess.IsAdmin(
+            _configuration,
+            User,
+            AdminAccess.IsDevelopmentPasswordBypassEnabled(_configuration, _environment));
 
     private async Task<bool> IsAntiForgeryTokenValidAsync()
     {

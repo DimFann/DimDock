@@ -9,7 +9,7 @@ using Website.Services;
 namespace Website.Pages;
 
 [EnableRateLimiting("admin-login")]
-public class LoginModel(IConfiguration configuration) : PageModel
+public class LoginModel(IConfiguration configuration, IWebHostEnvironment environment) : PageModel
 {
     [BindProperty]
     public string Username { get; set; } = string.Empty;
@@ -22,11 +22,14 @@ public class LoginModel(IConfiguration configuration) : PageModel
 
     public string? ErrorMessage { get; private set; }
     public bool AdminFeatureEnabled => AdminAccess.IsFeatureEnabled(configuration);
-    public bool CredentialsConfigured => AdminAccess.IsConfigured(configuration);
+    public bool DevelopmentPasswordBypassEnabled =>
+        AdminAccess.IsDevelopmentPasswordBypassEnabled(configuration, environment);
+    public bool CredentialsConfigured =>
+        AdminAccess.IsConfigured(configuration, DevelopmentPasswordBypassEnabled);
 
     public IActionResult OnGet()
     {
-        if (AdminAccess.IsAdmin(configuration, User))
+        if (AdminAccess.IsAdmin(configuration, User, DevelopmentPasswordBypassEnabled))
         {
             return RedirectToPage("/Admin");
         }
@@ -42,13 +45,16 @@ public class LoginModel(IConfiguration configuration) : PageModel
             return Page();
         }
 
-        if (!AdminAccess.IsConfigured(configuration))
+        var allowAnyPassword = DevelopmentPasswordBypassEnabled;
+        if (!AdminAccess.IsConfigured(configuration, allowAnyPassword))
         {
-            ErrorMessage = "Admin access is not configured. Set ADMIN_USERNAME and ADMIN_PASSWORD (at least 12 characters) in your environment.";
+            ErrorMessage = allowAnyPassword
+                ? "Admin access is not configured. Set ADMIN_USERNAME in your environment."
+                : "Admin access is not configured. Set ADMIN_USERNAME and ADMIN_PASSWORD (at least 12 characters) in your environment.";
             return Page();
         }
 
-        if (!AdminAccess.ValidateCredentials(configuration, Username, Password))
+        if (!AdminAccess.ValidateCredentials(configuration, Username, Password, allowAnyPassword))
         {
             ErrorMessage = "Invalid username or password.";
             return Page();

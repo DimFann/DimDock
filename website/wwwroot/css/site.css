@@ -873,7 +873,7 @@ body.blog-layout main {
 
 .gallery-image-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(256px, calc((100% - 12px) / 2)), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(256px, calc((100% - 12px) / 2)), 256px));
   gap: 12px;
   width: 100%;
 }

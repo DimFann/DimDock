@@ -25,6 +25,7 @@ public class GalleryModel : PageModel
     private readonly AppDbContext _context;
     private readonly ILogger<GalleryModel> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
     private readonly IAntiforgery _antiforgery;
     private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
     private readonly HttpClient _thumbnailClient;
@@ -33,6 +34,7 @@ public class GalleryModel : PageModel
         AppDbContext context,
         ILogger<GalleryModel> logger,
         IConfiguration configuration,
+        IWebHostEnvironment environment,
         IAntiforgery antiforgery,
         AdminOnlyTagsProvider adminOnlyTagsProvider,
         IHttpClientFactory httpClientFactory)
@@ -40,6 +42,7 @@ public class GalleryModel : PageModel
         _context = context;
         _logger = logger;
         _configuration = configuration;
+        _environment = environment;
         _antiforgery = antiforgery;
         _adminOnlyTagsProvider = adminOnlyTagsProvider;
         _thumbnailClient = httpClientFactory.CreateClient("ThumbnailService");
@@ -56,7 +59,10 @@ public class GalleryModel : PageModel
     public string? Message { get; set; }
     public string? CurrentPath { get; set; }
     public string? ParentPath { get; set; }
-    public bool AdminEnabled => AdminAccess.IsAdmin(_configuration, User);
+    public bool AdminEnabled => AdminAccess.IsAdmin(
+        _configuration,
+        User,
+        AdminAccess.IsDevelopmentPasswordBypassEnabled(_configuration, _environment));
     public HashSet<string> AdminOnlyTags { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyCollection<string> GetItemTags(Item item) =>

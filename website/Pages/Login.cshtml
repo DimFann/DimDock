@@ -13,7 +13,14 @@
     }
     else if (!Model.CredentialsConfigured)
     {
-        <p>Admin access is not configured. Set <code>ADMIN_USERNAME</code> and <code>ADMIN_PASSWORD</code> (at least 12 characters) in your environment, then restart the website.</p>
+        @if (Model.DevelopmentPasswordBypassEnabled)
+        {
+            <p>Admin access is not configured. Set <code>ADMIN_USERNAME</code> in your environment, then restart the website.</p>
+        }
+        else
+        {
+            <p>Admin access is not configured. Set <code>ADMIN_USERNAME</code> and <code>ADMIN_PASSWORD</code> (at least 12 characters) in your environment, then restart the website.</p>
+        }
     }
     else
     {

@@ -83,7 +83,9 @@ services:
     ports:
       - "${WEBSITE_PORT}:80"
     environment:
+      ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Production}
       ASPNETCORE_URLS: http://+:80
+      Development__AllowAnyAdminPassword: ${DEV_ALLOW_ANY_ADMIN_PASSWORD:-false}
       AdminAuth__Username: ${ADMIN_USERNAME:-}
       AdminAuth__Password: ${ADMIN_PASSWORD:-}
       DataProtection__KeysPath: /app_state/data-protection-keys

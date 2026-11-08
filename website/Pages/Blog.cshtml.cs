@@ -19,16 +19,19 @@ public class BlogModel : PageModel
 
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
     private readonly IAntiforgery _antiforgery;
     private const int PageSize = 10;
 
     public BlogModel(
         AppDbContext context,
         IConfiguration configuration,
+        IWebHostEnvironment environment,
         IAntiforgery antiforgery)
     {
         _context = context;
         _configuration = configuration;
+        _environment = environment;
         _antiforgery = antiforgery;
     }
 
@@ -36,7 +39,10 @@ public class BlogModel : PageModel
     [BindProperty(SupportsGet = true, Name = "pageNumber")]
     public int PageNumber { get; set; } = 1;
     public int PageCount { get; private set; } = 1;
-    public bool AdminEnabled => AdminAccess.IsAdmin(_configuration, User);
+    public bool AdminEnabled => AdminAccess.IsAdmin(
+        _configuration,
+        User,
+        AdminAccess.IsDevelopmentPasswordBypassEnabled(_configuration, _environment));
 
     public async Task OnGetAsync()
     {

@@ -20,20 +20,26 @@ public class BlogPostModel : PageModel
 
     private readonly AppDbContext _context;
     private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
     private readonly IAntiforgery _antiforgery;
 
     public BlogPostModel(
         AppDbContext context,
         IConfiguration configuration,
+        IWebHostEnvironment environment,
         IAntiforgery antiforgery)
     {
         _context = context;
         _configuration = configuration;
+        _environment = environment;
         _antiforgery = antiforgery;
     }
 
     public Blog Post { get; private set; } = null!;
-    public bool AdminEnabled => AdminAccess.IsAdmin(_configuration, User);
+    public bool AdminEnabled => AdminAccess.IsAdmin(
+        _configuration,
+        User,
+        AdminAccess.IsDevelopmentPasswordBypassEnabled(_configuration, _environment));
 
     public async Task<IActionResult> OnGetAsync(string slugOrId)
     {
