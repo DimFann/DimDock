@@ -7,6 +7,7 @@ using System.Text.RegularExpressions;
 using Microsoft.Extensions.Configuration;
 using Website.Data;
 using Website.Models;
+using Website.Services;
 
 namespace Website.Pages;
 
@@ -32,7 +33,7 @@ public class BlogPostModel : PageModel
     }
 
     public Blog Post { get; private set; } = null!;
-    public bool AdminEnabled => _configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
+    public bool AdminEnabled => AdminAccess.IsAdmin(_configuration, User);
 
     public async Task<IActionResult> OnGetAsync(string slugOrId)
     {
@@ -102,6 +103,64 @@ public class BlogPostModel : PageModel
         });
     }
 
+    public async Task<IActionResult> OnPostSaveTitleAsync(string slugOrId, [FromForm] string? title)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        var normalizedTitle = title?.Trim();
+        if (string.IsNullOrWhiteSpace(normalizedTitle) || normalizedTitle.Length > 1024)
+        {
+            return BadRequest("Enter a title between 1 and 1024 characters.");
+        }
+
+        var post = await FindPostAsync(slugOrId);
+        if (post is null)
+        {
+            return NotFound();
+        }
+
+        post.Title = normalizedTitle;
+        post.Text = ReplaceLeadingTitle(post.Text, normalizedTitle);
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+
+        return new JsonResult(new
+        {
+            title = normalizedTitle,
+            html = RenderMarkdown(post.Text)
+        });
+    }
+
+    public async Task<IActionResult> OnPostDeleteAsync(string slugOrId)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        var post = await FindPostAsync(slugOrId);
+        if (post is null)
+        {
+            return NotFound();
+        }
+
+        _context.Blogs.Remove(post);
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        return RedirectToPage("/Blog");
+    }
+
     private async Task<Blog?> FindPostAsync(string slugOrId)
     {
         var post = await _context.Blogs.FirstOrDefaultAsync(blog => blog.Alias == slugOrId);
@@ -117,6 +176,17 @@ public class BlogPostModel : PageModel
     {
         var match = LeadingTitlePattern.Match(text);
         return match.Success ? match.Groups[1].Value.Trim() : null;
+    }
+
+    private static string ReplaceLeadingTitle(string? markdown, string title)
+    {
+        var text = markdown ?? string.Empty;
+        if (LeadingTitlePattern.IsMatch(text))
+        {
+            return LeadingTitlePattern.Replace(text, $"# {title}{Environment.NewLine}", 1);
+        }
+
+        return $"# {title}{Environment.NewLine}{Environment.NewLine}{text}";
     }
 
     private async Task<bool> IsAntiForgeryTokenValidAsync()

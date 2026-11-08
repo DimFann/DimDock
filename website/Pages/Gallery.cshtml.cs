@@ -13,7 +13,6 @@ using Website.Data;
 using Website.Models;
 using Website.Services;
 
-[IgnoreAntiforgeryToken]
 public class GalleryModel : PageModel
 {
     private static readonly MarkdownPipeline DescriptionMarkdownPipeline =
@@ -57,7 +56,7 @@ public class GalleryModel : PageModel
     public string? Message { get; set; }
     public string? CurrentPath { get; set; }
     public string? ParentPath { get; set; }
-    public bool AdminEnabled => _configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
+    public bool AdminEnabled => AdminAccess.IsAdmin(_configuration, User);
     public HashSet<string> AdminOnlyTags { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public IReadOnlyCollection<string> GetItemTags(Item item) =>

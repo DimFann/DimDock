@@ -16,6 +16,9 @@ public class Blog
     [Column("alias")]
     public string Alias { get; set; } = string.Empty;
 
+    [Column("source_filename")]
+    public string SourceFilename { get; set; } = string.Empty;
+
     [Column("timestamp")]
     public DateTime? Timestamp { get; set; }
 

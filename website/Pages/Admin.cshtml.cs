@@ -33,10 +33,18 @@ public class AdminModel : PageModel
 
     public async Task<IActionResult> OnGetAsync()
     {
-        var isAdminEnabled = _configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
+        var isAdminEnabled = AdminAccess.IsFeatureEnabled(_configuration);
         if (!isAdminEnabled)
         {
             return NotFound();
+        }
+        if (!AdminAccess.IsConfigured(_configuration))
+        {
+            return RedirectToPage("/Login");
+        }
+        if (!User.IsInRole("Admin"))
+        {
+            return RedirectToPage("/Login", new { returnUrl = "/Admin" });
         }
 
         var tags = await _adminOnlyTagsProvider.GetTagsAsync(HttpContext.RequestAborted);
@@ -454,7 +462,7 @@ public class AdminModel : PageModel
     }
 
     private bool IsAdminEnabled() =>
-        _configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
+        AdminAccess.IsAdmin(_configuration, User);
 
     private async Task<bool> IsAntiForgeryTokenValidAsync()
     {

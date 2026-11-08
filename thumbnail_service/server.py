@@ -3,7 +3,9 @@ import json
 import logging
 import os
 import re
+import signal
 import tempfile
+import threading
 import warnings
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -131,7 +133,26 @@ def main():
 
     THUMB_DIR.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer(("0.0.0.0", port), ThumbnailHandler)
-    server.serve_forever()
+    server.daemon_threads = True
+    shutdown_requested = threading.Event()
+
+    def request_shutdown(_signum, _frame):
+        shutdown_requested.set()
+
+    signal.signal(signal.SIGINT, request_shutdown)
+    signal.signal(signal.SIGTERM, request_shutdown)
+    server_thread = threading.Thread(
+        target=server.serve_forever,
+        kwargs={"poll_interval": 0.1},
+        name="thumbnail-http-server",
+    )
+    try:
+        server_thread.start()
+        shutdown_requested.wait()
+    finally:
+        server.shutdown()
+        server.server_close()
+        server_thread.join()
 
 
 if __name__ == "__main__":

@@ -1,45 +1,161 @@
 @page "/blog"
 @model Website.Pages.BlogModel
-@using System.Globalization
 @{
     ViewData["Title"] = "Blog";
-    ViewData["BodyClass"] = "content-background";
+    ViewData["BodyClass"] = "content-background blog-layout";
 }
 
 <div class="blog-page">
-@foreach (var post in Model.Posts)
-{
-    var timestamp = post.Timestamp.HasValue
-        ? DateTime.SpecifyKind(post.Timestamp.Value, DateTimeKind.Utc)
-            .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)
-        : null;
-
-    <article class="blog-post">
-        <a class="blog-post-link" href="@($"/blog/{Uri.EscapeDataString(post.Alias)}")">
-            <h2 class="blog-post-title">@(string.IsNullOrWhiteSpace(post.Title) ? "Untitled" : post.Title)</h2>
-            <div class="blog-post-date">
-                @if (timestamp is not null)
-                {
-                    <time datetime="@timestamp" data-local-time>
-                        @post.Timestamp!.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
-                    </time>
-                }
-            </div>
-        </a>
-        <div class="blog-post-excerpt">
-            @Html.Raw(Model.RenderExcerpt(post.Text))
+    @if (Model.AdminEnabled)
+    {
+        <div class="admin-options-toolbar">
+            <strong class="admin-options-toolbar-title">Admin Options</strong>
+            <button type="button" class="path-admin-button" data-open-create-post>Post</button>
         </div>
-    </article>
-}
+
+        <dialog class="description-editor blog-create-dialog" data-create-post-dialog aria-labelledby="createPostTitle">
+            <form method="post" asp-page-handler="Create">
+                @Html.AntiForgeryToken()
+                <h2 id="createPostTitle">Draft Blog Post</h2>
+                <input class="blog-create-title" name="title" maxlength="1024"
+                       placeholder="Untitled" aria-label="Post title" />
+                <hr class="blog-create-divider" />
+                <textarea class="blog-create-content" name="content" maxlength="60000"
+                          aria-label="Blog post content in Markdown"></textarea>
+                <p class="blog-create-help">Content supports Markdown. The title will be added as the post heading.</p>
+                <div class="blog-create-actions">
+                    <button type="button" data-cancel-create-post>Cancel</button>
+                    <button type="submit" class="blog-create-publish-button">Publish</button>
+                </div>
+            </form>
+        </dialog>
+    }
+
+    <div data-blog-results aria-live="polite">
+        @await Html.PartialAsync("_BlogResults", Model)
+    </div>
+
+    @if (Model.AdminEnabled)
+    {
+        <dialog class="path-description-dialog path-admin-dialog" data-delete-blog-dialog aria-labelledby="deleteBlogTitle">
+            <form method="post" asp-page-handler="Delete">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="id" />
+                <input type="hidden" name="page" />
+                <div class="path-description-dialog-header">
+                    <h2 id="deleteBlogTitle">Delete Post?</h2>
+                    <button type="button" class="icon-action-button" data-close-delete-blog aria-label="Close" title="Close">
+                        <img src="/img/cancel.png" alt="" />
+                    </button>
+                </div>
+                <p>This permanently deletes this post from the database. This cannot be undone.</p>
+                <div class="path-admin-dialog-actions">
+                    <button type="button" data-close-delete-blog>Cancel</button>
+                    <button type="submit" class="path-admin-button path-admin-delete">Delete Post</button>
+                </div>
+            </form>
+        </dialog>
+    }
 </div>
 
 @section Scripts {
     <script>
-        document.querySelectorAll("time[data-local-time]").forEach((element) => {
-            const date = new Date(element.dateTime);
-            if (!Number.isNaN(date.getTime())) {
-                element.textContent = date.toLocaleString();
+        const createPostDialog = document.querySelector("[data-create-post-dialog]");
+        document.querySelector("[data-open-create-post]")?.addEventListener("click", () => {
+            createPostDialog.showModal();
+            createPostDialog.querySelector("input[name='title']").focus();
+        });
+        createPostDialog?.querySelector("[data-cancel-create-post]")?.addEventListener("click", () => {
+            createPostDialog.close();
+        });
+
+        const blogResults = document.querySelector("[data-blog-results]");
+        const deleteBlogDialog = document.querySelector("[data-delete-blog-dialog]");
+        deleteBlogDialog?.querySelectorAll("[data-close-delete-blog]").forEach((button) => {
+            button.addEventListener("click", () => deleteBlogDialog.close());
+        });
+        let activeBlogRequest = null;
+
+        function formatBlogDates(container) {
+            container.querySelectorAll("time[data-local-time]").forEach((element) => {
+                const date = new Date(element.dateTime);
+                if (!Number.isNaN(date.getTime())) {
+                    element.textContent = date.toLocaleString();
+                }
+            });
+        }
+
+        async function loadBlogPage(url, updateHistory) {
+            activeBlogRequest?.abort();
+            const request = new AbortController();
+            activeBlogRequest = request;
+            blogResults.setAttribute("aria-busy", "true");
+
+            try {
+                const response = await fetch(url, {
+                    headers: { "X-Requested-With": "XMLHttpRequest" },
+                    signal: request.signal
+                });
+                if (!response.ok) {
+                    throw new Error(`Blog page request failed (${response.status}).`);
+                }
+
+                const responseDocument = new DOMParser().parseFromString(await response.text(), "text/html");
+                const newResults = responseDocument.querySelector("[data-blog-results]");
+                if (!newResults) {
+                    throw new Error("The requested blog page did not contain results.");
+                }
+                if (activeBlogRequest !== request) {
+                    return;
+                }
+
+                blogResults.innerHTML = newResults.innerHTML;
+                formatBlogDates(blogResults);
+                if (updateHistory) {
+                    history.pushState(null, "", url);
+                }
+            } catch (error) {
+                if (error.name !== "AbortError" && activeBlogRequest === request) {
+                    window.location.assign(url);
+                }
+            } finally {
+                if (activeBlogRequest === request) {
+                    activeBlogRequest = null;
+                    blogResults.removeAttribute("aria-busy");
+                }
+            }
+        }
+
+        formatBlogDates(blogResults);
+        blogResults.addEventListener("click", (event) => {
+            const link = event.target.closest("a[data-blog-page]");
+            if (!link) {
+                return;
+            }
+
+            if (link.getAttribute("aria-disabled") === "true") {
+                event.preventDefault();
+                return;
+            }
+            if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) {
+                return;
+            }
+
+            event.preventDefault();
+            void loadBlogPage(link.href, true);
+        });
+        blogResults.addEventListener("submit", (event) => {
+            if (event.target.matches("[data-delete-blog-form]")) {
+                event.preventDefault();
+                const sourceForm = event.target;
+                const dialogForm = deleteBlogDialog.querySelector("form");
+                dialogForm.querySelector("input[name='id']").value =
+                    sourceForm.querySelector("input[name='id']").value;
+                dialogForm.querySelector("input[name='page']").value =
+                    sourceForm.querySelector("input[name='page']").value;
+                deleteBlogDialog.showModal();
             }
         });
+        window.addEventListener("popstate", () => void loadBlogPage(window.location.href, false));
     </script>
 }

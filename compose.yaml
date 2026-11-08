@@ -4,10 +4,10 @@ services:
     container_name: mariadb
     restart: unless-stopped
     environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: mydb
-      MYSQL_USER: myuser
-      MYSQL_PASSWORD: mypassword
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?Set DB_ROOT_PASSWORD in .env}
+      MYSQL_DATABASE: ${DB_NAME:?Set DB_NAME in .env}
+      MYSQL_USER: ${DB_USER:?Set DB_USER in .env}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
     volumes:
       - type: bind
         source: ${WSL_DATA_DIR:-${DATA_DIR}}/db_data
@@ -50,9 +50,10 @@ services:
         target: /about
     environment:
       DB_HOST: db
-      DB_USER: myuser
-      DB_PASSWORD: mypassword
-      DB_NAME: mydb
+      DB_PORT: "3306"
+      DB_USER: ${DB_USER:?Set DB_USER in .env}
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_NAME: ${DB_NAME:?Set DB_NAME in .env}
     command: ["python", "/app/load_paths.py"]
 
   thumbnail-service:
@@ -83,9 +84,15 @@ services:
       - "${WEBSITE_PORT}:80"
     environment:
       ASPNETCORE_URLS: http://+:80
+      AdminAuth__Username: ${ADMIN_USERNAME:-}
+      AdminAuth__Password: ${ADMIN_PASSWORD:-}
       DataProtection__KeysPath: /app_state/data-protection-keys
+      Database__Host: db
+      Database__Port: "3306"
+      Database__Name: ${DB_NAME:?Set DB_NAME in .env}
+      Database__User: ${DB_USER:?Set DB_USER in .env}
+      Database__Password: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       ThumbnailService__BaseAddress: http://thumbnail-service:${THUMBNAIL_SERVICE_PORT:-8080}/
-      ConnectionStrings__DefaultConnection: "Server=db;Port=3306;Database=mydb;User=myuser;Password=mypassword;"
     volumes:
       - type: bind
         source: ${WSL_DATA_DIR:-${DATA_DIR}}/app_state

@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Website.Data;
 using Website.Models;
+using Website.Services;
 
 namespace website.Pages;
 
@@ -17,7 +18,7 @@ public class IndexModel(
         new MarkdownPipelineBuilder().DisableHtml().Build();
 
     public string AboutMarkdown { get; private set; } = string.Empty;
-    public bool AdminEnabled => configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
+    public bool AdminEnabled => AdminAccess.IsAdmin(configuration, User);
 
     public async Task OnGetAsync()
     {

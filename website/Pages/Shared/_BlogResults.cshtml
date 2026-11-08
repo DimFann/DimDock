@@ -1,0 +1,72 @@
+@model Website.Pages.BlogModel
+@using System.Globalization
+
+<div class="blog-post-list">
+    @foreach (var post in Model.Posts)
+    {
+        var timestamp = post.Timestamp.HasValue
+            ? DateTime.SpecifyKind(post.Timestamp.Value, DateTimeKind.Utc)
+                .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)
+            : null;
+
+        <article class="blog-post">
+            <div class="blog-post-list-heading">
+                <a class="blog-post-link" href="@($"/blog/{Uri.EscapeDataString(post.Alias)}")">
+                    <h2 class="blog-post-title">@(string.IsNullOrWhiteSpace(post.Title) ? "Untitled" : post.Title)</h2>
+                    <div class="blog-post-date">
+                        @if (timestamp is not null)
+                        {
+                            <time datetime="@timestamp" data-local-time>
+                                @post.Timestamp!.Value.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture)
+                            </time>
+                        }
+                    </div>
+                </a>
+                @if (Model.AdminEnabled)
+                {
+                    <form method="post" asp-page-handler="Delete" class="blog-post-delete-form" data-delete-blog-form>
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="id" value="@post.Id" />
+                        <input type="hidden" name="page" value="@Model.PageNumber" />
+                        <button type="submit" class="icon-action-button blog-post-delete-button"
+                                aria-label="Delete @(string.IsNullOrWhiteSpace(post.Title) ? "Untitled" : post.Title)"
+                                title="Delete post">
+                            <img src="/img/trash.png" alt="" />
+                        </button>
+                    </form>
+                }
+            </div>
+            <div class="blog-post-excerpt">
+                @Html.Raw(Model.RenderExcerpt(post.Text))
+            </div>
+        </article>
+    }
+</div>
+
+@{
+    var firstDisabled = Model.PageNumber <= 1;
+    var lastDisabled = Model.PageNumber >= Model.PageCount;
+}
+<nav class="blog-pagination" aria-label="Blog pages">
+    <a class="icon-action-button @(firstDisabled ? "is-disabled" : "")"
+       href="/blog?pageNumber=1" data-blog-page aria-label="First page" title="First page"
+       aria-disabled="@firstDisabled" tabindex="@(firstDisabled ? "-1" : null)">
+        <img src="/img/first.png" alt="" />
+    </a>
+    <a class="icon-action-button @(firstDisabled ? "is-disabled" : "")"
+       href="/blog?pageNumber=@Math.Max(1, Model.PageNumber - 1)" data-blog-page aria-label="Previous page" title="Previous page"
+       aria-disabled="@firstDisabled" tabindex="@(firstDisabled ? "-1" : null)">
+        <img src="/img/prev.png" alt="" />
+    </a>
+    <span aria-current="page">Page @Model.PageNumber of @Model.PageCount</span>
+    <a class="icon-action-button @(lastDisabled ? "is-disabled" : "")"
+       href="/blog?pageNumber=@Math.Min(Model.PageCount, Model.PageNumber + 1)" data-blog-page aria-label="Next page" title="Next page"
+       aria-disabled="@lastDisabled" tabindex="@(lastDisabled ? "-1" : null)">
+        <img src="/img/next.png" alt="" />
+    </a>
+    <a class="icon-action-button @(lastDisabled ? "is-disabled" : "")"
+       href="/blog?pageNumber=@Model.PageCount" data-blog-page aria-label="Last page" title="Last page"
+       aria-disabled="@lastDisabled" tabindex="@(lastDisabled ? "-1" : null)">
+        <img src="/img/last.png" alt="" />
+    </a>
+</nav>

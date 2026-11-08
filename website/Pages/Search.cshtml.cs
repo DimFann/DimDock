@@ -29,7 +29,7 @@ public class SearchModel : PageModel
     public List<Item> Results { get; private set; } = new();
     public List<PathEntry> DirectoryResults { get; private set; } = new();
     public string? Message { get; private set; }
-    public bool AdminEnabled => _configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
+    public bool AdminEnabled => AdminAccess.IsAdmin(_configuration, User);
     public HashSet<string> AdminOnlyTags { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
 
     public async Task OnGetAsync(CancellationToken cancellationToken)

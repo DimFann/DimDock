@@ -33,7 +33,7 @@ public class ImageModel : PageModel
     public ulong? CurrentShortcutId { get; private set; }
     public string TagsInput { get; set; } = string.Empty;
     public string? TagError { get; private set; }
-    public bool AdminEnabled => _configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
+    public bool AdminEnabled => AdminAccess.IsAdmin(_configuration, User);
     public HashSet<string> AdminOnlyTags { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
     public IEnumerable<string> Tags =>
         Item.TagLinks.Select(link => link.Tag.Name)

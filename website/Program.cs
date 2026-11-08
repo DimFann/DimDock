@@ -1,9 +1,14 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.AspNetCore.RateLimiting;
+using MySqlConnector;
+using System.Threading.RateLimiting;
 using Website.Data;
 using Website.Services;
 
@@ -19,9 +24,32 @@ if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
 }
 
 // Add services
-builder.Services.AddRazorPages(options =>
+builder.Services
+    .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
+    .AddCookie(options =>
+    {
+        options.Cookie.Name = "DimDock.Admin";
+        options.Cookie.HttpOnly = true;
+        options.Cookie.SameSite = SameSiteMode.Strict;
+        options.Cookie.SecurePolicy = CookieSecurePolicy.Always;
+        options.ExpireTimeSpan = TimeSpan.FromHours(8);
+        options.SlidingExpiration = true;
+        options.LoginPath = "/Login";
+    });
+builder.Services.AddRazorPages();
+builder.Services.AddRateLimiter(options =>
 {
-    options.Conventions.ConfigureFilter(new IgnoreAntiforgeryTokenAttribute());
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("admin-login", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                AutoReplenishment = true,
+                PermitLimit = 10,
+                QueueLimit = 0,
+                Window = TimeSpan.FromMinutes(1)
+            }));
 });
 builder.Services.Configure<FormOptions>(options =>
 {
@@ -37,9 +65,30 @@ builder.Services.AddHttpClient("ThumbnailService", client =>
     client.Timeout = TimeSpan.FromMinutes(2);
 });
 
+var databasePassword = builder.Configuration["Database:Password"];
+var databaseConnectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+if (!string.IsNullOrWhiteSpace(databasePassword))
+{
+    databaseConnectionString = new MySqlConnectionStringBuilder
+    {
+        Server = builder.Configuration["Database:Host"] ?? "db",
+        Port = builder.Configuration.GetValue<uint?>("Database:Port") ?? 3306,
+        Database = builder.Configuration["Database:Name"]
+            ?? throw new InvalidOperationException("Database:Name is not configured."),
+        UserID = builder.Configuration["Database:User"]
+            ?? throw new InvalidOperationException("Database:User is not configured."),
+        Password = databasePassword
+    }.ConnectionString;
+}
+else if (string.IsNullOrWhiteSpace(databaseConnectionString))
+{
+    throw new InvalidOperationException(
+        "Configure the database with Database:Password and its connection settings, or ConnectionStrings:DefaultConnection.");
+}
+
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(
-        builder.Configuration.GetConnectionString("DefaultConnection"),
+        databaseConnectionString,
         new MySqlServerVersion(new Version(10, 11)),
         mySqlOptions => mySqlOptions.EnableRetryOnFailure()
     )
@@ -89,9 +138,21 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.UseRouting();
 
-// Optional: only if using authentication/authorization
-// app.UseAuthentication();
-// app.UseAuthorization();
+app.UseAuthentication();
+app.UseRateLimiter();
+app.Use(async (context, next) =>
+{
+    var isLoginRequest = context.Request.Path.Equals("/Login", StringComparison.OrdinalIgnoreCase);
+    if (HttpMethods.IsPost(context.Request.Method) &&
+        !isLoginRequest &&
+        !context.User.IsInRole("Admin"))
+    {
+        await context.ChallengeAsync();
+        return;
+    }
+
+    await next();
+});
 
 app.MapRazorPages();
 app.Run();

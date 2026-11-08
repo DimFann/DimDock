@@ -5,6 +5,7 @@
     var currentPage = ViewContext.RouteData.Values["page"]?.ToString();
     var isBlogPage = currentPage is "/Blog" or "/BlogPost";
     var isAdminEnabled = Configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
+    var isAdminAuthenticated = User.IsInRole("Admin");
     var showHomeLink = Configuration.GetValue<bool?>("Navigation:Home") ?? true;
     var showGalleryLink = Configuration.GetValue<bool?>("Navigation:Gallery") ?? true;
     var showSearchLink = Configuration.GetValue<bool?>("Navigation:Search") ?? true;
@@ -64,7 +65,7 @@
                                    asp-area="" asp-page="/Blog">Blog</a>
                             </li>
                         }
-                        @if (isAdminEnabled && showAdminLink)
+                        @if (isAdminEnabled && showAdminLink && isAdminAuthenticated)
                         {
                             <li class="nav-item">
                                 <a class="nav-link text-dark @(currentPage == "/Admin" ? "active" : "")"
@@ -73,11 +74,30 @@
                             </li>
                         }
                     </ul>
+                    <ul class="navbar-nav ms-auto">
+                        @if (isAdminEnabled && showAdminLink && !isAdminAuthenticated)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark @(currentPage == "/Login" ? "active" : "")"
+                                   aria-current="@(currentPage == "/Login" ? "page" : null)"
+                                   asp-area="" asp-page="/Login">Login</a>
+                            </li>
+                        }
+                        @if (isAdminAuthenticated)
+                        {
+                            <li class="nav-item">
+                                <form method="post" asp-page="/Login" asp-page-handler="Logout">
+                                    @Html.AntiForgeryToken()
+                                    <button type="submit" class="nav-link text-dark border-0 bg-transparent">Log out</button>
+                                </form>
+                            </li>
+                        }
+                    </ul>
                 </div>
             </div>
         </nav>
     </header>
-    <div class="container">
+    <div class="container site-content-container">
         <main role="main" class="pb-3">
             @RenderBody()
         </main>

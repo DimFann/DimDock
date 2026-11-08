@@ -2,33 +2,38 @@
 @model Website.Pages.AdminModel
 @{
     ViewData["Title"] = "Admin";
+    ViewData["BodyClass"] = "content-background";
 }
 
-<h1>Admin</h1>
+<div class="gallery-page-container admin-page">
+    <section class="admin-sync-section" aria-labelledby="syncDescriptionsHeading">
+        <h2 id="syncDescriptionsHeading">Sync DB to disk</h2>
+        <form method="post" asp-page-handler="SyncDescriptions" data-sync-descriptions>
+            @Html.AntiForgeryToken()
+            <button type="submit">Sync DB to disk</button>
+        </form>
+        <label for="syncStatus">Sync output</label>
+        <textarea id="syncStatus" rows="5" readonly data-sync-status aria-live="polite"></textarea>
+    </section>
 
-<section>
-    <h2>Admin-only tags</h2>
-    <form method="post" asp-page-handler="SaveAdminOnlyTags" data-save-admin-only-tags>
-        @Html.AntiForgeryToken()
-        <label for="adminOnlyTags">Comma-separated tags</label>
-        <input id="adminOnlyTags" name="AdminOnlyTagsInput" value="@Model.AdminOnlyTagsInput" maxlength="4000" />
-        <button type="submit">Save admin-only tags</button>
-    </form>
-    <p data-admin-only-tags-status role="status"></p>
-</section>
-
-<form method="post" asp-page-handler="SyncDescriptions" data-sync-descriptions>
-    @Html.AntiForgeryToken()
-    <button type="submit">Sync DB to disk</button>
-</form>
-<p data-sync-status role="status"></p>
+    <section class="admin-tags-section" aria-labelledby="adminOnlyTagsHeading">
+        <h2 id="adminOnlyTagsHeading">Admin-only tags</h2>
+        <form method="post" asp-page-handler="SaveAdminOnlyTags" data-save-admin-only-tags>
+            @Html.AntiForgeryToken()
+            <label for="adminOnlyTags">Comma-separated tags</label>
+            <textarea id="adminOnlyTags" name="AdminOnlyTagsInput" rows="6" maxlength="4000">@Model.AdminOnlyTagsInput</textarea>
+            <button type="submit">Save admin-only tags</button>
+        </form>
+        <p data-admin-only-tags-status role="status"></p>
+    </section>
+</div>
 
 <script>
     document.querySelector("[data-sync-descriptions]").addEventListener("submit", async (event) => {
         event.preventDefault();
         const form = event.currentTarget;
         const status = document.querySelector("[data-sync-status]");
-        status.textContent = "Syncing descriptions...";
+        status.value = "Syncing descriptions...";
 
         try {
             const response = await fetch(form.action, {
@@ -41,14 +46,12 @@
             }
 
             const result = await response.json();
-            status.textContent = `Sync complete: ${result.itemFilesRemoved} deleted item files removed from disk, ${result.pathsRemoved} deleted paths removed from disk; ${result.written} descriptions written, ${result.deleted} deleted, ${result.unchanged} unchanged; About Markdown ${result.aboutWritten ? "written" : "unchanged"}; ${result.manifestsWritten} tag manifests written, ${result.manifestsDeleted} removed; ${result.unusedTagsRemoved} unused tags removed, ${result.skipped} missing paths skipped.`;
+            status.value = `Sync complete: ${result.itemFilesRemoved} deleted item files removed from disk, ${result.pathsRemoved} deleted paths removed from disk; ${result.written} descriptions written, ${result.deleted} deleted, ${result.unchanged} unchanged; About Markdown ${result.aboutWritten ? "written" : "unchanged"}; ${result.manifestsWritten} tag manifests written, ${result.manifestsDeleted} removed; ${result.unusedTagsRemoved} unused tags removed, ${result.skipped} missing paths skipped.`;
         } catch (error) {
-            status.textContent = error.message;
+            status.value = error.message;
         }
     });
-</script>
 
-<script>
     document.querySelector("[data-save-admin-only-tags]").addEventListener("submit", async (event) => {
         event.preventDefault();
         const form = event.currentTarget;

@@ -2,45 +2,46 @@
 @model GalleryModel
 @{
     ViewData["Title"] = "Gallery";
-    ViewData["BodyClass"] = "content-background gallery-wide";
+    ViewData["BodyClass"] = "content-background";
+}
+
+@if (Model.AdminEnabled && Model.PathEntry is not null)
+{
+    <div class="admin-options-toolbar">
+        <strong class="admin-options-toolbar-title">Admin Options</strong>
+        <form method="post" asp-page-handler="SavePathType" class="path-type-form" data-path-type-form>
+            @Html.AntiForgeryToken()
+            <input type="hidden" name="path" value="@Model.CurrentPath" />
+            <label for="pathType">Display type</label>
+            <select id="pathType"
+                    name="type"
+                    aria-label="Directory display type"
+                    data-saved-value="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? "comic" : "")">
+                <option value="" selected="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? null : "selected")">Default (Gallery)</option>
+                <option value="comic" selected="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? "selected" : null)">Comic</option>
+            </select>
+            <span class="path-type-status" data-path-type-status role="status"></span>
+        </form>
+        <button type="button" class="path-admin-button" data-open-add-path>Add Path</button>
+        <button type="button" class="path-admin-button" data-open-upload-picker>Upload Images</button>
+        <input type="file"
+               accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
+               multiple
+               hidden
+               data-upload-picker />
+        <div class="path-upload-status" data-upload-status hidden aria-live="polite">
+            <progress max="100" value="0" data-upload-progress></progress>
+            <span data-upload-message role="status"></span>
+            <button type="button" data-refresh-gallery hidden>Refresh gallery</button>
+        </div>
+        @if (!string.Equals(Model.CurrentPath, "root", StringComparison.OrdinalIgnoreCase))
+        {
+            <button type="button" class="path-admin-button path-admin-delete" data-open-delete-path>Delete Path</button>
+        }
+    </div>
 }
 
 <div class="gallery-page-container">
-    @if (Model.AdminEnabled && Model.PathEntry is not null)
-    {
-        <div class="admin-options-toolbar">
-            <strong class="admin-options-toolbar-title">Admin Options</strong>
-            <form method="post" asp-page-handler="SavePathType" class="path-type-form" data-path-type-form>
-                @Html.AntiForgeryToken()
-                <input type="hidden" name="path" value="@Model.CurrentPath" />
-                <label for="pathType">Display type</label>
-                <select id="pathType"
-                        name="type"
-                        aria-label="Directory display type"
-                        data-saved-value="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? "comic" : "")">
-                    <option value="" selected="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? null : "selected")">Default (Gallery)</option>
-                    <option value="comic" selected="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? "selected" : null)">Comic</option>
-                </select>
-                <span class="path-type-status" data-path-type-status role="status"></span>
-            </form>
-            <button type="button" class="path-admin-button" data-open-add-path>Add Path</button>
-            <button type="button" class="path-admin-button" data-open-upload-picker>Upload Images</button>
-            <input type="file"
-                   accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
-                   multiple
-                   hidden
-                   data-upload-picker />
-            <div class="path-upload-status" data-upload-status hidden aria-live="polite">
-                <progress max="100" value="0" data-upload-progress></progress>
-                <span data-upload-message role="status"></span>
-                <button type="button" data-refresh-gallery hidden>Refresh gallery</button>
-            </div>
-            @if (!string.Equals(Model.CurrentPath, "root", StringComparison.OrdinalIgnoreCase))
-            {
-                <button type="button" class="path-admin-button path-admin-delete" data-open-delete-path>Delete Path</button>
-            }
-        </div>
-    }
     @if (Model.AdminEnabled && Model.PathEntry is not null)
     {
         <dialog class="path-description-dialog path-admin-dialog" data-add-path-dialog aria-labelledby="addPathTitle">

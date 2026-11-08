@@ -11,10 +11,31 @@
 }
 
 <div class="blog-page">
+    @if (Model.AdminEnabled)
+    {
+        <div class="admin-options-toolbar">
+            <strong class="admin-options-toolbar-title">Admin Options</strong>
+            <button type="button" class="path-admin-button path-admin-delete" data-open-delete-post>
+                Delete Post
+            </button>
+        </div>
+    }
+
     <article class="blog-post blog-post-full">
         <div class="blog-post-heading">
-            <h1 class="blog-post-title">@(string.IsNullOrWhiteSpace(Model.Post.Title) ? "Untitled" : Model.Post.Title)</h1>
-            <a href="/blog">Back to blog</a>
+            <div class="blog-post-title-row">
+                <h1 class="blog-post-title">@(string.IsNullOrWhiteSpace(Model.Post.Title) ? "Untitled" : Model.Post.Title)</h1>
+                @if (Model.AdminEnabled)
+                {
+                    <button type="button" class="icon-action-button blog-post-title-edit"
+                            data-open-title-editor aria-label="Edit post title" title="Edit title">
+                        <img src="/img/edit.png" alt="" />
+                    </button>
+                }
+            </div>
+            <a class="icon-action-button soft-shadow" href="/blog" aria-label="Back to blog" title="Back to blog">
+                <img src="/img/prev.png" alt="" />
+            </a>
         </div>
         <div class="blog-post-date">
             @if (timestamp is not null)
@@ -44,6 +65,44 @@
 
 @if (Model.AdminEnabled)
 {
+    <dialog class="path-description-dialog path-admin-dialog" data-title-editor aria-labelledby="editTitleHeading">
+        <form method="post" data-title-form>
+            @Html.AntiForgeryToken()
+            <div class="path-description-dialog-header">
+                <h2 id="editTitleHeading">Edit Post Title</h2>
+                <button type="button" class="icon-action-button" data-close-title-editor aria-label="Close" title="Close">
+                    <img src="/img/cancel.png" alt="" />
+                </button>
+            </div>
+            <label class="path-admin-field">
+                Title
+                <input name="title" value="@Model.Post.Title" maxlength="1024" required />
+            </label>
+            <p class="description-editor-error" data-title-error role="alert"></p>
+            <div class="path-admin-dialog-actions">
+                <button type="button" data-close-title-editor>Cancel</button>
+                <button type="submit">Save title</button>
+            </div>
+        </form>
+    </dialog>
+
+    <dialog class="path-description-dialog path-admin-dialog" data-delete-post-dialog aria-labelledby="deletePostTitle">
+        <form method="post" asp-page-handler="Delete">
+            @Html.AntiForgeryToken()
+            <div class="path-description-dialog-header">
+                <h2 id="deletePostTitle">Delete Post?</h2>
+                <button type="button" class="icon-action-button" data-close-delete-post aria-label="Close" title="Close">
+                    <img src="/img/cancel.png" alt="" />
+                </button>
+            </div>
+            <p>This permanently deletes this post from the database. This cannot be undone.</p>
+            <div class="path-admin-dialog-actions">
+                <button type="button" data-close-delete-post>Cancel</button>
+                <button type="submit" class="path-admin-button path-admin-delete">Delete Post</button>
+            </div>
+        </form>
+    </dialog>
+
     <dialog class="description-editor" data-blog-editor aria-labelledby="blogEditorTitle">
         <form method="post" data-blog-form>
             @Html.AntiForgeryToken()
@@ -99,6 +158,48 @@
         });
 
         const blogEditor = document.querySelector("[data-blog-editor]");
+        const titleEditor = document.querySelector("[data-title-editor]");
+        const deletePostDialog = document.querySelector("[data-delete-post-dialog]");
+        document.querySelector("[data-open-title-editor]")?.addEventListener("click", () => {
+            titleEditor.showModal();
+            titleEditor.querySelector("input[name='title']").focus();
+        });
+        titleEditor?.querySelectorAll("[data-close-title-editor]").forEach((button) => {
+            button.addEventListener("click", () => titleEditor.close());
+        });
+        document.querySelector("[data-open-delete-post]")?.addEventListener("click", () => deletePostDialog.showModal());
+        deletePostDialog?.querySelectorAll("[data-close-delete-post]").forEach((button) => {
+            button.addEventListener("click", () => deletePostDialog.close());
+        });
+        titleEditor?.querySelector("[data-title-form]").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const form = event.currentTarget;
+            const error = form.querySelector("[data-title-error]");
+            const url = new URL(window.location.href);
+            url.searchParams.set("handler", "SaveTitle");
+            error.textContent = "";
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    body: new FormData(form),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (!response.ok) {
+                    throw new Error(await response.text() || "Saving the title failed.");
+                }
+
+                const result = await response.json();
+                document.querySelector(".blog-post-title").textContent = result.title;
+                document.querySelector(".blog-post-content").innerHTML = result.html;
+                const titleSeparator = document.title.indexOf(" - ");
+                document.title = `${result.title}${titleSeparator >= 0 ? document.title.substring(titleSeparator) : ""}`;
+                titleEditor.close();
+            } catch (requestError) {
+                error.textContent = requestError.message;
+            }
+        });
+
         if (blogEditor) {
             document.addEventListener("click", async (event) => {
                 if (event.target.closest("[data-open-blog-editor]")) {

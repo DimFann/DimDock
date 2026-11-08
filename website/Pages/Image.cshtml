@@ -5,26 +5,27 @@
     ViewData["BodyClass"] = "content-background";
 }
 
+@if (Model.AdminEnabled)
+{
+    <div class="admin-options-toolbar">
+        <strong class="admin-options-toolbar-title">Admin Options</strong>
+        @if (Model.CurrentShortcutId.HasValue)
+        {
+            <button type="button" class="shortcut-toolbar-button" data-open-remove-shortcut>Remove Shortcut</button>
+        }
+        else
+        {
+            <button type="button" class="shortcut-toolbar-button" data-open-shortcut-to>Shortcut To</button>
+        }
+        <button type="button"
+                class="shortcut-toolbar-button image-delete-button"
+                data-open-delete-item>
+            @(Model.CurrentShortcutId.HasValue ? "Delete Shortcut" : "Delete")
+        </button>
+    </div>
+}
+
 <main class="image-viewer soft-shadow @(Model.Item.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name)) ? "admin-only-tagged" : "")">
-    @if (Model.AdminEnabled)
-    {
-        <div class="admin-options-toolbar">
-            <strong class="admin-options-toolbar-title">Admin Options</strong>
-            @if (Model.CurrentShortcutId.HasValue)
-            {
-                <button type="button" class="shortcut-toolbar-button" data-open-remove-shortcut>Remove Shortcut</button>
-            }
-            else
-            {
-                <button type="button" class="shortcut-toolbar-button" data-open-shortcut-to>Shortcut To</button>
-            }
-            <button type="button"
-                    class="shortcut-toolbar-button image-delete-button"
-                    data-open-delete-item>
-                @(Model.CurrentShortcutId.HasValue ? "Delete Shortcut" : "Delete")
-            </button>
-        </div>
-    }
     <div class="image-viewer-heading">
         <h1>@Model.Item.OriginalName</h1>
     </div>
