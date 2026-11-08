@@ -1,0 +1,361 @@
+.admin-options-toolbar {
+  background: var(--admin-blue);
+  border: 1px solid var(--admin-blue-dark);
+  box-sizing: border-box;
+  color: #fff;
+  display: grid;
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.blog-admin-options-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.65rem;
+}
+
+.blog-admin-options-toolbar .path-admin-button {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.blog-admin-options-toolbar .admin-options-toolbar-title {
+  margin-right: auto;
+}
+
+.image-admin-options-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
+  overflow-x: auto;
+}
+
+.image-admin-options-toolbar .admin-options-toolbar-title {
+  flex: 0 0 auto;
+  margin-right: auto;
+}
+
+.image-admin-options-toolbar .shortcut-toolbar-button {
+  flex: 0 0 auto;
+  width: auto;
+}
+
+.admin-options-toolbar-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.admin-options-toolbar-title {
+  white-space: nowrap;
+}
+
+.admin-options-toolbar-actions {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: flex-end;
+}
+
+.admin-toolbar-action-group {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.admin-toolbar-danger {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.path-type-form {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.path-type-form select {
+  max-width: 100%;
+}
+
+.path-type-status {
+  font-size: 0.8rem;
+}
+
+.path-admin-button {
+  background: #fff;
+  border: 1px solid var(--admin-blue-dark);
+  border-radius: 3px;
+  color: var(--admin-blue-dark);
+  cursor: pointer;
+  padding: 0.3rem 0.65rem;
+  white-space: nowrap;
+}
+
+.path-admin-button.path-admin-delete {
+  background: var(--admin-blue-dark);
+  color: #fff;
+}
+
+.path-upload-status {
+  align-items: center;
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.path-upload-status progress {
+  min-width: 10rem;
+}
+
+.path-upload-status [data-upload-message] {
+  overflow-wrap: anywhere;
+}
+
+.bulk-delete-toolbar {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.18);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 3px;
+  box-sizing: border-box;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem 0.85rem;
+  min-width: 0;
+  padding: 0.4rem 0.55rem;
+}
+
+.bulk-delete-toolbar[hidden] {
+  display: none;
+}
+
+.bulk-selection-heading {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.bulk-selection-heading span {
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 999px;
+  color: var(--admin-blue-dark);
+  font-size: 0.85rem;
+  padding: 0.15rem 0.55rem;
+}
+
+.bulk-selection-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.path-admin-dialog {
+  max-width: 32rem;
+}
+
+.path-admin-field {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.75rem 0;
+}
+
+.path-admin-field input {
+  box-sizing: border-box;
+  max-width: 100%;
+  width: 100%;
+}
+
+.path-admin-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
+@media (max-width: 480px) {
+  .admin-options-toolbar-header,
+  .admin-options-toolbar-actions {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .admin-options-toolbar-actions,
+  .admin-toolbar-action-group,
+  .bulk-delete-toolbar {
+    width: 100%;
+  }
+
+  .admin-options-toolbar-header {
+    align-items: center;
+    flex-direction: row;
+    width: 100%;
+  }
+
+  .admin-toolbar-danger {
+    margin-left: 0;
+  }
+
+  .bulk-delete-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .bulk-selection-actions {
+    width: 100%;
+  }
+
+  .bulk-selection-actions .path-admin-button {
+    flex: 1 1 auto;
+  }
+}
+
+.shortcut-toolbar-button {
+  background: #fff;
+  border: 1px solid var(--admin-blue-dark);
+  border-radius: 3px;
+  color: var(--admin-blue-dark);
+  padding: 0.3rem 0.65rem;
+}
+
+.image-delete-button {
+  background: var(--admin-blue-dark);
+  border: 1px solid var(--admin-blue-dark);
+  border-radius: 3px;
+  color: #fff;
+  cursor: pointer;
+  padding: 0.3rem 0.65rem;
+}
+
+.image-delete-dialog {
+  height: auto;
+  max-height: calc(100% - 2rem);
+}
+
+.shortcut-dialog {
+  background: var(--surface-background);
+  border: 1px solid #899;
+  border-radius: 4px;
+  box-sizing: border-box;
+  height: min(600px, calc(100% - 2rem));
+  max-width: 640px;
+  padding: 1rem;
+  width: calc(100% - 2rem);
+}
+
+.shortcut-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.shortcut-dialog > label,
+.shortcut-dialog > input[type="search"],
+.shortcut-dialog form > label,
+.shortcut-dialog form > input[type="search"] {
+  display: block;
+  width: 100%;
+}
+
+.shortcut-dialog > input[type="search"],
+.shortcut-dialog form > input[type="search"] {
+  box-sizing: border-box;
+  margin-top: 0.35rem;
+}
+
+.shortcut-dialog-status {
+  color: #555;
+  min-height: 1.2em;
+}
+
+.shortcut-path-results,
+.shortcut-location-list {
+  border: 1px solid #ccd3d3;
+  list-style: none;
+  margin: 0.5rem 0 1rem;
+  max-height: 260px;
+  overflow: auto;
+  padding: 0.35rem;
+}
+
+.shortcut-path-results li + li,
+.shortcut-location-list label + label {
+  margin-top: 0.25rem;
+}
+
+.shortcut-path-results button {
+  text-align: left;
+  width: 100%;
+}
+
+.shortcut-path-results button.selected {
+  background: #dce8f0;
+  outline: 2px solid #567890;
+}
+
+.shortcut-location-list label {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.admin-page section + section {
+  border-top: 1px solid #607878;
+  margin-top: 1.5rem;
+  padding-top: 1rem;
+}
+
+.admin-page h2 {
+  font-size: 1.25rem;
+}
+
+.admin-page form {
+  align-items: flex-start;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.admin-page textarea {
+  box-sizing: border-box;
+  max-width: 100%;
+  width: 100%;
+}
+
+.admin-page [data-admin-only-tags-status]:empty {
+  display: none;
+}
+
+.admin-login {
+  background: var(--surface-background);
+  border: 1px solid #607878;
+  padding: 1.5rem;
+}
+
+.admin-login form {
+  display: grid;
+  gap: 0.6rem;
+  max-width: 28rem;
+}
+
+.admin-login input {
+  max-width: 100%;
+  padding: 0.4rem;
+}
+
+.admin-login-error {
+  color: #a00;
+  margin: 0;
+}
+

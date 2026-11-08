@@ -1,0 +1,227 @@
+.path-description-section {
+  margin: 16px 0;
+  max-width: 600px;
+}
+
+.path-description-wrapper,
+.blog-post-content-wrapper {
+  position: relative;
+}
+
+.description-edit-icon,
+.tag-edit-icon {
+  align-items: center;
+  background: var(--surface-raised-background);
+  border: 1px solid rgba(120, 120, 120, 0.5);
+  border-radius: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  padding: 3px;
+}
+
+.description-edit-icon img,
+.tag-edit-icon img {
+  display: block;
+  height: 24px;
+  width: 24px;
+}
+
+.description-edit-icon {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  transition: opacity 120ms ease-in-out;
+  z-index: 1;
+}
+
+.path-description-wrapper.has-description .description-edit-icon {
+  opacity: 0;
+}
+
+.blog-post-content-wrapper .description-edit-icon {
+  opacity: 0;
+}
+
+.path-description-wrapper.has-description:hover .description-edit-icon,
+.path-description-wrapper.has-description:focus-within .description-edit-icon,
+.blog-post-content-wrapper:hover .description-edit-icon,
+.blog-post-content-wrapper:focus-within .description-edit-icon {
+  opacity: 0.7;
+}
+
+.description-edit-icon:hover,
+.tag-edit-icon:hover {
+  background: var(--surface-hover-background);
+  opacity: 1 !important;
+}
+
+.description-editor-button.description-edit-icon {
+  padding: 3px;
+}
+
+.description-editor-button {
+  background: var(--surface-raised-background);
+  border: 1px solid #9aa;
+  border-radius: 3px;
+  color: #222;
+  padding: 0.35rem 0.75rem;
+}
+
+.description-editor-button:hover {
+  background: var(--surface-hover-background);
+}
+
+.path-description-content {
+  background: var(--gallery-navigation-background);
+  box-sizing: border-box;
+  border: 1px solid var(--gallery-surface-border);
+  box-shadow: var(--soft-shadow);
+  font-size: 12px;
+  font-family: "Courier New", monospace;
+  max-height: 400px;
+  margin-top: 0.5rem;
+  overflow: hidden;
+  padding: 0.5rem;
+  position: relative;
+  cursor: pointer;
+}
+
+.path-description-content::after {
+  background: linear-gradient(to bottom, transparent, var(--gallery-navigation-background));
+  bottom: 0;
+  content: "";
+  height: 3rem;
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  right: 0;
+}
+
+.path-description-dialog {
+  background: var(--surface-background);
+  border: 1px solid #899;
+  border-radius: 4px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
+  max-height: 85vh;
+  max-width: 900px;
+  padding: 1rem;
+  width: calc(100% - 2rem);
+}
+
+.path-description-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.path-description-dialog-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.path-description-dialog-header h2 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.path-description-dialog-content {
+  background: var(--surface-raised-background);
+  border: 1px solid #e0f0ff;
+  font-family: "Courier New", monospace;
+  font-size: 12px;
+  max-height: calc(85vh - 5rem);
+  overflow: auto;
+  overflow-wrap: anywhere;
+  padding: 0.75rem;
+}
+
+.description-editor {
+  background: var(--surface-background);
+  box-sizing: border-box;
+  border: 1px solid #899;
+  border-radius: 4px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
+  height: 85vh;
+  max-height: 90vh;
+  max-width: 900px;
+  padding: 1rem;
+  width: calc(100% - 2rem);
+}
+
+.description-editor::backdrop {
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.description-editor form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  height: 100%;
+}
+
+.description-editor h2 {
+  font-size: 1.25rem;
+  margin: 0;
+}
+
+.description-editor-pane {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-height: 0;
+}
+
+.description-editor [hidden] {
+  display: none !important;
+}
+
+.description-editor textarea {
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  resize: vertical;
+  width: 100%;
+}
+
+.description-editor-preview {
+  border: 1px solid #ccd3d3;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.75rem;
+}
+
+.description-editor-preview.blog-post-content {
+  min-height: 0;
+}
+
+.description-editor-error {
+  color: #a00;
+  margin: 0;
+}
+
+.description-editor-error:empty {
+  display: none;
+}
+
+.description-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.description-editor-actions-left,
+.description-editor-actions-right {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+}
+
+.description-editor-actions-right {
+  margin-left: auto;
+}
+

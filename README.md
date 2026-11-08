@@ -30,6 +30,12 @@ use `localhost` for local HTTP development.
 
 Open the website at `http://localhost:<WEBSITE_PORT>` (set in `.env`).
 
+The shared Razor layout loads the stylesheets in `website/wwwroot/css` in a
+fixed order. `site.css` contains site-wide styles; the other files group blog,
+editor, admin, gallery, image, search, shared component, and comic styles.
+They are loaded on every page because several components are shared across
+pages and partials.
+
 Use the **Admin Login** link to sign in. The website issues an HTTP-only,
 SameSite-protected cookie with an eight-hour sliding lifetime. Login attempts
 are rate-limited, and all write requests require an authenticated admin and a
