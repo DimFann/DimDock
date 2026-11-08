@@ -57,6 +57,7 @@ builder.Services.Configure<FormOptions>(options =>
     options.ValueCountLimit = 1024;
 });
 builder.Services.AddScoped<AdminOnlyTagsProvider>();
+builder.Services.AddScoped<FilesystemPersistenceService>();
 builder.Services.AddHttpClient("ThumbnailService", client =>
 {
     client.BaseAddress = new Uri(

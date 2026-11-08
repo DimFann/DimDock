@@ -13,6 +13,7 @@ public class IndexModel(
     AppDbContext context,
     IConfiguration configuration,
     IWebHostEnvironment environment,
+    FilesystemPersistenceService filesystemPersistence,
     IAntiforgery antiforgery) : PageModel
 {
     private static readonly MarkdownPipeline MarkdownPipeline =
@@ -74,6 +75,7 @@ public class IndexModel(
 
         about.Description = markdown ?? string.Empty;
         await context.SaveChangesAsync(HttpContext.RequestAborted);
+        await filesystemPersistence.PersistAboutAsync(HttpContext.RequestAborted);
 
         return new JsonResult(new { html = RenderMarkdown(about.Description) });
     }

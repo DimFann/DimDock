@@ -16,19 +16,22 @@ public class AdminModel : PageModel
     private readonly AppDbContext _context;
     private readonly IAntiforgery _antiforgery;
     private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
+    private readonly FilesystemPersistenceService _filesystemPersistence;
 
     public AdminModel(
         IConfiguration configuration,
         IWebHostEnvironment environment,
         AppDbContext context,
         IAntiforgery antiforgery,
-        AdminOnlyTagsProvider adminOnlyTagsProvider)
+        AdminOnlyTagsProvider adminOnlyTagsProvider,
+        FilesystemPersistenceService filesystemPersistence)
     {
         _configuration = configuration;
         _environment = environment;
         _context = context;
         _antiforgery = antiforgery;
         _adminOnlyTagsProvider = adminOnlyTagsProvider;
+        _filesystemPersistence = filesystemPersistence;
     }
 
     [BindProperty]
@@ -78,6 +81,7 @@ public class AdminModel : PageModel
         await _context.Database.ExecuteSqlInterpolatedAsync(
             $"INSERT INTO AdminOnlyTagSettings (id, tags) VALUES (1, {tagsJson}) ON DUPLICATE KEY UPDATE tags = VALUES(tags)",
             HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistAdminOnlyTagsAsync(tags, HttpContext.RequestAborted);
 
         return new JsonResult(new { tags });
     }
@@ -298,6 +302,17 @@ public class AdminModel : PageModel
             aboutWritten = true;
         }
 
+        var blogs = await _context.Blogs
+            .AsNoTracking()
+            .ToListAsync(HttpContext.RequestAborted);
+        foreach (var blog in blogs)
+        {
+            await _filesystemPersistence.PersistBlogAsync(blog, HttpContext.RequestAborted);
+        }
+
+        var adminOnlyTags = await _adminOnlyTagsProvider.GetTagsAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistAdminOnlyTagsAsync(adminOnlyTags, HttpContext.RequestAborted);
+
         var unusedTags = await _context.Tags
             .Where(tag => !tag.ItemLinks.Any() && !tag.PathLinks.Any())
             .ToListAsync();
@@ -313,6 +328,7 @@ public class AdminModel : PageModel
             manifestsWritten,
             manifestsDeleted,
             aboutWritten,
+            blogsPersisted = blogs.Count,
             itemFilesRemoved = pendingItemDeletions.Count,
             pathsRemoved = pendingPathDeletions.Count,
             unusedTagsRemoved = unusedTags.Count

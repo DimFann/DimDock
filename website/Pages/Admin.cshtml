@@ -6,16 +6,6 @@
 }
 
 <div class="gallery-page-container admin-page">
-    <section class="admin-sync-section" aria-labelledby="syncDescriptionsHeading">
-        <h2 id="syncDescriptionsHeading">Sync DB to disk</h2>
-        <form method="post" asp-page-handler="SyncDescriptions" data-sync-descriptions>
-            @Html.AntiForgeryToken()
-            <button type="submit">Sync DB to disk</button>
-        </form>
-        <label for="syncStatus">Sync output</label>
-        <textarea id="syncStatus" rows="5" readonly data-sync-status aria-live="polite"></textarea>
-    </section>
-
     <section class="admin-tags-section" aria-labelledby="adminOnlyTagsHeading">
         <h2 id="adminOnlyTagsHeading">Admin-only tags</h2>
         <form method="post" asp-page-handler="SaveAdminOnlyTags" data-save-admin-only-tags>
@@ -29,29 +19,6 @@
 </div>
 
 <script>
-    document.querySelector("[data-sync-descriptions]").addEventListener("submit", async (event) => {
-        event.preventDefault();
-        const form = event.currentTarget;
-        const status = document.querySelector("[data-sync-status]");
-        status.value = "Syncing descriptions...";
-
-        try {
-            const response = await fetch(form.action, {
-                method: "POST",
-                body: new FormData(form),
-                headers: { "X-Requested-With": "XMLHttpRequest" }
-            });
-            if (!response.ok) {
-                throw new Error(await response.text() || "Description sync failed.");
-            }
-
-            const result = await response.json();
-            status.value = `Sync complete: ${result.itemFilesRemoved} deleted item files removed from disk, ${result.pathsRemoved} deleted paths removed from disk; ${result.written} descriptions written, ${result.deleted} deleted, ${result.unchanged} unchanged; About Markdown ${result.aboutWritten ? "written" : "unchanged"}; ${result.manifestsWritten} tag manifests written, ${result.manifestsDeleted} removed; ${result.unusedTagsRemoved} unused tags removed, ${result.skipped} missing paths skipped.`;
-        } catch (error) {
-            status.value = error.message;
-        }
-    });
-
     document.querySelector("[data-save-admin-only-tags]").addEventListener("submit", async (event) => {
         event.preventDefault();
         const form = event.currentTarget;

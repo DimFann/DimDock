@@ -22,17 +22,20 @@ public class BlogPostModel : PageModel
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _environment;
     private readonly IAntiforgery _antiforgery;
+    private readonly FilesystemPersistenceService _filesystemPersistence;
 
     public BlogPostModel(
         AppDbContext context,
         IConfiguration configuration,
         IWebHostEnvironment environment,
-        IAntiforgery antiforgery)
+        IAntiforgery antiforgery,
+        FilesystemPersistenceService filesystemPersistence)
     {
         _context = context;
         _configuration = configuration;
         _environment = environment;
         _antiforgery = antiforgery;
+        _filesystemPersistence = filesystemPersistence;
     }
 
     public Blog Post { get; private set; } = null!;
@@ -101,6 +104,7 @@ public class BlogPostModel : PageModel
         post.Text = markdown ?? string.Empty;
         post.Title = ExtractTitle(post.Text);
         await _context.SaveChangesAsync();
+        await _filesystemPersistence.PersistBlogAsync(post, HttpContext.RequestAborted);
 
         return new JsonResult(new
         {
@@ -136,6 +140,7 @@ public class BlogPostModel : PageModel
         post.Title = normalizedTitle;
         post.Text = ReplaceLeadingTitle(post.Text, normalizedTitle);
         await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistBlogAsync(post, HttpContext.RequestAborted);
 
         return new JsonResult(new
         {
@@ -164,6 +169,7 @@ public class BlogPostModel : PageModel
 
         _context.Blogs.Remove(post);
         await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        _filesystemPersistence.DeleteBlogFile(post.SourceFilename);
         return RedirectToPage("/Blog");
     }
 

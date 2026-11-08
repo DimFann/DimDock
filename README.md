@@ -14,9 +14,11 @@ use `localhost` for local HTTP development.
    `WSL_PROJECT_DIR` if Docker runs in WSL and cannot access Windows paths
    directly. Ensure
    `DATA_DIR/admin/admin-only-tags.json` and `DATA_DIR/about/about.md` exist.
-   About Markdown is imported into the database on path-loader startup, edited
-   from the Home page in admin mode, and synced back to disk with the Admin
-   page's “Sync DB to disk” control. ASP.NET Data Protection keys are stored in
+   About Markdown is imported into the database on path-loader startup and
+   written to disk automatically when edited. Gallery descriptions, tags,
+   display types, blog posts, admin-only tags, and deletions are also persisted
+   to their data files as changes are made. The Admin page's “Sync DB to disk”
+   control remains available to reconcile the database and files. ASP.NET Data Protection keys are stored in
    `DATA_DIR/app_state/data-protection-keys` so antiforgery tokens remain valid
    across website container restarts; preserve this directory with the rest of
    the application data.

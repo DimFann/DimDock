@@ -17,6 +17,7 @@
         {
             <button type="button" class="shortcut-toolbar-button" data-open-shortcut-to>Shortcut To</button>
         }
+        <button type="button" class="shortcut-toolbar-button" data-open-move-to>Move To</button>
         <button type="button"
                 class="shortcut-toolbar-button image-delete-button"
                 data-open-delete-item>
@@ -98,6 +99,29 @@
             </form>
         </dialog>
 
+        <dialog class="shortcut-dialog" data-move-to-dialog aria-labelledby="moveToTitle">
+            <div class="path-description-dialog-header">
+                <h2 id="moveToTitle">Move To</h2>
+                <button type="button" class="icon-action-button" data-close-shortcut-dialog aria-label="Close" title="Close">
+                    <img src="/img/cancel.png" alt="" />
+                </button>
+            </div>
+            <label for="movePathSearch">Search existing directories</label>
+            <input id="movePathSearch" type="search" autocomplete="off" data-move-path-search />
+            <p class="shortcut-dialog-status" data-move-search-status role="status"></p>
+            <ul class="shortcut-path-results" data-move-path-results></ul>
+            <form method="post" asp-page-handler="MoveTo" data-move-to-form>
+                @Html.AntiForgeryToken()
+                @if (Model.CurrentShortcutId.HasValue)
+                {
+                    <input type="hidden" name="shortcutId" value="@Model.CurrentShortcutId.Value" />
+                }
+                <input type="hidden" name="targetPath" data-move-target-path />
+                <button type="submit" disabled data-move-submit>Move to selected directory</button>
+                <span class="shortcut-dialog-status" data-move-status role="status"></span>
+            </form>
+        </dialog>
+
         <dialog class="shortcut-dialog" data-remove-shortcut-dialog aria-labelledby="removeShortcutTitle">
             <div class="path-description-dialog-header">
                 <h2 id="removeShortcutTitle">Remove Shortcuts</h2>
@@ -135,7 +159,7 @@
                 {
                     <p>
                         This removes <strong>@Model.Item.OriginalName</strong> from the database and deletes its source file
-                        the next time you run Sync DB to disk. All shortcuts to this image will stop working. This cannot be undone.
+                        immediately. All shortcuts to this image will stop working. This cannot be undone.
                     </p>
                 }
                 <p class="shortcut-dialog-status" data-delete-item-status role="status"></p>
@@ -214,6 +238,12 @@
     const shortcutTargetPath = document.querySelector("[data-shortcut-target-path]");
     const createShortcutSubmit = document.querySelector("[data-create-shortcut-submit]");
     const currentShortcutId = "@Model.CurrentShortcutId";
+    const moveToDialog = document.querySelector("[data-move-to-dialog]");
+    const movePathSearch = document.querySelector("[data-move-path-search]");
+    const movePathResults = document.querySelector("[data-move-path-results]");
+    const moveSearchStatus = document.querySelector("[data-move-search-status]");
+    const moveTargetPath = document.querySelector("[data-move-target-path]");
+    const moveSubmit = document.querySelector("[data-move-submit]");
 
     function handlerUrl(handler) {
         const url = new URL(window.location.href);
@@ -224,6 +254,17 @@
     document.querySelector("[data-open-shortcut-to]")?.addEventListener("click", () => {
         shortcutToDialog.showModal();
         shortcutPathSearch.focus();
+    });
+
+    document.querySelector("[data-open-move-to]")?.addEventListener("click", () => {
+        movePathSearch.value = "";
+        movePathResults.replaceChildren();
+        moveTargetPath.value = "";
+        moveSubmit.disabled = true;
+        moveSearchStatus.textContent = "Enter at least two characters to search.";
+        document.querySelector("[data-move-status]").textContent = "";
+        moveToDialog.showModal();
+        movePathSearch.focus();
     });
 
     document.querySelector("[data-open-remove-shortcut]")?.addEventListener("click", async () => {
@@ -333,6 +374,72 @@
             shortcutStatus.textContent = error.message;
         }
     }
+
+    let moveSearchTimeout;
+    movePathSearch?.addEventListener("input", () => {
+        window.clearTimeout(moveSearchTimeout);
+        moveTargetPath.value = "";
+        moveSubmit.disabled = true;
+        moveSearchTimeout = window.setTimeout(searchMovePaths, 250);
+    });
+
+    async function searchMovePaths() {
+        const query = movePathSearch.value.trim();
+        movePathResults.replaceChildren();
+        if (query.length < 2) {
+            moveSearchStatus.textContent = "Enter at least two characters to search.";
+            return;
+        }
+
+        moveSearchStatus.textContent = "Searching...";
+        const url = handlerUrl("SearchMovePaths");
+        url.searchParams.set("query", query);
+        try {
+            const response = await fetch(url);
+            if (!response.ok) {
+                throw new Error(await response.text() || "Directory search failed.");
+            }
+            const paths = await response.json();
+            for (const entry of paths) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.textContent = entry.unavailable ? `${entry.displayPath} (unavailable)` : entry.displayPath;
+                button.disabled = entry.unavailable;
+                button.addEventListener("click", () => {
+                    movePathResults.querySelectorAll("button").forEach((result) => result.classList.remove("selected"));
+                    button.classList.add("selected");
+                    moveTargetPath.value = entry.path;
+                    moveSubmit.disabled = false;
+                });
+                const row = document.createElement("li");
+                row.append(button);
+                movePathResults.append(row);
+            }
+            moveSearchStatus.textContent = paths.length ? "" : "No matching directories found.";
+        } catch (error) {
+            moveSearchStatus.textContent = error.message;
+        }
+    }
+
+    document.querySelector("[data-move-to-form]")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const status = form.querySelector("[data-move-status]");
+        status.textContent = "Moving...";
+        try {
+            const response = await fetch(handlerUrl("MoveTo"), {
+                method: "POST",
+                body: new FormData(form)
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Moving item failed.");
+            }
+            const result = await response.json();
+            window.location.assign(result.redirectPath);
+        } catch (error) {
+            status.textContent = error.message;
+        }
+    });
 
     document.querySelector("[data-create-shortcut-form]")?.addEventListener("submit", async (event) => {
         event.preventDefault();

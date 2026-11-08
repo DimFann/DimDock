@@ -8,22 +8,54 @@
 @if (Model.AdminEnabled && Model.PathEntry is not null)
 {
     <div class="admin-options-toolbar">
-        <strong class="admin-options-toolbar-title">Admin Options</strong>
-        <form method="post" asp-page-handler="SavePathType" class="path-type-form" data-path-type-form>
-            @Html.AntiForgeryToken()
-            <input type="hidden" name="path" value="@Model.CurrentPath" />
-            <label for="pathType">Display type</label>
-            <select id="pathType"
-                    name="type"
-                    aria-label="Directory display type"
-                    data-saved-value="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? "comic" : "")">
-                <option value="" selected="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? null : "selected")">Default (Gallery)</option>
-                <option value="comic" selected="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? "selected" : null)">Comic</option>
-            </select>
-            <span class="path-type-status" data-path-type-status role="status"></span>
-        </form>
-        <button type="button" class="path-admin-button" data-open-add-path>Add Path</button>
-        <button type="button" class="path-admin-button" data-open-upload-picker>Upload Images</button>
+        <div class="admin-options-toolbar-header">
+            <strong class="admin-options-toolbar-title">Admin Options</strong>
+            <form method="post" asp-page-handler="SavePathType" class="path-type-form" data-path-type-form>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="path" value="@Model.CurrentPath" />
+                <label for="pathType">Display type</label>
+                <select id="pathType"
+                        name="type"
+                        aria-label="Directory display type"
+                        data-saved-value="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? "comic" : "")">
+                    <option value="" selected="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? null : "selected")">Default (Gallery)</option>
+                    <option value="comic" selected="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? "selected" : null)">Comic</option>
+                </select>
+                <span class="path-type-status" data-path-type-status role="status"></span>
+            </form>
+        </div>
+        <div class="admin-options-toolbar-actions">
+            <div class="admin-toolbar-action-group" aria-label="Gallery actions">
+                <button type="button" class="path-admin-button" data-open-add-path>Add Path</button>
+                <button type="button" class="path-admin-button" data-open-upload-picker>Upload Images</button>
+                @if (Model.Items.Count > 0)
+                {
+                    <button type="button" class="path-admin-button" data-toggle-bulk-select aria-pressed="false"
+                            hidden="@string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase)">Select items</button>
+                }
+            </div>
+            @if (Model.Items.Count > 0)
+            {
+                <div class="bulk-delete-toolbar" data-bulk-selection-controls hidden aria-label="Bulk selection">
+                    <div class="bulk-selection-heading">
+                        <strong>Bulk selection</strong>
+                        <span data-selected-item-count aria-live="polite">0 selected</span>
+                    </div>
+                    <div class="bulk-selection-actions">
+                        <button type="button" class="path-admin-button" data-select-all-items>Select all</button>
+                        <button type="button" class="path-admin-button" data-open-bulk-move disabled>Move selected</button>
+                        <button type="button" class="path-admin-button path-admin-delete" data-open-bulk-delete disabled>Delete selected</button>
+                        <button type="button" class="path-admin-button" data-exit-bulk-select>Cancel selection</button>
+                    </div>
+                </div>
+            }
+            @if (!string.Equals(Model.CurrentPath, "root", StringComparison.OrdinalIgnoreCase))
+            {
+                <div class="admin-toolbar-danger">
+                    <button type="button" class="path-admin-button path-admin-delete" data-open-delete-path>Delete Path</button>
+                </div>
+            }
+        </div>
         <input type="file"
                accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
                multiple
@@ -34,10 +66,6 @@
             <span data-upload-message role="status"></span>
             <button type="button" data-refresh-gallery hidden>Refresh gallery</button>
         </div>
-        @if (!string.Equals(Model.CurrentPath, "root", StringComparison.OrdinalIgnoreCase))
-        {
-            <button type="button" class="path-admin-button path-admin-delete" data-open-delete-path>Delete Path</button>
-        }
     </div>
 }
 
@@ -85,7 +113,7 @@
                     </div>
                     <p>
                         This permanently removes <strong>@Model.CurrentPath</strong> and all child paths and contents from the database.
-                        Its files and folders will be permanently deleted from disk the next time you run Sync DB to disk.
+                        Its files and folders will be permanently deleted from disk when you confirm.
                         This cannot be undone.
                     </p>
                     <p class="description-editor-error" data-delete-path-error role="alert"></p>
@@ -96,6 +124,50 @@
                 </form>
             </dialog>
         }
+
+        <dialog class="path-description-dialog path-admin-dialog" data-bulk-delete-dialog aria-labelledby="bulkDeleteTitle">
+            <form method="post" data-bulk-delete-form>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="path" value="@Model.CurrentPath" />
+                <div data-bulk-delete-entries></div>
+                <div class="path-description-dialog-header">
+                    <h2 id="bulkDeleteTitle">Delete selected items?</h2>
+                    <button type="button" class="icon-action-button" data-close-bulk-delete aria-label="Close" title="Close">
+                        <img src="/img/cancel.png" alt="" />
+                    </button>
+                </div>
+                <p data-bulk-delete-message></p>
+                <p class="description-editor-error" data-bulk-delete-error role="alert"></p>
+                <div class="path-admin-dialog-actions">
+                    <button type="button" data-close-bulk-delete>Cancel</button>
+                    <button type="submit" class="path-admin-button path-admin-delete">Delete selected</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog class="shortcut-dialog" data-bulk-move-dialog aria-labelledby="bulkMoveTitle">
+            <form method="post" data-bulk-move-form>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="path" value="@Model.CurrentPath" />
+                <div data-bulk-move-entries></div>
+                <div class="path-description-dialog-header">
+                    <h2 id="bulkMoveTitle">Move selected items</h2>
+                    <button type="button" class="icon-action-button" data-close-bulk-move aria-label="Close" title="Close">
+                        <img src="/img/cancel.png" alt="" />
+                    </button>
+                </div>
+                <label for="bulkMovePathSearch">Search existing directories</label>
+                <input id="bulkMovePathSearch" type="search" autocomplete="off" data-bulk-move-path-search />
+                <p class="shortcut-dialog-status" data-bulk-move-search-status role="status"></p>
+                <ul class="shortcut-path-results" data-bulk-move-path-results></ul>
+                <input type="hidden" name="targetPath" data-bulk-move-target-path />
+                <p class="description-editor-error" data-bulk-move-error role="alert"></p>
+                <div class="path-admin-dialog-actions">
+                    <button type="button" data-close-bulk-move>Cancel</button>
+                    <button type="submit" disabled data-bulk-move-submit>Move selected</button>
+                </div>
+            </form>
+        </dialog>
     }
     <div class="gallery-heading">
         <h4>@Model.Path</h4>
@@ -112,6 +184,7 @@
     const pathTypeSelect = document.querySelector("[data-path-type-form] select[name='type']");
     const comicViewer = document.querySelector("[data-comic-viewer]");
     const galleryGrid = document.querySelector("[data-gallery-grid]");
+    const bulkSelectButton = document.querySelector("[data-toggle-bulk-select]");
     const galleryDirectory = document.querySelector(".gallery-directory");
     const pathDescription = document.querySelector("[data-path-description]");
     let displayComicPage = () => {};
@@ -139,6 +212,14 @@
         const isComic = type === "comic";
         if (galleryGrid) {
             galleryGrid.hidden = isComic;
+        }
+        if (bulkSelectButton) {
+            bulkSelectButton.hidden = isComic;
+            if (isComic) {
+                galleryGrid.classList.remove("bulk-select-mode");
+                document.querySelector("[data-bulk-selection-controls]").hidden = true;
+                document.querySelectorAll("[data-bulk-select-item]").forEach((input) => { input.checked = false; });
+            }
         }
         if (comicViewer) {
             comicViewer.hidden = !isComic;
@@ -373,6 +454,207 @@
         }
     });
 </script>
+
+@if (Model.AdminEnabled && Model.PathEntry is not null && Model.Items.Count > 0)
+{
+    <script>
+        const bulkSelectToggle = document.querySelector("[data-toggle-bulk-select]");
+        const bulkSelectionControls = document.querySelector("[data-bulk-selection-controls]");
+        const bulkDeleteDialog = document.querySelector("[data-bulk-delete-dialog]");
+        const bulkDeleteForm = document.querySelector("[data-bulk-delete-form]");
+        const bulkMoveDialog = document.querySelector("[data-bulk-move-dialog]");
+        const bulkMoveForm = document.querySelector("[data-bulk-move-form]");
+        const galleryItemGrid = document.querySelector("[data-gallery-grid]");
+        const bulkSelectionInputs = () => Array.from(galleryItemGrid.querySelectorAll("[data-bulk-select-item]"));
+        const selectedBulkItems = () => bulkSelectionInputs().filter((input) => input.checked);
+
+        function updateBulkSelection() {
+            const selectedCount = selectedBulkItems().length;
+            document.querySelector("[data-selected-item-count]").textContent =
+                `${selectedCount} selected`;
+            document.querySelector("[data-open-bulk-delete]").disabled = selectedCount === 0;
+            document.querySelector("[data-open-bulk-move]").disabled = selectedCount === 0;
+        }
+
+        function setBulkSelectMode(enabled) {
+            galleryItemGrid.classList.toggle("bulk-select-mode", enabled);
+            bulkSelectionControls.hidden = !enabled;
+            bulkSelectToggle.setAttribute("aria-pressed", String(enabled));
+            bulkSelectToggle.textContent = enabled ? "Selection mode on" : "Select items";
+            if (!enabled) {
+                bulkSelectionInputs().forEach((input) => { input.checked = false; });
+            }
+            updateBulkSelection();
+        }
+
+        bulkSelectToggle.addEventListener("click", () => {
+            setBulkSelectMode(!galleryItemGrid.classList.contains("bulk-select-mode"));
+        });
+        document.querySelector("[data-exit-bulk-select]").addEventListener("click", () => {
+            setBulkSelectMode(false);
+        });
+        galleryItemGrid.addEventListener("change", (event) => {
+            if (event.target.matches("[data-bulk-select-item]")) {
+                updateBulkSelection();
+            }
+        });
+        galleryItemGrid.addEventListener("click", (event) => {
+            if (galleryItemGrid.classList.contains("bulk-select-mode") &&
+                event.target.closest(".gallery-image-link")) {
+                event.preventDefault();
+                const itemCard = event.target.closest(".gallery-image-result");
+                const checkbox = itemCard.querySelector("[data-bulk-select-item]");
+                checkbox.checked = !checkbox.checked;
+                updateBulkSelection();
+            }
+        });
+        document.querySelector("[data-select-all-items]").addEventListener("click", () => {
+            bulkSelectionInputs().forEach((input) => { input.checked = true; });
+            updateBulkSelection();
+        });
+        document.querySelector("[data-open-bulk-delete]").addEventListener("click", () => {
+            const entries = document.querySelector("[data-bulk-delete-entries]");
+            entries.replaceChildren();
+            const selected = selectedBulkItems();
+            const itemCount = selected.filter((input) => !input.dataset.shortcutId).length;
+            const shortcutCount = selected.length - itemCount;
+            for (const input of selected) {
+                const hiddenInput = document.createElement("input");
+                hiddenInput.type = "hidden";
+                hiddenInput.name = input.dataset.shortcutId ? "shortcutIds" : "itemIds";
+                hiddenInput.value = input.dataset.shortcutId || input.value;
+                entries.append(hiddenInput);
+            }
+
+            document.querySelector("[data-bulk-delete-message]").textContent =
+                `${itemCount} original image${itemCount === 1 ? "" : "s"} will be removed from this gallery and queued for disk deletion; ` +
+                `${shortcutCount} shortcut${shortcutCount === 1 ? "" : "s"} will be removed. This cannot be undone.`;
+            document.querySelector("[data-bulk-delete-error]").textContent = "";
+            bulkDeleteDialog.showModal();
+        });
+        document.querySelector("[data-open-bulk-move]").addEventListener("click", () => {
+            const entries = document.querySelector("[data-bulk-move-entries]");
+            entries.replaceChildren();
+            for (const input of selectedBulkItems()) {
+                const hiddenInput = document.createElement("input");
+                hiddenInput.type = "hidden";
+                hiddenInput.name = input.dataset.shortcutId ? "shortcutIds" : "itemIds";
+                hiddenInput.value = input.dataset.shortcutId || input.value;
+                entries.append(hiddenInput);
+            }
+
+            const search = document.querySelector("[data-bulk-move-path-search]");
+            search.value = "";
+            document.querySelector("[data-bulk-move-path-results]").replaceChildren();
+            document.querySelector("[data-bulk-move-target-path]").value = "";
+            document.querySelector("[data-bulk-move-submit]").disabled = true;
+            document.querySelector("[data-bulk-move-search-status]").textContent =
+                "Enter at least two characters to search.";
+            document.querySelector("[data-bulk-move-error]").textContent = "";
+            bulkMoveDialog.showModal();
+            search.focus();
+        });
+        bulkDeleteDialog.querySelectorAll("[data-close-bulk-delete]").forEach((button) => {
+            button.addEventListener("click", () => bulkDeleteDialog.close());
+        });
+        bulkMoveDialog.querySelectorAll("[data-close-bulk-move]").forEach((button) => {
+            button.addEventListener("click", () => bulkMoveDialog.close());
+        });
+        let bulkMoveSearchTimeout;
+        const bulkMovePathSearch = document.querySelector("[data-bulk-move-path-search]");
+        bulkMovePathSearch.addEventListener("input", () => {
+            window.clearTimeout(bulkMoveSearchTimeout);
+            document.querySelector("[data-bulk-move-target-path]").value = "";
+            document.querySelector("[data-bulk-move-submit]").disabled = true;
+            bulkMoveSearchTimeout = window.setTimeout(searchBulkMovePaths, 250);
+        });
+        async function searchBulkMovePaths() {
+            const query = bulkMovePathSearch.value.trim();
+            const results = document.querySelector("[data-bulk-move-path-results]");
+            const status = document.querySelector("[data-bulk-move-search-status]");
+            results.replaceChildren();
+            if (query.length < 2) {
+                status.textContent = "Enter at least two characters to search.";
+                return;
+            }
+
+            status.textContent = "Searching...";
+            const url = new URL(window.location.href);
+            url.searchParams.set("handler", "SearchMovePaths");
+            url.searchParams.set("path", "@Model.CurrentPath");
+            url.searchParams.set("query", query);
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(await response.text() || "Directory search failed.");
+                }
+                const paths = await response.json();
+                for (const entry of paths) {
+                    const button = document.createElement("button");
+                    button.type = "button";
+                    button.textContent = entry.unavailable ? `${entry.displayPath} (current directory)` : entry.displayPath;
+                    button.disabled = entry.unavailable;
+                    button.addEventListener("click", () => {
+                        results.querySelectorAll("button").forEach((result) => result.classList.remove("selected"));
+                        button.classList.add("selected");
+                        document.querySelector("[data-bulk-move-target-path]").value = entry.path;
+                        document.querySelector("[data-bulk-move-submit]").disabled = false;
+                    });
+                    const row = document.createElement("li");
+                    row.append(button);
+                    results.append(row);
+                }
+                status.textContent = paths.length ? "" : "No matching directories found.";
+            } catch (error) {
+                status.textContent = error.message;
+            }
+        }
+        bulkMoveForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const errorStatus = document.querySelector("[data-bulk-move-error]");
+            errorStatus.textContent = "Moving selected items...";
+            const url = new URL(window.location.href);
+            url.searchParams.set("handler", "BulkMove");
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    body: new FormData(bulkMoveForm),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (!response.ok) {
+                    throw new Error(await response.text() || "Moving selected items failed.");
+                }
+                const result = await response.json();
+                window.location.assign(result.redirectPath);
+            } catch (requestError) {
+                errorStatus.textContent = requestError.message;
+            }
+        });
+        bulkDeleteForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const error = document.querySelector("[data-bulk-delete-error]");
+            error.textContent = "Deleting selected items...";
+            const url = new URL(window.location.href);
+            url.searchParams.set("handler", "BulkDelete");
+
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    body: new FormData(bulkDeleteForm),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (!response.ok) {
+                    throw new Error(await response.text() || "Deleting selected items failed.");
+                }
+
+                const result = await response.json();
+                window.location.assign(result.redirectPath);
+            } catch (requestError) {
+                error.textContent = requestError.message;
+            }
+        });
+    </script>
+}
 
 <script>
     const addPathDialog = document.querySelector("[data-add-path-dialog]");

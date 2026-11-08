@@ -15,19 +15,22 @@ public class ImageModel : PageModel
     private readonly IWebHostEnvironment _environment;
     private readonly IAntiforgery _antiforgery;
     private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
+    private readonly FilesystemPersistenceService _filesystemPersistence;
 
     public ImageModel(
         AppDbContext context,
         IConfiguration configuration,
         IWebHostEnvironment environment,
         IAntiforgery antiforgery,
-        AdminOnlyTagsProvider adminOnlyTagsProvider)
+        AdminOnlyTagsProvider adminOnlyTagsProvider,
+        FilesystemPersistenceService filesystemPersistence)
     {
         _context = context;
         _configuration = configuration;
         _environment = environment;
         _antiforgery = antiforgery;
         _adminOnlyTagsProvider = adminOnlyTagsProvider;
+        _filesystemPersistence = filesystemPersistence;
     }
 
     public Item Item { get; private set; } = null!;
@@ -118,6 +121,69 @@ public class ImageModel : PageModel
         }));
     }
 
+    public async Task<IActionResult> OnGetSearchMovePathsAsync(
+        ulong id,
+        [FromQuery] ulong? shortcutId,
+        [FromQuery] string? query)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        var item = await _context.Items
+            .Where(entry => entry.Id == id)
+            .Select(entry => new { entry.ParentPath })
+            .FirstOrDefaultAsync(HttpContext.RequestAborted);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        var currentShortcutPath = (string?)null;
+        if (shortcutId.HasValue)
+        {
+            var shortcut = await _context.Shortcuts
+                .Where(shortcut => shortcut.Id == shortcutId.Value && shortcut.OriginalId == id)
+                .Select(shortcut => new { shortcut.ShortcutPath })
+                .FirstOrDefaultAsync(HttpContext.RequestAborted);
+            if (shortcut is null)
+            {
+                return NotFound();
+            }
+            currentShortcutPath = shortcut.ShortcutPath ?? "root";
+        }
+
+        var search = query?.Trim();
+        if (string.IsNullOrEmpty(search) || search.Length > 256)
+        {
+            return new JsonResult(Array.Empty<object>());
+        }
+
+        var originalPath = item.ParentPath ?? "root";
+        var existingShortcutPaths = await _context.Shortcuts
+            .Where(shortcut => shortcut.OriginalId == id &&
+                (!shortcutId.HasValue || shortcut.Id != shortcutId.Value))
+            .Select(shortcut => shortcut.ShortcutPath)
+            .ToListAsync(HttpContext.RequestAborted);
+        var paths = await _context.Paths
+            .Where(path => path.Path.Contains(search))
+            .OrderBy(path => path.Path)
+            .Select(path => path.Path)
+            .Take(50)
+            .ToListAsync(HttpContext.RequestAborted);
+        var currentPath = currentShortcutPath ?? originalPath;
+
+        return new JsonResult(paths.Select(path => new
+        {
+            path,
+            displayPath = path == "root" ? "/" : path,
+            unavailable = string.Equals(path, currentPath, StringComparison.OrdinalIgnoreCase) ||
+                existingShortcutPaths.Contains(path, StringComparer.OrdinalIgnoreCase) ||
+                (shortcutId.HasValue && string.Equals(path, originalPath, StringComparison.OrdinalIgnoreCase))
+        }));
+    }
+
     public async Task<IActionResult> OnGetShortcutLocationsAsync(ulong id)
     {
         if (!AdminEnabled)
@@ -195,6 +261,82 @@ public class ImageModel : PageModel
         return new JsonResult(new { saved = true });
     }
 
+    public async Task<IActionResult> OnPostMoveToAsync(
+        ulong id,
+        [FromForm] ulong? shortcutId,
+        [FromForm] string? targetPath)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        if (string.IsNullOrWhiteSpace(targetPath) ||
+            targetPath.Length > 1024 ||
+            !await _context.Paths.AnyAsync(path => path.Path == targetPath, HttpContext.RequestAborted))
+        {
+            return BadRequest("Select an existing directory.");
+        }
+
+        if (shortcutId.HasValue)
+        {
+            var shortcut = await _context.Shortcuts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(
+                    entry => entry.Id == shortcutId.Value && entry.OriginalId == id,
+                    HttpContext.RequestAborted);
+            if (shortcut is null)
+            {
+                return NotFound();
+            }
+
+            try
+            {
+                await _filesystemPersistence.MoveEntriesAsync(
+                    Array.Empty<Item>(),
+                    [shortcut],
+                    targetPath,
+                    HttpContext.RequestAborted);
+            }
+            catch (GalleryMoveException error)
+            {
+                return StatusCode(StatusCodes.Status409Conflict, error.Message);
+            }
+        }
+        else
+        {
+            var item = await _context.Items
+                .AsNoTracking()
+                .FirstOrDefaultAsync(entry => entry.Id == id, HttpContext.RequestAborted);
+            if (item is null)
+            {
+                return NotFound();
+            }
+
+            try
+            {
+                await _filesystemPersistence.MoveEntriesAsync(
+                    [item],
+                    Array.Empty<Shortcut>(),
+                    targetPath,
+                    HttpContext.RequestAborted);
+            }
+            catch (GalleryMoveException error)
+            {
+                return StatusCode(StatusCodes.Status409Conflict, error.Message);
+            }
+        }
+
+        return new JsonResult(new
+        {
+            redirectPath = CreateGalleryUrl(targetPath)
+        });
+    }
+
     public async Task<IActionResult> OnPostDeleteShortcutsAsync(
         ulong id,
         [FromForm] List<ulong>? shortcutIds)
@@ -270,6 +412,12 @@ public class ImageModel : PageModel
         await _context.Items
             .Where(entry => entry.Id == id)
             .ExecuteDeleteAsync(HttpContext.RequestAborted);
+        var parentPath = item.ParentPath ?? "root";
+        await _filesystemPersistence.DeleteItemFileAsync(
+            parentPath,
+            item.OriginalName,
+            HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistPathAsync(parentPath, HttpContext.RequestAborted);
 
         return new JsonResult(new
         {
@@ -372,7 +520,10 @@ public class ImageModel : PageModel
             ItemId = Item.Id,
             Tag = tag
         }));
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistPathAsync(
+            Item.ParentPath ?? "root",
+            HttpContext.RequestAborted);
 
         return RedirectToPage("/Image", new { id });
     }

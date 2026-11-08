@@ -21,18 +21,21 @@ public class BlogModel : PageModel
     private readonly IConfiguration _configuration;
     private readonly IWebHostEnvironment _environment;
     private readonly IAntiforgery _antiforgery;
+    private readonly FilesystemPersistenceService _filesystemPersistence;
     private const int PageSize = 10;
 
     public BlogModel(
         AppDbContext context,
         IConfiguration configuration,
         IWebHostEnvironment environment,
-        IAntiforgery antiforgery)
+        IAntiforgery antiforgery,
+        FilesystemPersistenceService filesystemPersistence)
     {
         _context = context;
         _configuration = configuration;
         _environment = environment;
         _antiforgery = antiforgery;
+        _filesystemPersistence = filesystemPersistence;
     }
 
     public IReadOnlyList<Blog> Posts { get; private set; } = [];
@@ -78,6 +81,7 @@ public class BlogModel : PageModel
 
         _context.Blogs.Remove(post);
         await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        _filesystemPersistence.DeleteBlogFile(post.SourceFilename);
 
         var remainingPosts = await _context.Blogs.CountAsync(HttpContext.RequestAborted);
         var lastPage = Math.Max(1, (int)Math.Ceiling(remainingPosts / (double)PageSize));
@@ -110,17 +114,28 @@ public class BlogModel : PageModel
             return BadRequest("The post content is too large.");
         }
 
-        var uniqueId = Guid.NewGuid().ToString("N");
+        var timestamp = DateTime.UtcNow;
+        var sourceFilename = $"UTC_{timestamp:yyyyMMdd_HHmmss}.md";
+        while (await _context.Blogs.AnyAsync(
+                   blog => blog.SourceFilename == sourceFilename,
+                   HttpContext.RequestAborted) ||
+               _filesystemPersistence.BlogFileExists(sourceFilename))
+        {
+            timestamp = timestamp.AddSeconds(1);
+            sourceFilename = $"UTC_{timestamp:yyyyMMdd_HHmmss}.md";
+        }
+
         var post = new Blog
         {
-            Alias = $"new-post-{uniqueId}",
-            SourceFilename = $"admin-{uniqueId}.md",
+            Alias = $"new-post-{Guid.NewGuid():N}",
+            SourceFilename = sourceFilename,
             Title = normalizedTitle,
-            Timestamp = DateTime.UtcNow,
+            Timestamp = timestamp,
             Text = markdown
         };
         _context.Blogs.Add(post);
         await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistBlogAsync(post, HttpContext.RequestAborted);
 
         return Redirect($"/blog/{Uri.EscapeDataString(post.Alias)}");
     }

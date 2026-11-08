@@ -28,6 +28,7 @@ public class GalleryModel : PageModel
     private readonly IWebHostEnvironment _environment;
     private readonly IAntiforgery _antiforgery;
     private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
+    private readonly FilesystemPersistenceService _filesystemPersistence;
     private readonly HttpClient _thumbnailClient;
 
     public GalleryModel(
@@ -37,6 +38,7 @@ public class GalleryModel : PageModel
         IWebHostEnvironment environment,
         IAntiforgery antiforgery,
         AdminOnlyTagsProvider adminOnlyTagsProvider,
+        FilesystemPersistenceService filesystemPersistence,
         IHttpClientFactory httpClientFactory)
     {
         _context = context;
@@ -45,6 +47,7 @@ public class GalleryModel : PageModel
         _environment = environment;
         _antiforgery = antiforgery;
         _adminOnlyTagsProvider = adminOnlyTagsProvider;
+        _filesystemPersistence = filesystemPersistence;
         _thumbnailClient = httpClientFactory.CreateClient("ThumbnailService");
     }
 
@@ -291,7 +294,8 @@ public class GalleryModel : PageModel
         }
 
         pathEntry.Description = string.IsNullOrWhiteSpace(description) ? null : description;
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistPathAsync(sanitizedPath, HttpContext.RequestAborted);
 
         return new JsonResult(new
         {
@@ -338,7 +342,8 @@ public class GalleryModel : PageModel
         }
 
         pathEntry.Type = normalizedType;
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistPathAsync(sanitizedPath, HttpContext.RequestAborted);
         return new JsonResult(new { type = normalizedType });
     }
 
@@ -395,7 +400,8 @@ public class GalleryModel : PageModel
             PathId = pathEntry.Id,
             Tag = tag
         }));
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistPathAsync(sanitizedPath, HttpContext.RequestAborted);
 
         return new JsonResult(new { tags = normalizedTags });
     }
@@ -499,7 +505,8 @@ public class GalleryModel : PageModel
             Path = pathEntry,
             Tag = tag
         }));
-        await _context.SaveChangesAsync();
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistPathAsync(newPath, HttpContext.RequestAborted);
 
         return new JsonResult(new { path = newPath });
     }
@@ -549,6 +556,7 @@ public class GalleryModel : PageModel
         _context.PendingPathDeletions.Add(new PendingPathDeletion { Path = sanitizedPath });
         await _context.SaveChangesAsync();
         var removed = await DeletePathRecordsAsync(sanitizedPath);
+        await _filesystemPersistence.DeletePathDirectoryAsync(sanitizedPath, HttpContext.RequestAborted);
 
         var redirectPath = sanitizedPath.Contains('/')
             ? sanitizedPath[..sanitizedPath.LastIndexOf('/')]
@@ -560,6 +568,252 @@ public class GalleryModel : PageModel
             removed.Paths,
             removed.Items,
             removed.Shortcuts
+        });
+    }
+
+    public async Task<IActionResult> OnPostBulkDeleteAsync(
+        [FromForm] string? path,
+        [FromForm] List<ulong>? itemIds,
+        [FromForm] List<ulong>? shortcutIds)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        if (string.IsNullOrEmpty(sanitizedPath))
+        {
+            sanitizedPath = "root";
+        }
+
+        var selectedItemIds = itemIds?.Distinct().ToList() ?? [];
+        var selectedShortcutIds = shortcutIds?.Distinct().ToList() ?? [];
+        if (selectedItemIds.Count + selectedShortcutIds.Count == 0)
+        {
+            return BadRequest("Select at least one item to delete.");
+        }
+        if (selectedItemIds.Count + selectedShortcutIds.Count > 500)
+        {
+            return BadRequest("Select no more than 500 items at a time.");
+        }
+
+        var items = await _context.Items
+            .AsNoTracking()
+            .Where(item => item.ParentPath == sanitizedPath && selectedItemIds.Contains(item.Id))
+            .ToListAsync(HttpContext.RequestAborted);
+        if (items.Count != selectedItemIds.Count)
+        {
+            return BadRequest("One or more selected items are not in this gallery.");
+        }
+
+        var shortcuts = await _context.Shortcuts
+            .AsNoTracking()
+            .Where(shortcut =>
+                shortcut.ShortcutPath == sanitizedPath &&
+                selectedShortcutIds.Contains(shortcut.Id))
+            .ToListAsync(HttpContext.RequestAborted);
+        if (shortcuts.Count != selectedShortcutIds.Count)
+        {
+            return BadRequest("One or more selected shortcuts are not in this gallery.");
+        }
+
+        if (items.Count > 0)
+        {
+            await EnsurePendingItemDeletionsTableAsync();
+        }
+
+        var cancellationToken = HttpContext.RequestAborted;
+        var executionStrategy = _context.Database.CreateExecutionStrategy();
+        await executionStrategy.ExecuteAsync(async () =>
+        {
+            await using var transaction = await _context.Database.BeginTransactionAsync(cancellationToken);
+            foreach (var item in items)
+            {
+                await _context.Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT INTO PendingItemDeletions (parent_path, original_name) VALUES ({item.ParentPath ?? "root"}, {item.OriginalName})",
+                    cancellationToken);
+            }
+
+            if (selectedShortcutIds.Count > 0)
+            {
+                await _context.Shortcuts
+                    .Where(shortcut =>
+                        shortcut.ShortcutPath == sanitizedPath &&
+                        selectedShortcutIds.Contains(shortcut.Id))
+                    .ExecuteDeleteAsync(cancellationToken);
+            }
+
+            if (selectedItemIds.Count > 0)
+            {
+                await _context.Items
+                    .Where(item => item.ParentPath == sanitizedPath && selectedItemIds.Contains(item.Id))
+                    .ExecuteDeleteAsync(cancellationToken);
+            }
+
+            await transaction.CommitAsync(cancellationToken);
+        });
+        foreach (var item in items)
+        {
+            await _filesystemPersistence.DeleteItemFileAsync(
+                item.ParentPath ?? "root",
+                item.OriginalName,
+                cancellationToken);
+        }
+        await _filesystemPersistence.PersistPathAsync(sanitizedPath, cancellationToken);
+
+        var redirectPath = sanitizedPath == "root"
+            ? "/Gallery"
+            : "/Gallery/" + string.Join(
+                '/',
+                sanitizedPath.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(Uri.EscapeDataString));
+        return new JsonResult(new
+        {
+            redirectPath,
+            deletedItems = items.Count,
+            deletedShortcuts = shortcuts.Count
+        });
+    }
+
+    public async Task<IActionResult> OnGetSearchMovePathsAsync(
+        [FromQuery] string? path,
+        [FromQuery] string? query)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        if (string.IsNullOrEmpty(sanitizedPath))
+        {
+            sanitizedPath = "root";
+        }
+        if (!await _context.Paths.AnyAsync(entry => entry.Path == sanitizedPath, HttpContext.RequestAborted))
+        {
+            return NotFound();
+        }
+
+        var search = query?.Trim();
+        if (string.IsNullOrEmpty(search) || search.Length > 256)
+        {
+            return new JsonResult(Array.Empty<object>());
+        }
+
+        var paths = await _context.Paths
+            .Where(entry => entry.Path.Contains(search))
+            .OrderBy(entry => entry.Path)
+            .Select(entry => entry.Path)
+            .Take(50)
+            .ToListAsync(HttpContext.RequestAborted);
+
+        return new JsonResult(paths.Select(entry => new
+        {
+            path = entry,
+            displayPath = entry == "root" ? "/" : entry,
+            unavailable = string.Equals(entry, sanitizedPath, StringComparison.OrdinalIgnoreCase)
+        }));
+    }
+
+    public async Task<IActionResult> OnPostBulkMoveAsync(
+        [FromForm] string? path,
+        [FromForm] List<ulong>? itemIds,
+        [FromForm] List<ulong>? shortcutIds,
+        [FromForm] string? targetPath)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        if (string.IsNullOrEmpty(sanitizedPath))
+        {
+            sanitizedPath = "root";
+        }
+        if (string.IsNullOrWhiteSpace(targetPath) || targetPath.Length > 1024)
+        {
+            return BadRequest("Select an existing destination directory.");
+        }
+
+        var selectedItemIds = itemIds?.Distinct().ToList() ?? [];
+        var selectedShortcutIds = shortcutIds?.Distinct().ToList() ?? [];
+        if (selectedItemIds.Count + selectedShortcutIds.Count == 0)
+        {
+            return BadRequest("Select at least one item to move.");
+        }
+        if (selectedItemIds.Count + selectedShortcutIds.Count > 500)
+        {
+            return BadRequest("Select no more than 500 items at a time.");
+        }
+
+        var items = await _context.Items
+            .AsNoTracking()
+            .Where(item => item.ParentPath == sanitizedPath && selectedItemIds.Contains(item.Id))
+            .ToListAsync(HttpContext.RequestAborted);
+        if (items.Count != selectedItemIds.Count)
+        {
+            return BadRequest("One or more selected items are not in this gallery.");
+        }
+
+        var shortcuts = await _context.Shortcuts
+            .AsNoTracking()
+            .Where(shortcut =>
+                shortcut.ShortcutPath == sanitizedPath &&
+                selectedShortcutIds.Contains(shortcut.Id))
+            .ToListAsync(HttpContext.RequestAborted);
+        if (shortcuts.Count != selectedShortcutIds.Count)
+        {
+            return BadRequest("One or more selected shortcuts are not in this gallery.");
+        }
+
+        try
+        {
+            await _filesystemPersistence.MoveEntriesAsync(
+                items,
+                shortcuts,
+                targetPath,
+                HttpContext.RequestAborted);
+        }
+        catch (GalleryMoveException error)
+        {
+            return StatusCode(StatusCodes.Status409Conflict, error.Message);
+        }
+
+        var redirectPath = targetPath == "root"
+            ? "/Gallery"
+            : "/Gallery/" + string.Join(
+                '/',
+                targetPath.Split('/', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(Uri.EscapeDataString));
+        return new JsonResult(new
+        {
+            redirectPath,
+            movedItems = items.Count,
+            movedShortcuts = shortcuts.Count
         });
     }
 
@@ -931,6 +1185,19 @@ public class GalleryModel : PageModel
         }
 
         return directory;
+    }
+
+    private async Task EnsurePendingItemDeletionsTableAsync()
+    {
+        await _context.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS PendingItemDeletions (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                parent_path VARCHAR(1024) NOT NULL,
+                original_name VARCHAR(255) NOT NULL
+            )
+            """,
+            HttpContext.RequestAborted);
     }
 
     private async Task<bool> IsAntiForgeryTokenValidAsync()
