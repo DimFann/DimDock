@@ -22,6 +22,7 @@
             const dialog = document.querySelector("[data-description-editor]");
             dialog.querySelector("[data-description-preview-pane]").hidden = true;
             dialog.querySelector("[data-description-edit-pane]").hidden = false;
+            dialog.querySelector("[data-description-editor-title]").textContent = "Edit Description";
             dialog.querySelector("[data-description-error]").textContent = "";
             dialog.showModal();
             dialog.querySelector("[data-description-markdown]").focus();
@@ -37,6 +38,7 @@
             const dialog = document.querySelector("[data-description-editor]");
             dialog.querySelector("[data-description-preview-pane]").hidden = true;
             dialog.querySelector("[data-description-edit-pane]").hidden = false;
+            dialog.querySelector("[data-description-editor-title]").textContent = "Edit Description";
             dialog.querySelector("[data-description-markdown]").focus();
             return;
         }
@@ -62,21 +64,12 @@
                 preview.innerHTML = await response.text();
                 form.querySelector("[data-description-edit-pane]").hidden = true;
                 form.querySelector("[data-description-preview-pane]").hidden = false;
+                dialog.querySelector("[data-description-editor-title]").textContent = "Preview";
             } catch (requestError) {
                 error.textContent = requestError.message;
             }
         }
 
-        if (event.target.closest("[data-open-directory-tags]")) {
-            const form = document.querySelector("[data-directory-tags-form]");
-            form.hidden = false;
-            form.querySelector("input[name='tags']").focus();
-            return;
-        }
-
-        if (event.target.closest("[data-cancel-directory-tags]")) {
-            document.querySelector("[data-directory-tags-form]").hidden = true;
-        }
     });
 
     document.addEventListener("submit", async (event) => {
@@ -99,20 +92,7 @@
                 }
 
                 const result = await response.json();
-                const list = document.querySelector("[data-directory-tag-list]");
-                const fragments = [];
-                result.tags.forEach((tag, index) => {
-                    if (index > 0) {
-                        fragments.push(document.createTextNode(", "));
-                    }
-                    const link = document.createElement("a");
-                    link.href = `/Search?tag=${encodeURIComponent(tag)}`;
-                    link.textContent = tag;
-                    fragments.push(link);
-                });
-                list.replaceChildren(...fragments);
-                document.querySelector("[data-directory-tags-form] input[name='tags']").value = result.tags.join(", ");
-                tagForm.hidden = true;
+                tagForm.querySelector("input[name='tags']").value = result.tags.join(", ");
             } catch (requestError) {
                 error.textContent = requestError.message;
             }
@@ -142,10 +122,22 @@
 
             const result = await response.json();
             const content = document.querySelector("[data-path-description]");
-            const button = document.querySelector("[data-open-description-editor]");
+            const wrapper = document.querySelector("[data-path-description-wrapper]");
+            const button = wrapper.querySelector("[data-open-description-editor]");
             content.innerHTML = result.html;
             content.hidden = !result.hasDescription;
-            button.textContent = result.hasDescription ? "Edit Description" : "Add Description";
+            wrapper.classList.toggle("has-description", result.hasDescription);
+            button.classList.toggle("description-add-icon", !result.hasDescription);
+            button.classList.toggle("description-edit-icon", result.hasDescription);
+            button.classList.toggle("icon-action-button", !result.hasDescription);
+            button.classList.toggle("description-editor-button", result.hasDescription);
+            button.setAttribute("aria-label", result.hasDescription ? "Edit description" : "Add description");
+            button.title = result.hasDescription ? "Edit description" : "Add description";
+            button.replaceChildren();
+            const icon = document.createElement("img");
+            icon.src = result.hasDescription ? "/img/edit.png" : "/img/add.png";
+            icon.alt = "";
+            button.append(icon);
             document.querySelector("[data-description-editor]").close();
         } catch (requestError) {
             error.textContent = requestError.message;

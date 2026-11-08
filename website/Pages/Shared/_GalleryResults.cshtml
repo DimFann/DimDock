@@ -5,79 +5,102 @@
     <p class="gallery-message">@Model.Message</p>
 }
 
-<!-- Path table wrapper -->
-<div class="gallery-directory">
-    <table class="gallery-directory-table">
-        <tr>
-            <td><a href="/Gallery">/</a></td>
-        </tr>
-        <tr>
-            <td>
-                <a href="@($"/Gallery/{(Model.ParentPath == "root" ? "" : Model.ParentPath)}")">..</a>
-            </td>
-        </tr>
-        @if (Model.Paths.Any())
+<div class="gallery-top-layout">
+    <div class="gallery-directory">
+        <table class="gallery-directory-table">
+            <tr>
+                <td><a href="/Gallery">/</a></td>
+            </tr>
+            <tr>
+                <td>
+                    <a href="@($"/Gallery/{(Model.ParentPath == "root" ? "" : Model.ParentPath)}")">..</a>
+                </td>
+            </tr>
+            @if (Model.Paths.Any())
+            {
+                var rowIndex = 0;
+                foreach (var path in Model.Paths)
+                {
+                    var segments = path.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+                    var lastSegment = segments.Length > 0 ? segments[^1] : path.Path;
+                    var rowClass = rowIndex % 2 == 0 ? "gallery-directory-row-even" : "gallery-directory-row-odd";
+                    var isAdminOnly = path.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
+                    <tr class="@rowClass">
+                        <td>
+                            <a class="@(isAdminOnly ? "admin-only-tagged" : "")"
+                               href="@($"/Gallery/{path.Path}")">@Html.Encode(lastSegment)</a>
+                        </td>
+                    </tr>
+                    rowIndex++;
+                }
+            }
+        </table>
+        @if (Model.AdminEnabled ||
+             (Model.PathEntry?.TagLinks.Any(link => !Model.AdminOnlyTags.Contains(link.Tag.Name)) ?? false))
         {
-            var rowIndex = 0;
-            foreach (var path in Model.Paths)
-            {
-                var segments = path.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-                var lastSegment = segments.Length > 0 ? segments[^1] : path.Path;
-                var rowClass = rowIndex % 2 == 0 ? "gallery-directory-row-even" : "gallery-directory-row-odd";
-                var isAdminOnly = path.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
-                <tr class="@rowClass">
-                    <td>
-                        <a class="@(isAdminOnly ? "admin-only-tagged" : "")"
-                           href="@($"/Gallery/{path.Path}")">@Html.Encode(lastSegment)</a>
-                    </td>
-                </tr>
-                rowIndex++;
-            }
-        }
-    </table>
-    @if (Model.AdminEnabled ||
-         (Model.PathEntry?.TagLinks.Any(link => !Model.AdminOnlyTags.Contains(link.Tag.Name)) ?? false))
-    {
-        var directoryTags = Model.PathEntry?.TagLinks
-            .Select(link => link.Tag.Name)
-            .Where(tag => Model.AdminEnabled || !Model.AdminOnlyTags.Contains(tag))
-            .OrderBy(name => name, StringComparer.Ordinal)
-            .ToList() ?? new List<string>();
-        <section class="path-tags-section">
-            <h3>Directory tags</h3>
-            <p class="tag-links" data-directory-tag-list>
-                @await Html.PartialAsync("_TagLinks", new Website.Models.TagListModel(directoryTags))
-            </p>
-            @if (Model.AdminEnabled)
-            {
-                <button type="button" class="description-editor-button" data-open-directory-tags>Edit tags</button>
-                <form method="post" class="directory-tag-editor" data-directory-tags-form hidden>
-                    @Html.AntiForgeryToken()
-                    <input type="hidden" name="path" value="@Model.CurrentPath" />
-                    <label for="directoryTags">Tags (comma-separated)</label>
-                    <input id="directoryTags" name="tags" maxlength="4000" value="@string.Join(", ", directoryTags)" />
-                    <p class="description-editor-error" data-directory-tag-error role="alert"></p>
-                    <div class="description-editor-actions">
-                        <button type="button" class="description-editor-button" data-cancel-directory-tags>Cancel</button>
-                        <button type="submit" class="description-editor-button">Save</button>
+            var directoryTags = Model.PathEntry?.TagLinks
+                .Select(link => link.Tag.Name)
+                .Where(tag => Model.AdminEnabled || !Model.AdminOnlyTags.Contains(tag))
+                .OrderBy(name => name, StringComparer.Ordinal)
+                .ToList() ?? new List<string>();
+            <section class="path-tags-section" aria-label="Directory tags">
+                @if (Model.AdminEnabled)
+                {
+                    <form method="post" class="directory-tag-editor" data-directory-tags-form>
+                        @Html.AntiForgeryToken()
+                        <input type="hidden" name="path" value="@Model.CurrentPath" />
+                        <div class="directory-tag-input-wrapper">
+                            <input id="directoryTags"
+                                   name="tags"
+                                   maxlength="4000"
+                                   placeholder="Tags..."
+                                   aria-label="Directory tags, comma-separated"
+                                   value="@string.Join(", ", directoryTags)" />
+                            <button type="submit" class="icon-action-button directory-tag-save" aria-label="Save tags" title="Save tags">
+                                <img src="/img/save.png" alt="" />
+                            </button>
+                        </div>
+                        <p class="description-editor-error" data-directory-tag-error role="alert"></p>
+                    </form>
+                }
+                else
+                {
+                    <div class="path-tags-row">
+                        <span class="tag-links" data-directory-tag-list>
+                            @await Html.PartialAsync("_TagLinks", new Website.Models.TagListModel(directoryTags))
+                        </span>
                     </div>
-                </form>
-            }
-        </section>
-    }
+                }
+            </section>
+        }
+    </div>
     @if (Model.AdminEnabled || !string.IsNullOrWhiteSpace(Model.PathEntry?.Description))
     {
-        <div class="path-description-section">
-            @if (Model.AdminEnabled)
-            {
-                <button type="button" class="description-editor-button" data-open-description-editor>
-                    @(string.IsNullOrWhiteSpace(Model.PathEntry?.Description) ? "Add Description" : "Edit Description")
-                </button>
-            }
-            <div class="path-description-content"
-                 data-path-description
-                 hidden="@string.IsNullOrWhiteSpace(Model.PathEntry?.Description)">
-                @Html.Raw(Model.RenderMarkdown(Model.PathEntry?.Description))
+        var hasDescription = !string.IsNullOrWhiteSpace(Model.PathEntry?.Description);
+        <div class="path-description-section gallery-path-description">
+            <div class="path-description-wrapper @(hasDescription ? "has-description" : "")" data-path-description-wrapper>
+                @if (Model.AdminEnabled)
+                {
+                    <button type="button"
+                            class="@(hasDescription ? "description-editor-button description-edit-icon" : "icon-action-button description-add-icon")"
+                            data-open-description-editor
+                            aria-label="@(hasDescription ? "Edit description" : "Add description")"
+                            title="@(hasDescription ? "Edit description" : "Add description")">
+                        @if (hasDescription)
+                        {
+                            <img src="/img/edit.png" alt="" />
+                        }
+                        else
+                        {
+                            <img src="/img/add.png" alt="" />
+                        }
+                    </button>
+                }
+                <div class="path-description-content"
+                     data-path-description
+                     hidden="@(!hasDescription)">
+                    @Html.Raw(Model.RenderMarkdown(Model.PathEntry?.Description))
+                </div>
             </div>
         </div>
     }
@@ -89,19 +112,40 @@
         <form method="post" data-description-form>
             @Html.AntiForgeryToken()
             <input type="hidden" name="path" value="@Model.CurrentPath" />
+            <h2 id="descriptionEditorTitle" data-description-editor-title>Edit Description</h2>
             <section class="description-editor-pane" data-description-edit-pane>
-                <h2 id="descriptionEditorTitle">Edit path description</h2>
                 <div class="description-editor-actions">
-                    <button type="button" class="description-editor-button" data-preview-description>Preview</button>
-                    <button type="button" class="description-editor-button" data-close-description-editor>Cancel</button>
-                    <button type="submit" class="description-editor-button">Save</button>
+                    <div class="description-editor-actions-left">
+                        <button type="button" class="icon-action-button" data-preview-description aria-label="Preview description" title="Preview">
+                            <img src="/img/preview.png" alt="" />
+                        </button>
+                    </div>
+                    <div class="description-editor-actions-right">
+                        <button type="button" class="icon-action-button" data-close-description-editor aria-label="Cancel editing" title="Cancel">
+                            <img src="/img/cancel.png" alt="" />
+                        </button>
+                        <button type="submit" class="icon-action-button" aria-label="Save description" title="Save">
+                            <img src="/img/save.png" alt="" />
+                        </button>
+                    </div>
                 </div>
                 <textarea name="description" data-description-markdown aria-label="Description Markdown">@Model.PathEntry?.Description</textarea>
             </section>
             <section class="description-editor-pane description-editor-preview-pane" data-description-preview-pane hidden>
                 <div class="description-editor-actions">
-                    <button type="button" class="description-editor-button" data-edit-description>Edit</button>
-                    <button type="submit" class="description-editor-button">Save</button>
+                    <div class="description-editor-actions-left">
+                        <button type="button" class="icon-action-button" data-edit-description aria-label="Edit description" title="Edit">
+                            <img src="/img/edit.png" alt="" />
+                        </button>
+                    </div>
+                    <div class="description-editor-actions-right">
+                        <button type="button" class="icon-action-button" data-close-description-editor aria-label="Cancel editing" title="Cancel">
+                            <img src="/img/cancel.png" alt="" />
+                        </button>
+                        <button type="submit" class="icon-action-button" aria-label="Save description" title="Save">
+                            <img src="/img/save.png" alt="" />
+                        </button>
+                    </div>
                 </div>
                 <div class="description-editor-preview blog-post-content" data-description-preview aria-live="polite"></div>
             </section>

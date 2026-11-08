@@ -118,6 +118,63 @@ footer.footer {
   max-width: 600px;
 }
 
+.path-description-wrapper,
+.blog-post-content-wrapper {
+  position: relative;
+}
+
+.description-edit-icon,
+.tag-edit-icon {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(120, 120, 120, 0.5);
+  border-radius: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  justify-content: center;
+  padding: 3px;
+}
+
+.description-edit-icon img,
+.tag-edit-icon img {
+  display: block;
+  height: 24px;
+  width: 24px;
+}
+
+.description-edit-icon {
+  position: absolute;
+  right: 6px;
+  top: 6px;
+  transition: opacity 120ms ease-in-out;
+  z-index: 1;
+}
+
+.path-description-wrapper.has-description .description-edit-icon {
+  opacity: 0;
+}
+
+.blog-post-content-wrapper .description-edit-icon {
+  opacity: 0;
+}
+
+.path-description-wrapper.has-description:hover .description-edit-icon,
+.path-description-wrapper.has-description:focus-within .description-edit-icon,
+.blog-post-content-wrapper:hover .description-edit-icon,
+.blog-post-content-wrapper:focus-within .description-edit-icon {
+  opacity: 0.7;
+}
+
+.description-edit-icon:hover,
+.tag-edit-icon:hover {
+  background: rgba(255, 255, 255, 0.9);
+  opacity: 1 !important;
+}
+
+.description-editor-button.description-edit-icon {
+  padding: 3px;
+}
+
 .description-editor-button {
   background: #f5f7f7;
   border: 1px solid #9aa;
@@ -211,8 +268,19 @@ footer.footer {
 .description-editor-actions {
   display: flex;
   flex-wrap: wrap;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.description-editor-actions-left,
+.description-editor-actions-right {
+  align-items: center;
+  display: flex;
   gap: 0.5rem;
-  justify-content: flex-end;
+}
+
+.description-editor-actions-right {
+  margin-left: auto;
 }
 
 .blog-post-admin {
@@ -253,6 +321,34 @@ footer.footer {
 
 .gallery-directory {
   max-width: 400px;
+  min-width: 0;
+  width: 100%;
+}
+
+.gallery-top-layout {
+  align-items: start;
+  display: grid;
+  gap: 24px;
+  grid-template-columns: minmax(0, 400px) minmax(0, 1fr);
+}
+
+.gallery-top-layout:not(:has(.gallery-directory-table)) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.gallery-top-layout:not(:has(.gallery-directory-table)) .gallery-directory {
+  display: contents;
+}
+
+.gallery-path-description {
+  margin: 0;
+  max-width: 600px;
+}
+
+@media (max-width: 767.98px) {
+  .gallery-top-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .gallery-directory-table {
@@ -455,8 +551,79 @@ footer.footer {
   margin: 0.75rem 0;
 }
 
-.path-tags-section h3 {
-  font-size: 1rem;
+.path-tags-row {
+  align-items: baseline;
+  display: flex;
+  font-size: 0.8rem;
+  gap: 0.35rem;
+}
+
+.directory-tag-editor {
+  display: block;
+  font-size: 0.8rem;
+  margin: 0;
+  width: 100%;
+}
+
+.path-tags-row .tag-links {
+  margin: 0;
+}
+
+.directory-tag-input-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.directory-tag-input-wrapper input {
+  box-sizing: border-box;
+  font: inherit;
+  padding: 0.3rem 2.5rem 0.3rem 0.4rem;
+  width: 100%;
+}
+
+.directory-tag-save {
+  opacity: 0;
+  position: absolute;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease-in-out;
+}
+
+.directory-tag-editor:hover .directory-tag-save,
+.directory-tag-editor:focus-within .directory-tag-save {
+  opacity: 0.7;
+}
+
+.directory-tag-editor .description-editor-error {
+  font-size: 0.9rem;
+  margin-top: 0.35rem;
+}
+
+.icon-action-button {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid #9aa;
+  border-radius: 3px;
+  cursor: pointer;
+  display: inline-flex;
+  height: 34px;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 0;
+  width: 34px;
+}
+
+.icon-action-button:hover,
+.icon-action-button:focus-visible {
+  background: rgba(232, 238, 238, 0.95);
+}
+
+.icon-action-button img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
 }
 
 .directory-tag-editor {
