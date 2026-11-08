@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Website.Data;
 using Website.Models;
@@ -13,6 +14,10 @@ public sealed class FilesystemPersistenceService(
 {
     private const string ImageRoot = "/img_src";
     private const string BlogRoot = "/blogs";
+    private const string BlogAssetsRoot = "/blogs/assets";
+    private const long MaximumBlogAssetBytes = 20L * 1024 * 1024;
+    private static readonly HashSet<string> BlogAssetExtensions =
+        new(StringComparer.OrdinalIgnoreCase) { ".gif", ".jpeg", ".jpg", ".png", ".webp" };
     private const string AboutFile = "/about/about.md";
     private static readonly Regex ImportableBlogFilename =
         new(@"^[A-Z]{2,5}_\d{8}_\d{6}\.md$", RegexOptions.Compiled);
@@ -216,6 +221,96 @@ public sealed class FilesystemPersistenceService(
         {
             EnsureNotLinkedFile(filePath);
             File.Delete(filePath);
+        }
+    }
+
+    public async Task<string> SaveBlogAssetAsync(
+        ulong postId,
+        IFormFile file,
+        CancellationToken cancellationToken = default)
+    {
+        if (postId == 0)
+        {
+            throw new InvalidDataException("The blog post is not ready to receive images.");
+        }
+
+        if (file.Length == 0 || file.Length > MaximumBlogAssetBytes)
+        {
+            throw new InvalidDataException("Images must be between 1 byte and 20 MB.");
+        }
+
+        var extension = Path.GetExtension(file.FileName);
+        if (!BlogAssetExtensions.Contains(extension))
+        {
+            throw new InvalidDataException("Upload a PNG, JPEG, GIF, or WebP image.");
+        }
+
+        Directory.CreateDirectory(BlogAssetsRoot);
+        EnsureNotLinkedDirectory(BlogAssetsRoot);
+
+        var postDirectory = ResolveBlogAssetsDirectory(postId);
+        Directory.CreateDirectory(postDirectory);
+        EnsureNotLinkedDirectory(postDirectory);
+
+        var fileName = $"{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
+        var filePath = Path.Combine(postDirectory, fileName);
+        await using var input = file.OpenReadStream();
+        var signature = new byte[12];
+        var signatureLength = 0;
+        while (signatureLength < signature.Length)
+        {
+            var bytesRead = await input.ReadAsync(signature.AsMemory(signatureLength), cancellationToken);
+            if (bytesRead == 0)
+            {
+                break;
+            }
+
+            signatureLength += bytesRead;
+        }
+
+        if (!HasImageSignature(extension, signature.AsSpan(0, signatureLength)))
+        {
+            throw new InvalidDataException("The uploaded file does not match its image extension.");
+        }
+
+        input.Position = 0;
+        try
+        {
+            await using var output = new FileStream(
+                filePath,
+                FileMode.CreateNew,
+                FileAccess.Write,
+                FileShare.None,
+                bufferSize: 81920,
+                useAsync: true);
+            await input.CopyToAsync(output, cancellationToken);
+        }
+        catch
+        {
+            if (File.Exists(filePath))
+            {
+                File.Delete(filePath);
+            }
+
+            throw;
+        }
+
+        return $"/blogs/assets/{postId}/{fileName}";
+    }
+
+    public void DeleteBlogAssets(ulong postId)
+    {
+        if (postId == 0 || !Directory.Exists(BlogAssetsRoot))
+        {
+            return;
+        }
+
+        EnsureNotLinkedDirectory(BlogAssetsRoot);
+        var directory = ResolveBlogAssetsDirectory(postId);
+        if (Directory.Exists(directory))
+        {
+            EnsureNotLinkedDirectory(directory);
+            Directory.Delete(directory, recursive: true);
         }
     }
 
@@ -837,6 +932,45 @@ public sealed class FilesystemPersistenceService(
         }
         return Path.GetFullPath(Path.Combine(BlogRoot, sourceFilename));
     }
+
+    private static string ResolveBlogAssetsDirectory(ulong postId)
+    {
+        var root = Path.GetFullPath(BlogAssetsRoot);
+        var directory = Path.GetFullPath(Path.Combine(root, postId.ToString()));
+        var rootPrefix = root.EndsWith(Path.DirectorySeparatorChar)
+            ? root
+            : root + Path.DirectorySeparatorChar;
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!directory.StartsWith(rootPrefix, comparison))
+        {
+            throw new InvalidOperationException($"Blog assets resolve outside their root: {postId}");
+        }
+
+        return directory;
+    }
+
+    private static bool HasImageSignature(string extension, ReadOnlySpan<byte> signature) =>
+        extension.ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" =>
+                signature.Length >= 3 &&
+                signature[0] == 0xff &&
+                signature[1] == 0xd8 &&
+                signature[2] == 0xff,
+            ".png" =>
+                signature.Length >= 8 &&
+                signature[..8].SequenceEqual(new byte[] { 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a }),
+            ".gif" =>
+                signature.Length >= 6 &&
+                (signature[..6].SequenceEqual("GIF87a"u8) || signature[..6].SequenceEqual("GIF89a"u8)),
+            ".webp" =>
+                signature.Length >= 12 &&
+                signature[..4].SequenceEqual("RIFF"u8) &&
+                signature[8..12].SequenceEqual("WEBP"u8),
+            _ => false
+        };
 
     private static void EnsureNotLinkedDirectory(string path)
     {

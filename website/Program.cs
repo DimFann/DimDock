@@ -14,6 +14,7 @@ using Website.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 const long maximumUploadRequestBytes = 512L * 1024 * 1024;
+const long maximumBlogImageRequestBytes = 21L * 1024 * 1024;
 
 var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
 if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
@@ -103,10 +104,16 @@ var app = builder.Build();
 app.Use(async (context, next) =>
 {
     if (HttpMethods.IsPost(context.Request.Method) &&
-        string.Equals(context.Request.Query["handler"], "Upload", StringComparison.OrdinalIgnoreCase) &&
         context.Features.Get<IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } requestSizeFeature)
     {
-        requestSizeFeature.MaxRequestBodySize = maximumUploadRequestBytes;
+        if (string.Equals(context.Request.Query["handler"], "UploadImage", StringComparison.OrdinalIgnoreCase))
+        {
+            requestSizeFeature.MaxRequestBodySize = maximumBlogImageRequestBytes;
+        }
+        else if (string.Equals(context.Request.Query["handler"], "Upload", StringComparison.OrdinalIgnoreCase))
+        {
+            requestSizeFeature.MaxRequestBodySize = maximumUploadRequestBytes;
+        }
     }
 
     await next();
@@ -135,6 +142,14 @@ app.UseStaticFiles(new StaticFileOptions
 {
     FileProvider = new PhysicalFileProvider("/img_db_thumbs"),
     RequestPath = "/img_db_thumbs"
+});
+Directory.CreateDirectory("/blogs/assets");
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider("/blogs/assets"),
+    RequestPath = "/blogs/assets",
+    OnPrepareResponse = context =>
+        context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff"
 });
 
 app.UseRouting();

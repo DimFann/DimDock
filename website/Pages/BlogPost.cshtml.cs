@@ -1,4 +1,3 @@
-using Markdig;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -13,8 +12,6 @@ namespace Website.Pages;
 
 public class BlogPostModel : PageModel
 {
-    private static readonly MarkdownPipeline MarkdownPipeline =
-        new MarkdownPipelineBuilder().DisableHtml().Build();
     private static readonly Regex LeadingTitlePattern =
         new(@"^ {0,3}#[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*(?:\r?\n|$)", RegexOptions.Compiled);
 
@@ -66,7 +63,7 @@ public class BlogPostModel : PageModel
     }
 
     public string RenderMarkdown(string? text) =>
-        Markdig.Markdown.ToHtml(text ?? string.Empty, MarkdownPipeline);
+        BlogMarkdownRenderer.Render(text);
 
     public async Task<IActionResult> OnPostPreviewAsync(string slugOrId, [FromForm] string? markdown)
     {
@@ -111,6 +108,49 @@ public class BlogPostModel : PageModel
             title = string.IsNullOrWhiteSpace(post.Title) ? "Untitled" : post.Title,
             html = RenderMarkdown(post.Text)
         });
+    }
+
+    public async Task<IActionResult> OnPostUploadImageAsync(
+        string slugOrId,
+        [FromForm] IFormFile? image)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        var post = await FindPostAsync(slugOrId);
+        if (post is null)
+        {
+            return NotFound();
+        }
+
+        if (image is null)
+        {
+            return BadRequest("Choose an image to upload.");
+        }
+
+        try
+        {
+            var imageUrl = await _filesystemPersistence.SaveBlogAssetAsync(
+                post.Id,
+                image,
+                HttpContext.RequestAborted);
+            return new JsonResult(new
+            {
+                url = imageUrl,
+                fileName = Path.GetFileName(image.FileName.Replace('\\', '/'))
+            });
+        }
+        catch (InvalidDataException exception)
+        {
+            return BadRequest(exception.Message);
+        }
     }
 
     public async Task<IActionResult> OnPostSaveTitleAsync(string slugOrId, [FromForm] string? title)
@@ -169,6 +209,7 @@ public class BlogPostModel : PageModel
 
         _context.Blogs.Remove(post);
         await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        _filesystemPersistence.DeleteBlogAssets(post.Id);
         _filesystemPersistence.DeleteBlogFile(post.SourceFilename);
         return RedirectToPage("/Blog");
     }

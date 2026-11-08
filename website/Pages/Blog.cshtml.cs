@@ -1,4 +1,3 @@
-using Markdig;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -12,8 +11,6 @@ namespace Website.Pages;
 
 public class BlogModel : PageModel
 {
-    private static readonly MarkdownPipeline MarkdownPipeline =
-        new MarkdownPipelineBuilder().DisableHtml().Build();
     private static readonly Regex LeadingTitlePattern =
         new(@"^ {0,3}#[ \t]+[^\r\n]+(?:\r?\n|$)", RegexOptions.Compiled);
 
@@ -81,6 +78,7 @@ public class BlogModel : PageModel
 
         _context.Blogs.Remove(post);
         await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        _filesystemPersistence.DeleteBlogAssets(post.Id);
         _filesystemPersistence.DeleteBlogFile(post.SourceFilename);
 
         var remainingPosts = await _context.Blogs.CountAsync(HttpContext.RequestAborted);
@@ -148,7 +146,7 @@ public class BlogModel : PageModel
             excerpt = LeadingTitlePattern.Replace(excerpt, string.Empty, 1);
         }
 
-        return Markdig.Markdown.ToHtml(excerpt, MarkdownPipeline);
+        return BlogMarkdownRenderer.Render(excerpt);
     }
 
     private async Task<bool> IsAntiForgeryTokenValidAsync()

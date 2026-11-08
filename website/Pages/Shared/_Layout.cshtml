@@ -24,9 +24,9 @@
 </head>
 <body class="@ViewData["BodyClass"]">
     <header>
-        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light bg-white border-bottom box-shadow mb-3">
+        <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light site-header border-bottom box-shadow mb-3">
             <div class="container">
-                <a class="navbar-brand" asp-area="" asp-page="/Index">@siteTitle</a>
+                <a class="navbar-brand fw-bold" asp-area="" asp-page="/Index">@siteTitle</a>
                 <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target=".navbar-collapse" aria-controls="navbarSupportedContent"
                         aria-expanded="false" aria-label="Toggle navigation">
                     <span class="navbar-toggler-icon"></span>
@@ -36,7 +36,7 @@
                         @if (showHomeLink)
                         {
                             <li class="nav-item">
-                                <a class="nav-link text-dark @(currentPage == "/Index" ? "active" : "")"
+                                <a class="nav-link @(currentPage == "/Index" ? "active" : "")"
                                    aria-current="@(currentPage == "/Index" ? "page" : null)"
                                    asp-area="" asp-page="/Index">Home</a>
                             </li>
@@ -44,7 +44,7 @@
                         @if (showGalleryLink)
                         {
                             <li class="nav-item">
-                                <a class="nav-link text-dark @(currentPage == "/Gallery" ? "active" : "")"
+                                <a class="nav-link @(currentPage == "/Gallery" ? "active" : "")"
                                    aria-current="@(currentPage == "/Gallery" ? "page" : null)"
                                    asp-area="" asp-page="/Gallery">Gallery</a>
                             </li>
@@ -52,7 +52,7 @@
                         @if (showSearchLink)
                         {
                             <li class="nav-item">
-                                <a class="nav-link text-dark @(currentPage == "/Search" ? "active" : "")"
+                                <a class="nav-link @(currentPage == "/Search" ? "active" : "")"
                                    aria-current="@(currentPage == "/Search" ? "page" : null)"
                                    asp-area="" asp-page="/Search">Search</a>
                             </li>
@@ -60,15 +60,20 @@
                         @if (showBlogLink)
                         {
                             <li class="nav-item">
-                                <a class="nav-link text-dark @(isBlogPage ? "active" : "")"
+                                <a class="nav-link @(isBlogPage ? "active" : "")"
                                    aria-current="@(isBlogPage ? "page" : null)"
                                    asp-area="" asp-page="/Blog">Blog</a>
                             </li>
                         }
+                        @if (isAdminEnabled && showAdminLink && isAdminAuthenticated &&
+                             (showHomeLink || showGalleryLink || showSearchLink || showBlogLink))
+                        {
+                            <li class="nav-item site-header-separator" aria-hidden="true">|</li>
+                        }
                         @if (isAdminEnabled && showAdminLink && isAdminAuthenticated)
                         {
                             <li class="nav-item">
-                                <a class="nav-link text-dark @(currentPage == "/Admin" ? "active" : "")"
+                                <a class="nav-link @(currentPage == "/Admin" ? "active" : "")"
                                    aria-current="@(currentPage == "/Admin" ? "page" : null)"
                                    asp-area="" asp-page="/Admin">Admin</a>
                             </li>
@@ -78,7 +83,7 @@
                         @if (isAdminEnabled && showAdminLink && !isAdminAuthenticated)
                         {
                             <li class="nav-item">
-                                <a class="nav-link text-dark @(currentPage == "/Login" ? "active" : "")"
+                                <a class="nav-link @(currentPage == "/Login" ? "active" : "")"
                                    aria-current="@(currentPage == "/Login" ? "page" : null)"
                                    asp-area="" asp-page="/Login">Login</a>
                             </li>
@@ -88,7 +93,7 @@
                             <li class="nav-item">
                                 <form method="post" asp-page="/Login" asp-page-handler="Logout">
                                     @Html.AntiForgeryToken()
-                                    <button type="submit" class="nav-link text-dark border-0 bg-transparent">Log out</button>
+                                    <button type="submit" class="nav-link border-0 bg-transparent">Logout</button>
                                 </form>
                             </li>
                         }

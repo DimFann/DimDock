@@ -59,4 +59,8 @@ internal port can be changed with `THUMBNAIL_SERVICE_PORT` in `.env` (default
 
 Admins can create blog posts from the Blog page. Posts created in the website
 are stored in the database; posts imported from Markdown files in `/blogs`
-retain their existing file-based source.
+retain their existing file-based source. Images uploaded in a post's Markdown
+editor are stored under `DATA_DIR/blogs/assets/<post-id>` and are removed when
+that post is deleted. PNG, JPEG, GIF, and WebP images up to 20 MB can be
+selected or dragged into the editor; the image scale selector inserts the
+chosen size using Markdown image syntax.

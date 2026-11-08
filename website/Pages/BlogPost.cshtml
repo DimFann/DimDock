@@ -113,6 +113,20 @@
                         <button type="button" class="icon-action-button" data-preview-blog aria-label="Preview blog post" title="Preview">
                             <img src="/img/preview.png" alt="" />
                         </button>
+                        <label class="blog-image-scale">
+                            Image scale
+                            <select data-blog-image-scale aria-label="Image scale">
+                                <option value="25">25%</option>
+                                <option value="50" selected>50%</option>
+                                <option value="75">75%</option>
+                                <option value="100">100%</option>
+                            </select>
+                        </label>
+                        <button type="button" class="description-editor-button" data-upload-blog-image>
+                            Upload image
+                        </button>
+                        <input type="file" accept=".gif,.jpeg,.jpg,.png,.webp,image/gif,image/jpeg,image/png,image/webp"
+                               data-blog-image-input hidden multiple />
                     </div>
                     <div class="description-editor-actions-right">
                         <button type="button" class="icon-action-button" data-close-blog-editor aria-label="Cancel editing" title="Cancel">
@@ -123,6 +137,10 @@
                         </button>
                     </div>
                 </div>
+                <div class="blog-image-dropzone" data-blog-image-dropzone>
+                    Drop images here, or use Upload image. Images are inserted as Markdown.
+                </div>
+                <p class="description-editor-error blog-image-upload-status" data-blog-image-status role="status"></p>
                 <textarea name="markdown" data-blog-markdown aria-label="Blog post Markdown">@Model.Post.Text</textarea>
             </section>
             <section class="description-editor-pane description-editor-preview-pane" data-blog-preview-pane hidden>
@@ -201,6 +219,70 @@
         });
 
         if (blogEditor) {
+            const blogForm = blogEditor.querySelector("[data-blog-form]");
+            const markdownEditor = blogEditor.querySelector("[data-blog-markdown]");
+            const imageInput = blogEditor.querySelector("[data-blog-image-input]");
+            const imageStatus = blogEditor.querySelector("[data-blog-image-status]");
+
+            async function uploadBlogImages(files) {
+                for (const file of files) {
+                    imageStatus.textContent = `Uploading ${file.name}...`;
+                    const formData = new FormData(blogForm);
+                    formData.append("image", file);
+                    const url = new URL(window.location.href);
+                    url.searchParams.set("handler", "UploadImage");
+
+                    try {
+                        const response = await fetch(url, {
+                            method: "POST",
+                            body: formData,
+                            headers: { "X-Requested-With": "XMLHttpRequest" }
+                        });
+                        if (!response.ok) {
+                            throw new Error(await response.text() || "Image upload failed.");
+                        }
+
+                        const result = await response.json();
+                        const altText = result.fileName
+                            .replaceAll("\\", "\\\\")
+                            .replaceAll("]", "\\]")
+                            .replace(/[\r\n]/g, " ");
+                        const scale = blogEditor.querySelector("[data-blog-image-scale]").value;
+                        const imageMarkdown = `![${altText}](${result.url} "scale=${scale}%")`;
+                        const start = markdownEditor.selectionStart;
+                        const end = markdownEditor.selectionEnd;
+                        const before = start > 0 && markdownEditor.value[start - 1] !== "\n" ? "\n" : "";
+                        const after = end < markdownEditor.value.length && markdownEditor.value[end] !== "\n" ? "\n" : "";
+                        markdownEditor.setRangeText(`${before}${imageMarkdown}${after}`, start, end, "end");
+                        markdownEditor.focus();
+                        imageStatus.textContent = `Uploaded ${file.name}.`;
+                    } catch (requestError) {
+                        imageStatus.textContent = requestError.message;
+                    }
+                }
+            }
+
+            blogEditor.querySelector("[data-upload-blog-image]").addEventListener("click", () => imageInput.click());
+            imageInput.addEventListener("change", () => {
+                void uploadBlogImages(Array.from(imageInput.files));
+                imageInput.value = "";
+            });
+            const imageDropzone = blogEditor.querySelector("[data-blog-image-dropzone]");
+            imageDropzone.addEventListener("dragover", (event) => {
+                event.preventDefault();
+                imageDropzone.classList.add("is-dragging");
+            });
+            imageDropzone.addEventListener("dragleave", (event) => {
+                if (!imageDropzone.contains(event.relatedTarget)) {
+                    imageDropzone.classList.remove("is-dragging");
+                }
+            });
+            imageDropzone.addEventListener("drop", (event) => {
+                event.preventDefault();
+                imageDropzone.classList.remove("is-dragging");
+                void uploadBlogImages(Array.from(event.dataTransfer.files));
+            });
+
             document.addEventListener("click", async (event) => {
                 if (event.target.closest("[data-open-blog-editor]")) {
                     blogEditor.querySelector("[data-blog-preview-pane]").hidden = true;
