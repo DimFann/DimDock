@@ -2,20 +2,65 @@
 @model GalleryModel
 @{
     ViewData["Title"] = "Gallery";
+    ViewData["BodyClass"] = "content-background gallery-wide";
 }
 
-<!-- Title and spinner aligned left -->
-<div class="gallery-heading">
-    <h4>@Model.Path</h4>
-    <div id="loadingSpinner"></div>
-</div>
+<div class="gallery-page-container">
+    <div class="gallery-heading">
+        <h4>@Model.Path</h4>
+        @if (Model.AdminEnabled && Model.PathEntry is not null)
+        {
+            <form method="post" asp-page-handler="SavePathType" class="path-type-form" data-path-type-form>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="path" value="@Model.CurrentPath" />
+                <label for="pathType">Display type</label>
+                <select id="pathType"
+                        name="type"
+                        aria-label="Directory display type"
+                        data-saved-value="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? "comic" : "")">
+                    <option value="" selected="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? null : "selected")">Default (Gallery)</option>
+                    <option value="comic" selected="@(string.Equals(Model.PathEntry.Type, "comic", StringComparison.OrdinalIgnoreCase) ? "selected" : null)">Comic</option>
+                </select>
+                <span class="path-type-status" data-path-type-status role="status"></span>
+            </form>
+        }
+        <div id="loadingSpinner"></div>
+    </div>
 
-<!-- Results container spans full width -->
-<div id="galleryResults">
-    @await Html.PartialAsync("_GalleryResults", Model)
+    <!-- Results container spans full width -->
+    <div id="galleryResults">
+        @await Html.PartialAsync("_GalleryResults", Model)
+    </div>
 </div>
 
 <script>
+    document.addEventListener("change", async (event) => {
+        const select = event.target.closest("[data-path-type-form] select[name='type']");
+        if (!select) {
+            return;
+        }
+
+        const form = select.form;
+        const status = form.querySelector("[data-path-type-status]");
+        const previousValue = select.dataset.savedValue ?? "";
+        status.textContent = "Saving...";
+        try {
+            const response = await fetch(form.action, {
+                method: "POST",
+                body: new FormData(form),
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Saving display type failed.");
+            }
+            select.dataset.savedValue = select.value;
+            status.textContent = "Saved";
+        } catch (error) {
+            select.value = previousValue;
+            status.textContent = error.message;
+        }
+    });
+
     document.addEventListener("click", async (event) => {
         const openButton = event.target.closest("[data-open-description-editor]");
         if (openButton) {

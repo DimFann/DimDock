@@ -164,9 +164,19 @@ public class AdminModel : PageModel
                 .Select(link => link.Tag.Name)
                 .OrderBy(name => name, StringComparer.Ordinal)
                 .ToArray();
+            var manifestType = entry.Type?.Trim().ToLowerInvariant();
+            if (manifestType == "directory")
+            {
+                manifestType = null;
+            }
+            if (manifestType is not null && manifestType != "comic")
+            {
+                throw new InvalidOperationException($"Unsupported path type '{entry.Type}' for path '{entry.Path}'.");
+            }
+
             var manifestPath = Path.Combine(directory, ".dimdock.json");
 
-            if (directoryTags.Length == 0 && itemTags.Count == 0)
+            if (manifestType is null && directoryTags.Length == 0 && itemTags.Count == 0)
             {
                 if (System.IO.File.Exists(manifestPath))
                 {
@@ -177,7 +187,7 @@ public class AdminModel : PageModel
             }
 
             var manifest = JsonSerializer.Serialize(
-                new { version = 1, tags = directoryTags, items = itemTags },
+                new { version = 1, type = manifestType, tags = directoryTags, items = itemTags },
                 new JsonSerializerOptions
                 {
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,

@@ -256,6 +256,48 @@ public class GalleryModel : PageModel
         });
     }
 
+    public async Task<IActionResult> OnPostSavePathTypeAsync(
+        [FromForm] string? path,
+        [FromForm] string? type)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        if (string.IsNullOrEmpty(sanitizedPath))
+        {
+            sanitizedPath = "root";
+        }
+
+        var normalizedType = string.IsNullOrWhiteSpace(type) ? null : type.Trim().ToLowerInvariant();
+        if (normalizedType is not null && normalizedType != "comic")
+        {
+            return BadRequest("Unsupported directory display type.");
+        }
+
+        var pathEntry = await _context.Paths
+            .FirstOrDefaultAsync(entry => entry.Path == sanitizedPath);
+        if (pathEntry is null)
+        {
+            return NotFound();
+        }
+
+        pathEntry.Type = normalizedType;
+        await _context.SaveChangesAsync();
+        return new JsonResult(new { type = normalizedType });
+    }
+
     public async Task<IActionResult> OnPostSaveDirectoryTagsAsync(
         [FromForm] string? path,
         [FromForm] string? tags)

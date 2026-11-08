@@ -78,7 +78,7 @@ def insert_path(cursor, path, parent, description):
     cursor.execute("""
         INSERT INTO Paths (path, parent_path, description, type, metadata)
         VALUES (%s, %s, %s, %s, %s)
-    """, (path, parent, description, 'directory', '{}'))
+    """, (path, parent, description, None, '{}'))
     return cursor.lastrowid
 
 def normalize_tags(raw_tags, source):
@@ -112,7 +112,7 @@ def date_path_tags(path):
 def read_tag_manifest(directory):
     manifest_path = os.path.join(directory, TAG_MANIFEST_FILENAME)
     if not os.path.isfile(manifest_path):
-        return {'tags': [], 'items': {}}
+        return {'type': None, 'tags': [], 'items': {}}
 
     try:
         with open(manifest_path, 'r', encoding='utf-8') as manifest_file:
@@ -124,6 +124,13 @@ def read_tag_manifest(directory):
         raise ValueError(f"Unsupported or missing version in tag manifest {manifest_path}")
 
     directory_tags = normalize_tags(manifest.get('tags', []), f"{manifest_path}: tags")
+    raw_type = manifest.get('type')
+    if raw_type is not None and not isinstance(raw_type, str):
+        raise ValueError(f"{manifest_path}: type must be a string or null")
+    path_type = raw_type.strip().lower() if raw_type else None
+    if path_type not in (None, 'comic'):
+        raise ValueError(f"Unsupported directory type in {manifest_path}: {raw_type!r}")
+
     raw_items = manifest.get('items', {})
     if not isinstance(raw_items, dict):
         raise ValueError(f"{manifest_path}: items must be an object")
@@ -136,7 +143,7 @@ def read_tag_manifest(directory):
         if not isinstance(item_metadata, dict):
             raise ValueError(f"{manifest_path}: metadata for {filename!r} must be an object")
         items[filename] = normalize_tags(item_metadata.get('tags', []), f"{manifest_path}: {filename!r} tags")
-    return {'tags': directory_tags, 'items': items}
+    return {'type': path_type, 'tags': directory_tags, 'items': items}
 
 def replace_entity_tags(cursor, table, entity_column, entity_id, tag_names):
     cursor.execute(f"DELETE FROM {table} WHERE {entity_column} = %s", (entity_id,))
@@ -313,8 +320,10 @@ def process_image(file_path, thumbnail_key):
 
 def traverse_and_insert(cursor):
     total_images = 0
-    cursor.execute("SELECT path, id FROM Paths")
-    existing_paths = {row[0]: row[1] for row in cursor.fetchall()}
+    cursor.execute("SELECT path, id, type FROM Paths")
+    path_rows = cursor.fetchall()
+    existing_paths = {row[0]: row[1] for row in path_rows}
+    existing_path_types = {row[0]: row[2] for row in path_rows}
     cursor.execute("SELECT id, parent_path, original_name, thumbnail_key FROM Items")
     existing_items = {
         (row[1], row[2]): {'id': row[0], 'thumbnail_key': row[3]}
@@ -344,7 +353,14 @@ def traverse_and_insert(cursor):
 
         if path not in existing_paths:
             existing_paths[path] = insert_path(cursor, path, parent, description)
+            existing_path_types[path] = None
         path_id = existing_paths[path]
+        if existing_path_types[path] != tag_manifest['type']:
+            cursor.execute(
+                "UPDATE Paths SET type = %s WHERE id = %s",
+                (tag_manifest['type'], path_id)
+            )
+            existing_path_types[path] = tag_manifest['type']
         if get_entity_tags(cursor, 'PathTags', 'path_id', path_id) != set(tag_manifest['tags']):
             replace_entity_tags(cursor, 'PathTags', 'path_id', path_id, tag_manifest['tags'])
 

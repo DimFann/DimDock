@@ -3,7 +3,7 @@
 @using System.Globalization
 @{
     ViewData["Title"] = string.IsNullOrWhiteSpace(Model.Post.Title) ? "Untitled" : Model.Post.Title;
-    ViewData["BodyClass"] = "blog-background";
+    ViewData["BodyClass"] = "content-background";
     var timestamp = Model.Post.Timestamp.HasValue
         ? DateTime.SpecifyKind(Model.Post.Timestamp.Value, DateTimeKind.Utc)
             .ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)

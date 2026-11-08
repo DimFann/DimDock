@@ -32,7 +32,6 @@ public class ImageModel : PageModel
     public string GalleryUrl { get; private set; } = "/Gallery";
     public string TagsInput { get; set; } = string.Empty;
     public string? TagError { get; private set; }
-    public bool TagEditorOpen { get; private set; }
     public bool AdminEnabled => _configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
     public HashSet<string> AdminOnlyTags { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
     public IEnumerable<string> Tags =>
@@ -82,7 +81,6 @@ public class ImageModel : PageModel
             return NotFound();
         }
 
-        TagEditorOpen = true;
         TagsInput = tags ?? string.Empty;
         if (!TagNameNormalizer.TryNormalize(TagsInput, out var normalizedTags, out var error))
         {
