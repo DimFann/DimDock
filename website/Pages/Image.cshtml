@@ -18,6 +18,11 @@
             {
                 <button type="button" class="shortcut-toolbar-button" data-open-shortcut-to>Shortcut To</button>
             }
+            <button type="button"
+                    class="shortcut-toolbar-button image-delete-button"
+                    data-open-delete-item>
+                @(Model.CurrentShortcutId.HasValue ? "Delete Shortcut" : "Delete")
+            </button>
         </div>
     }
     <div class="image-viewer-heading">
@@ -105,6 +110,40 @@
                 <div class="shortcut-location-list" data-shortcut-location-list></div>
                 <p class="shortcut-dialog-status" data-delete-shortcuts-status role="status"></p>
                 <button type="submit">Remove selected shortcuts</button>
+            </form>
+        </dialog>
+
+        <dialog class="shortcut-dialog image-delete-dialog" data-delete-item-dialog aria-labelledby="deleteItemTitle">
+            <form method="post" data-delete-item-form>
+                @Html.AntiForgeryToken()
+                @if (Model.CurrentShortcutId.HasValue)
+                {
+                    <input type="hidden" name="shortcutId" value="@Model.CurrentShortcutId.Value" />
+                }
+                <div class="path-description-dialog-header">
+                    <h2 id="deleteItemTitle">@(Model.CurrentShortcutId.HasValue ? "Delete Shortcut?" : "Delete Item?")</h2>
+                    <button type="button" class="icon-action-button" data-close-delete-item aria-label="Close" title="Close">
+                        <img src="/img/cancel.png" alt="" />
+                    </button>
+                </div>
+                @if (Model.CurrentShortcutId.HasValue)
+                {
+                    <p>This removes this shortcut from its gallery. The original image and any other shortcuts will remain.</p>
+                }
+                else
+                {
+                    <p>
+                        This removes <strong>@Model.Item.OriginalName</strong> from the database and deletes its source file
+                        the next time you run Sync DB to disk. All shortcuts to this image will stop working. This cannot be undone.
+                    </p>
+                }
+                <p class="shortcut-dialog-status" data-delete-item-status role="status"></p>
+                <div class="path-admin-dialog-actions">
+                    <button type="button" data-close-delete-item>Cancel</button>
+                    <button type="submit" class="image-delete-button">
+                        @(Model.CurrentShortcutId.HasValue ? "Delete Shortcut" : "Delete Item")
+                    </button>
+                </div>
             </form>
         </dialog>
     }
@@ -216,6 +255,36 @@
 
     document.querySelectorAll("[data-close-shortcut-dialog]").forEach((button) => {
         button.addEventListener("click", () => button.closest("dialog").close());
+    });
+
+    const deleteItemDialog = document.querySelector("[data-delete-item-dialog]");
+    document.querySelector("[data-open-delete-item]")?.addEventListener("click", () => {
+        document.querySelector("[data-delete-item-status]").textContent = "";
+        deleteItemDialog.showModal();
+    });
+    document.querySelectorAll("[data-close-delete-item]").forEach((button) => {
+        button.addEventListener("click", () => deleteItemDialog.close());
+    });
+    document.querySelector("[data-delete-item-form]")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const status = form.querySelector("[data-delete-item-status]");
+        const isShortcut = Boolean(form.querySelector("input[name='shortcutId']"));
+        status.textContent = isShortcut ? "Deleting shortcut..." : "Deleting item...";
+        try {
+            const response = await fetch(handlerUrl(isShortcut ? "DeleteCurrentShortcut" : "DeleteItem"), {
+                method: "POST",
+                body: new FormData(form)
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Delete failed.");
+            }
+
+            const result = await response.json();
+            window.location.assign(result.redirectPath);
+        } catch (error) {
+            status.textContent = error.message;
+        }
     });
 
     let searchTimeout;

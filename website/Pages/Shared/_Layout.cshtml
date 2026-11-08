@@ -5,6 +5,11 @@
     var currentPage = ViewContext.RouteData.Values["page"]?.ToString();
     var isBlogPage = currentPage is "/Blog" or "/BlogPost";
     var isAdminEnabled = Configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
+    var showHomeLink = Configuration.GetValue<bool?>("Navigation:Home") ?? true;
+    var showGalleryLink = Configuration.GetValue<bool?>("Navigation:Gallery") ?? true;
+    var showSearchLink = Configuration.GetValue<bool?>("Navigation:Search") ?? true;
+    var showBlogLink = Configuration.GetValue<bool?>("Navigation:Blog") ?? true;
+    var showAdminLink = Configuration.GetValue<bool?>("Navigation:Admin") ?? true;
 }
 <html lang="en">
 <head>
@@ -27,27 +32,39 @@
                 </button>
                 <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
                     <ul class="navbar-nav flex-grow-1">
-                        <li class="nav-item">
-                            <a class="nav-link text-dark @(currentPage == "/Index" ? "active" : "")"
-                               aria-current="@(currentPage == "/Index" ? "page" : null)"
-                               asp-area="" asp-page="/Index">Home</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark @(currentPage == "/Gallery" ? "active" : "")"
-                               aria-current="@(currentPage == "/Gallery" ? "page" : null)"
-                               asp-area="" asp-page="/Gallery">Gallery</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark @(currentPage == "/Search" ? "active" : "")"
-                               aria-current="@(currentPage == "/Search" ? "page" : null)"
-                               asp-area="" asp-page="/Search">Search</a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link text-dark @(isBlogPage ? "active" : "")"
-                               aria-current="@(isBlogPage ? "page" : null)"
-                               asp-area="" asp-page="/Blog">Blog</a>
-                        </li>
-                        @if (isAdminEnabled)
+                        @if (showHomeLink)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark @(currentPage == "/Index" ? "active" : "")"
+                                   aria-current="@(currentPage == "/Index" ? "page" : null)"
+                                   asp-area="" asp-page="/Index">Home</a>
+                            </li>
+                        }
+                        @if (showGalleryLink)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark @(currentPage == "/Gallery" ? "active" : "")"
+                                   aria-current="@(currentPage == "/Gallery" ? "page" : null)"
+                                   asp-area="" asp-page="/Gallery">Gallery</a>
+                            </li>
+                        }
+                        @if (showSearchLink)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark @(currentPage == "/Search" ? "active" : "")"
+                                   aria-current="@(currentPage == "/Search" ? "page" : null)"
+                                   asp-area="" asp-page="/Search">Search</a>
+                            </li>
+                        }
+                        @if (showBlogLink)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link text-dark @(isBlogPage ? "active" : "")"
+                                   aria-current="@(isBlogPage ? "page" : null)"
+                                   asp-area="" asp-page="/Blog">Blog</a>
+                            </li>
+                        }
+                        @if (isAdminEnabled && showAdminLink)
                         {
                             <li class="nav-item">
                                 <a class="nav-link text-dark @(currentPage == "/Admin" ? "active" : "")"

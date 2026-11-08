@@ -405,6 +405,61 @@ body.content-background {
   font-size: 0.8rem;
 }
 
+.path-admin-button {
+  background: #fff;
+  border: 1px solid #fff;
+  border-radius: 3px;
+  color: #7a3030;
+  cursor: pointer;
+  padding: 0.3rem 0.65rem;
+  white-space: nowrap;
+}
+
+.path-admin-button.path-admin-delete {
+  background: #8b1e1e;
+  color: #fff;
+}
+
+.path-upload-status {
+  align-items: center;
+  display: flex;
+  flex-basis: 100%;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.path-upload-status progress {
+  min-width: 10rem;
+}
+
+.path-upload-status [data-upload-message] {
+  overflow-wrap: anywhere;
+}
+
+.path-admin-dialog {
+  max-width: 32rem;
+}
+
+.path-admin-field {
+  display: grid;
+  gap: 0.3rem;
+  margin: 0.75rem 0;
+}
+
+.path-admin-field input {
+  box-sizing: border-box;
+  max-width: 100%;
+  width: 100%;
+}
+
+.path-admin-dialog-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 1rem;
+}
+
 @media (max-width: 480px) {
   .admin-options-toolbar {
     align-items: flex-start;
@@ -419,6 +474,20 @@ body.content-background {
   border-radius: 3px;
   color: #7a3030;
   padding: 0.3rem 0.65rem;
+}
+
+.image-delete-button {
+  background: #8b1e1e;
+  border: 1px solid #8b1e1e;
+  border-radius: 3px;
+  color: #fff;
+  cursor: pointer;
+  padding: 0.3rem 0.65rem;
+}
+
+.image-delete-dialog {
+  height: auto;
+  max-height: calc(100% - 2rem);
 }
 
 .shortcut-dialog {

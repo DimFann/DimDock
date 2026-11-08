@@ -41,7 +41,7 @@
             }
 
             const result = await response.json();
-            status.textContent = `Sync complete: ${result.written} descriptions written, ${result.deleted} deleted, ${result.unchanged} unchanged; About Markdown ${result.aboutWritten ? "written" : "unchanged"}; ${result.manifestsWritten} tag manifests written, ${result.manifestsDeleted} removed; ${result.unusedTagsRemoved} unused tags removed, ${result.skipped} missing paths skipped.`;
+            status.textContent = `Sync complete: ${result.itemFilesRemoved} deleted item files removed from disk, ${result.pathsRemoved} deleted paths removed from disk; ${result.written} descriptions written, ${result.deleted} deleted, ${result.unchanged} unchanged; About Markdown ${result.aboutWritten ? "written" : "unchanged"}; ${result.manifestsWritten} tag manifests written, ${result.manifestsDeleted} removed; ${result.unusedTagsRemoved} unused tags removed, ${result.skipped} missing paths skipped.`;
         } catch (error) {
             status.textContent = error.message;
         }

@@ -19,3 +19,9 @@ are currently unauthenticated.
    ```
 
 Open the website at `http://localhost:<WEBSITE_PORT>` (set in `.env`).
+
+In admin mode, the Gallery page can upload up to 50 JPEG, PNG, or GIF images
+(50 MB each) to the current directory. The private thumbnail service uses
+Pillow to create the same 256-pixel thumbnails used by the path loader. Its
+internal port can be changed with `THUMBNAIL_SERVICE_PORT` in `.env` (default
+`8080`); the service is not published directly to the host.

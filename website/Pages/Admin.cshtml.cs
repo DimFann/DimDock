@@ -86,6 +86,63 @@ public class AdminModel : PageModel
         var rootPrefix = fullImageRoot.EndsWith(Path.DirectorySeparatorChar)
             ? fullImageRoot
             : fullImageRoot + Path.DirectorySeparatorChar;
+        await EnsurePendingItemDeletionsTableAsync();
+        var pendingItemDeletions = await _context.PendingItemDeletions
+            .AsNoTracking()
+            .OrderBy(entry => entry.Id)
+            .ToListAsync(HttpContext.RequestAborted);
+        foreach (var pendingDeletion in pendingItemDeletions)
+        {
+            var filePath = ResolveItemFilePath(
+                fullImageRoot,
+                rootPrefix,
+                pendingDeletion.ParentPath,
+                pendingDeletion.OriginalName);
+            if (Directory.Exists(filePath))
+            {
+                throw new InvalidOperationException(
+                    $"Pending item deletion resolves to a directory: {pendingDeletion.ParentPath}/{pendingDeletion.OriginalName}");
+            }
+            if (System.IO.File.Exists(filePath))
+            {
+                if ((System.IO.File.GetAttributes(filePath) & FileAttributes.ReparsePoint) != 0)
+                {
+                    throw new InvalidOperationException(
+                        $"Pending item deletion resolves to a linked file: {pendingDeletion.ParentPath}/{pendingDeletion.OriginalName}");
+                }
+
+                System.IO.File.Delete(filePath);
+            }
+
+            await _context.PendingItemDeletions
+                .Where(entry => entry.Id == pendingDeletion.Id)
+                .ExecuteDeleteAsync(HttpContext.RequestAborted);
+        }
+
+        await EnsurePendingPathDeletionsTableAsync();
+        var pendingPathDeletions = await _context.PendingPathDeletions
+            .AsNoTracking()
+            .OrderBy(entry => entry.Path.Length)
+            .ToListAsync(HttpContext.RequestAborted);
+        foreach (var pendingDeletion in pendingPathDeletions)
+        {
+            var directory = ResolvePathDirectory(fullImageRoot, rootPrefix, pendingDeletion.Path);
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, recursive: true);
+            }
+            else if (System.IO.File.Exists(directory))
+            {
+                throw new InvalidOperationException(
+                    $"Pending path deletion is not a directory: {pendingDeletion.Path}");
+            }
+
+            await DeletePathRecordsAsync(pendingDeletion.Path);
+            await _context.PendingPathDeletions
+                .Where(entry => entry.Path == pendingDeletion.Path)
+                .ExecuteDeleteAsync(HttpContext.RequestAborted);
+        }
+
         var paths = await _context.Paths
             .Include(path => path.TagLinks)
             .ThenInclude(link => link.Tag)
@@ -243,8 +300,157 @@ public class AdminModel : PageModel
             manifestsWritten,
             manifestsDeleted,
             aboutWritten,
+            itemFilesRemoved = pendingItemDeletions.Count,
+            pathsRemoved = pendingPathDeletions.Count,
             unusedTagsRemoved = unusedTags.Count
         });
+    }
+
+    private async Task EnsurePendingPathDeletionsTableAsync()
+    {
+        await _context.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS PendingPathDeletions (
+                path VARCHAR(1024) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY
+            )
+            """,
+            HttpContext.RequestAborted);
+    }
+
+    private async Task EnsurePendingItemDeletionsTableAsync()
+    {
+        await _context.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS PendingItemDeletions (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                parent_path VARCHAR(1024) NOT NULL,
+                original_name VARCHAR(255) NOT NULL
+            )
+            """,
+            HttpContext.RequestAborted);
+    }
+
+    private async Task DeletePathRecordsAsync(string path)
+    {
+        var pathPrefix = path + "/";
+        await _context.Shortcuts
+            .Where(shortcut =>
+                shortcut.ShortcutPath == path ||
+                (shortcut.ShortcutPath != null && shortcut.ShortcutPath.StartsWith(pathPrefix)))
+            .ExecuteDeleteAsync(HttpContext.RequestAborted);
+        await _context.Items
+            .Where(item =>
+                item.ParentPath == path ||
+                (item.ParentPath != null && item.ParentPath.StartsWith(pathPrefix)))
+            .ExecuteDeleteAsync(HttpContext.RequestAborted);
+        await _context.Paths
+            .Where(entry => entry.Path == path || entry.Path.StartsWith(pathPrefix))
+            .ExecuteDeleteAsync(HttpContext.RequestAborted);
+    }
+
+    private static string ResolvePathDirectory(string fullImageRoot, string rootPrefix, string path)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (string.Equals(path, "root", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The root path cannot be deleted.");
+        }
+        if (Directory.Exists(fullImageRoot) &&
+            (System.IO.File.GetAttributes(fullImageRoot) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException("The image directory cannot be a linked directory.");
+        }
+
+        var segments = path.Split('/');
+        if (segments.Length == 0 ||
+            segments.Any(segment =>
+                segment.Length == 0 ||
+                segment is "." or ".." ||
+                segment.Any(character =>
+                    !char.IsAsciiLetterOrDigit(character) && character != '-' && character != '_')))
+        {
+            throw new InvalidOperationException($"Invalid pending path deletion: {path}");
+        }
+
+        var relativePath = string.Join(Path.DirectorySeparatorChar, segments);
+        var directory = Path.GetFullPath(Path.Combine(fullImageRoot, relativePath));
+        if (!directory.StartsWith(rootPrefix, comparison))
+        {
+            throw new InvalidOperationException($"Path entry resolves outside the image directory: {path}");
+        }
+
+        var current = fullImageRoot;
+        foreach (var segment in segments)
+        {
+            current = Path.Combine(current, segment);
+            if (Directory.Exists(current) &&
+                (System.IO.File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException($"Pending path contains a linked directory: {path}");
+            }
+        }
+
+        return directory;
+    }
+
+    private static string ResolveItemFilePath(
+        string fullImageRoot,
+        string rootPrefix,
+        string parentPath,
+        string originalName)
+    {
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (string.IsNullOrWhiteSpace(originalName) ||
+            originalName is "." or ".." ||
+            originalName != Path.GetFileName(originalName) ||
+            originalName.Contains('/') ||
+            originalName.Contains('\\') ||
+            originalName.Any(char.IsControl))
+        {
+            throw new InvalidOperationException($"Invalid pending item filename: {originalName}");
+        }
+
+        var segments = parentPath == "root"
+            ? Array.Empty<string>()
+            : parentPath.Split('/');
+        if (segments.Any(segment =>
+            string.IsNullOrWhiteSpace(segment) ||
+            segment is "." or ".." ||
+            segment.Contains('\\') ||
+            segment.Contains(':')))
+        {
+            throw new InvalidOperationException($"Invalid pending item path: {parentPath}");
+        }
+
+        if (Directory.Exists(fullImageRoot) &&
+            (System.IO.File.GetAttributes(fullImageRoot) & FileAttributes.ReparsePoint) != 0)
+        {
+            throw new InvalidOperationException("The image directory cannot be a linked directory.");
+        }
+
+        var current = fullImageRoot;
+        foreach (var segment in segments)
+        {
+            current = Path.Combine(current, segment);
+            if (Directory.Exists(current) &&
+                (System.IO.File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
+            {
+                throw new InvalidOperationException($"Pending item path contains a linked directory: {parentPath}");
+            }
+        }
+
+        var filePath = Path.GetFullPath(Path.Combine(current, originalName));
+        if (!filePath.StartsWith(rootPrefix, comparison))
+        {
+            throw new InvalidOperationException(
+                $"Pending item deletion resolves outside the image directory: {parentPath}/{originalName}");
+        }
+
+        return filePath;
     }
 
     private bool IsAdminEnabled() =>

@@ -48,10 +48,15 @@ public class ImageModel : PageModel
         }
         if (shortcutId.HasValue)
         {
-            CurrentShortcutId = await _context.Shortcuts
+            var shortcut = await _context.Shortcuts
                 .Where(shortcut => shortcut.Id == shortcutId.Value && shortcut.OriginalId == id)
-                .Select(shortcut => (ulong?)shortcut.Id)
+                .Select(shortcut => new { shortcut.Id, shortcut.ShortcutPath })
                 .FirstOrDefaultAsync(HttpContext.RequestAborted);
+            if (shortcut is not null)
+            {
+                CurrentShortcutId = shortcut.Id;
+                GalleryUrl = CreateGalleryUrl(shortcut.ShortcutPath);
+            }
         }
         AdminOnlyTags = await _adminOnlyTagsProvider.GetTagsAsync(HttpContext.RequestAborted);
         if (!AdminEnabled &&
@@ -221,6 +226,90 @@ public class ImageModel : PageModel
         });
     }
 
+    public async Task<IActionResult> OnPostDeleteItemAsync(
+        ulong id,
+        [FromForm] ulong? shortcutId)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        if (shortcutId.HasValue)
+        {
+            return BadRequest("Delete the current shortcut instead of the original item.");
+        }
+
+        var item = await _context.Items
+            .AsNoTracking()
+            .FirstOrDefaultAsync(entry => entry.Id == id, HttpContext.RequestAborted);
+        if (item is null)
+        {
+            return NotFound();
+        }
+
+        await EnsurePendingItemDeletionsTableAsync();
+        _context.PendingItemDeletions.Add(new PendingItemDeletion
+        {
+            ParentPath = item.ParentPath ?? "root",
+            OriginalName = item.OriginalName
+        });
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+
+        await _context.Items
+            .Where(entry => entry.Id == id)
+            .ExecuteDeleteAsync(HttpContext.RequestAborted);
+
+        return new JsonResult(new
+        {
+            redirectPath = CreateGalleryUrl(item.ParentPath ?? "root"),
+            deletedShortcut = false
+        });
+    }
+
+    public async Task<IActionResult> OnPostDeleteCurrentShortcutAsync(
+        ulong id,
+        [FromForm] ulong? shortcutId)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        if (!shortcutId.HasValue)
+        {
+            return BadRequest("No shortcut was selected.");
+        }
+
+        var shortcut = await _context.Shortcuts
+            .FirstOrDefaultAsync(
+                entry => entry.Id == shortcutId.Value && entry.OriginalId == id,
+                HttpContext.RequestAborted);
+        if (shortcut is null)
+        {
+            return NotFound();
+        }
+
+        var redirectPath = CreateGalleryUrl(shortcut.ShortcutPath);
+        _context.Shortcuts.Remove(shortcut);
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+
+        return new JsonResult(new
+        {
+            redirectPath,
+            deletedShortcut = true
+        });
+    }
+
     public async Task<IActionResult> OnPostSaveTagsAsync(ulong id, [FromForm] string? tags)
     {
         if (!AdminEnabled)
@@ -299,14 +388,32 @@ public class ImageModel : PageModel
             .Append(item.OriginalName)
             .Select(Uri.EscapeDataString);
         SourceUrl = "/img_src/" + string.Join('/', segments);
-        var gallerySegments = (item.ParentPath ?? string.Empty)
+        GalleryUrl = CreateGalleryUrl(item.ParentPath ?? "root");
+        return true;
+    }
+
+    private static string CreateGalleryUrl(string? path)
+    {
+        var gallerySegments = (path is null or "root" ? string.Empty : path)
             .Split('/', StringSplitOptions.RemoveEmptyEntries)
             .Select(Uri.EscapeDataString)
             .ToArray();
-        GalleryUrl = gallerySegments.Length == 0
+        return gallerySegments.Length == 0
             ? "/Gallery"
             : "/Gallery/" + string.Join('/', gallerySegments);
-        return true;
+    }
+
+    private async Task EnsurePendingItemDeletionsTableAsync()
+    {
+        await _context.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS PendingItemDeletions (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                parent_path VARCHAR(1024) NOT NULL,
+                original_name VARCHAR(255) NOT NULL
+            )
+            """,
+            HttpContext.RequestAborted);
     }
 
     private async Task<bool> IsAntiForgeryTokenValidAsync()

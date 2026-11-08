@@ -73,6 +73,16 @@ CREATE TABLE PathTags (
     KEY ix_path_tags_tag (tag_id)
 );
 
+CREATE TABLE PendingPathDeletions (
+    path VARCHAR(1024) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY
+);
+
+CREATE TABLE PendingItemDeletions (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    parent_path VARCHAR(1024) NOT NULL,
+    original_name VARCHAR(255) NOT NULL
+);
+
 CREATE TABLE AdminOnlyTagSettings (
     id TINYINT UNSIGNED NOT NULL PRIMARY KEY,
     tags JSON NOT NULL

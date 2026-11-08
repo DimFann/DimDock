@@ -23,7 +23,78 @@
                 </select>
                 <span class="path-type-status" data-path-type-status role="status"></span>
             </form>
+            <button type="button" class="path-admin-button" data-open-add-path>Add Path</button>
+            <button type="button" class="path-admin-button" data-open-upload-picker>Upload Images</button>
+            <input type="file"
+                   accept=".jpg,.jpeg,.png,.gif,image/jpeg,image/png,image/gif"
+                   multiple
+                   hidden
+                   data-upload-picker />
+            <div class="path-upload-status" data-upload-status hidden aria-live="polite">
+                <progress max="100" value="0" data-upload-progress></progress>
+                <span data-upload-message role="status"></span>
+                <button type="button" data-refresh-gallery hidden>Refresh gallery</button>
+            </div>
+            @if (!string.Equals(Model.CurrentPath, "root", StringComparison.OrdinalIgnoreCase))
+            {
+                <button type="button" class="path-admin-button path-admin-delete" data-open-delete-path>Delete Path</button>
+            }
         </div>
+    }
+    @if (Model.AdminEnabled && Model.PathEntry is not null)
+    {
+        <dialog class="path-description-dialog path-admin-dialog" data-add-path-dialog aria-labelledby="addPathTitle">
+            <form method="post" data-add-path-form>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="parentPath" value="@Model.CurrentPath" />
+                <div class="path-description-dialog-header">
+                    <h2 id="addPathTitle">Add Path</h2>
+                    <button type="button" class="icon-action-button" data-close-path-dialog aria-label="Close" title="Close">
+                        <img src="/img/cancel.png" alt="" />
+                    </button>
+                </div>
+                <label class="path-admin-field">
+                    Path name
+                    <input name="name" maxlength="255" pattern="[A-Za-z0-9_-]+" required
+                           title="Use letters, numbers, underscores, and hyphens." />
+                </label>
+                <label class="path-admin-field">
+                    Starter tags (comma-separated)
+                    <input name="tags" maxlength="4000" />
+                </label>
+                <p class="description-editor-error" data-add-path-error role="alert"></p>
+                <div class="path-admin-dialog-actions">
+                    <button type="button" data-close-path-dialog>Cancel</button>
+                    <button type="submit">Add Path</button>
+                </div>
+            </form>
+        </dialog>
+
+        @if (!string.Equals(Model.CurrentPath, "root", StringComparison.OrdinalIgnoreCase))
+        {
+            <dialog class="path-description-dialog path-admin-dialog" data-delete-path-dialog aria-labelledby="deletePathTitle">
+                <form method="post" data-delete-path-form>
+                    @Html.AntiForgeryToken()
+                    <input type="hidden" name="path" value="@Model.CurrentPath" />
+                    <div class="path-description-dialog-header">
+                        <h2 id="deletePathTitle">Delete Path?</h2>
+                        <button type="button" class="icon-action-button" data-close-path-dialog aria-label="Close" title="Close">
+                            <img src="/img/cancel.png" alt="" />
+                        </button>
+                    </div>
+                    <p>
+                        This permanently removes <strong>@Model.CurrentPath</strong> and all child paths and contents from the database.
+                        Its files and folders will be permanently deleted from disk the next time you run Sync DB to disk.
+                        This cannot be undone.
+                    </p>
+                    <p class="description-editor-error" data-delete-path-error role="alert"></p>
+                    <div class="path-admin-dialog-actions">
+                        <button type="button" data-close-path-dialog>Cancel</button>
+                        <button type="submit" class="path-admin-delete">Delete path and contents</button>
+                    </div>
+                </form>
+            </dialog>
+        }
     }
     <div class="gallery-heading">
         <h4>@Model.Path</h4>
@@ -299,5 +370,157 @@
         } catch (requestError) {
             error.textContent = requestError.message;
         }
+    });
+</script>
+
+<script>
+    const addPathDialog = document.querySelector("[data-add-path-dialog]");
+    const deletePathDialog = document.querySelector("[data-delete-path-dialog]");
+    const uploadPicker = document.querySelector("[data-upload-picker]");
+    const uploadStatus = document.querySelector("[data-upload-status]");
+    const uploadProgress = document.querySelector("[data-upload-progress]");
+    const uploadMessage = document.querySelector("[data-upload-message]");
+    const uploadButton = document.querySelector("[data-open-upload-picker]");
+    const refreshGalleryButton = document.querySelector("[data-refresh-gallery]");
+
+    document.addEventListener("click", (event) => {
+        if (event.target.closest("[data-open-add-path]")) {
+            addPathDialog.querySelector("[data-add-path-error]").textContent = "";
+            addPathDialog.showModal();
+            addPathDialog.querySelector("input[name='name']").focus();
+            return;
+        }
+
+        if (event.target.closest("[data-open-delete-path]")) {
+            deletePathDialog.querySelector("[data-delete-path-error]").textContent = "";
+            deletePathDialog.showModal();
+            return;
+        }
+
+        if (event.target.closest("[data-open-upload-picker]")) {
+            uploadPicker.click();
+            return;
+        }
+
+        if (event.target.closest("[data-refresh-gallery]")) {
+            window.location.reload();
+            return;
+        }
+
+        if (event.target.closest("[data-close-path-dialog]")) {
+            event.target.closest("dialog").close();
+        }
+    });
+
+    document.addEventListener("submit", async (event) => {
+        const addForm = event.target.closest("[data-add-path-form]");
+        const deleteForm = event.target.closest("[data-delete-path-form]");
+        if (!addForm && !deleteForm) {
+            return;
+        }
+
+        event.preventDefault();
+        const form = addForm ?? deleteForm;
+        const isAdd = Boolean(addForm);
+        const error = form.querySelector(isAdd ? "[data-add-path-error]" : "[data-delete-path-error]");
+        error.textContent = isAdd ? "Adding path..." : "Deleting path...";
+
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set("handler", isAdd ? "CreatePath" : "DeletePath");
+            const response = await fetch(url, {
+                method: "POST",
+                body: new FormData(form),
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || (isAdd ? "Adding path failed." : "Deleting path failed."));
+            }
+
+            const result = await response.json();
+            if (isAdd) {
+                const encodedPath = result.path.split("/").map(encodeURIComponent).join("/");
+                window.location.assign(`/Gallery/${encodedPath}`);
+            } else {
+                window.location.assign(result.redirectPath);
+            }
+        } catch (requestError) {
+            error.textContent = requestError.message;
+        }
+    });
+
+    uploadPicker?.addEventListener("change", () => {
+        if (uploadPicker.files.length === 0) {
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append("path", "@Model.CurrentPath");
+        formData.append("__RequestVerificationToken",
+            document.querySelector("[data-add-path-form] input[name='__RequestVerificationToken']").value);
+        for (const file of uploadPicker.files) {
+            formData.append("files", file, file.name);
+        }
+
+        uploadStatus.hidden = false;
+        uploadProgress.value = 0;
+        uploadProgress.removeAttribute("value");
+        refreshGalleryButton.hidden = true;
+        uploadMessage.textContent = "Uploading selected files...";
+        uploadButton.disabled = true;
+
+        const request = new XMLHttpRequest();
+        request.open("POST", new URL("?handler=Upload", window.location.href));
+        request.setRequestHeader("X-Requested-With", "XMLHttpRequest");
+        request.upload.addEventListener("progress", (event) => {
+            if (!event.lengthComputable) {
+                return;
+            }
+
+            uploadProgress.value = Math.round((event.loaded / event.total) * 100);
+            uploadMessage.textContent = event.loaded === event.total
+                ? "Generating thumbnails and saving to the gallery..."
+                : `Uploading files: ${uploadProgress.value}%`;
+        });
+        request.addEventListener("load", () => {
+            uploadButton.disabled = false;
+            uploadPicker.value = "";
+            if (request.status < 200 || request.status >= 300) {
+                uploadProgress.value = 0;
+                uploadMessage.textContent = request.responseText || "Upload failed.";
+                return;
+            }
+
+            try {
+                const result = JSON.parse(request.responseText);
+                const successes = result.uploaded ?? [];
+                const errors = result.errors ?? [];
+                uploadProgress.value = 100;
+                if (successes.length > 0) {
+                    refreshGalleryButton.hidden = false;
+                }
+
+                const summary = `${successes.length} image${successes.length === 1 ? "" : "s"} uploaded.`;
+                uploadMessage.textContent = errors.length > 0
+                    ? `${summary} ${errors.join(" ")}`
+                    : summary;
+                if (errors.length === 0 && successes.length > 0) {
+                    window.location.reload();
+                }
+            } catch {
+                uploadMessage.textContent = "Upload completed, but the server response could not be read.";
+            }
+        });
+        request.addEventListener("error", () => {
+            uploadButton.disabled = false;
+            uploadPicker.value = "";
+            uploadMessage.textContent = "Upload failed because the connection was interrupted.";
+        });
+        request.addEventListener("abort", () => {
+            uploadButton.disabled = false;
+            uploadPicker.value = "";
+            uploadMessage.textContent = "Upload canceled.";
+        });
+        request.send(formData);
     });
 </script>

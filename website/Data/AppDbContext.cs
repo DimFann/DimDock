@@ -17,6 +17,8 @@ namespace Website.Data
         public DbSet<PathTag> PathTags { get; set; }
         public DbSet<AdminOnlyTagSettings> AdminOnlyTagSettings { get; set; }
         public DbSet<AboutContent> About { get; set; }
+        public DbSet<PendingPathDeletion> PendingPathDeletions { get; set; }
+        public DbSet<PendingItemDeletion> PendingItemDeletions { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -31,6 +33,8 @@ namespace Website.Data
             modelBuilder.Entity<PathTag>().ToTable("PathTags");
             modelBuilder.Entity<AdminOnlyTagSettings>().ToTable("AdminOnlyTagSettings");
             modelBuilder.Entity<AboutContent>().ToTable("About");
+            modelBuilder.Entity<PendingPathDeletion>().ToTable("PendingPathDeletions");
+            modelBuilder.Entity<PendingItemDeletion>().ToTable("PendingItemDeletions");
             modelBuilder.Entity<ItemTag>().HasKey(link => new { link.ItemId, link.TagId });
             modelBuilder.Entity<ItemTag>()
                 .HasOne(link => link.Item)

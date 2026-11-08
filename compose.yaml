@@ -55,15 +55,35 @@ services:
       DB_NAME: mydb
     command: ["python", "/app/load_paths.py"]
 
+  thumbnail-service:
+    build: ./thumbnail_service
+    container_name: thumbnail-service
+    restart: unless-stopped
+    environment:
+      THUMBNAIL_SERVICE_PORT: ${THUMBNAIL_SERVICE_PORT:-8080}
+    volumes:
+      - type: bind
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_db_thumbs
+        target: /img_db_thumbs
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"THUMBNAIL_SERVICE_PORT\", \"8080\")}/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
   website:
     build: ./website
     container_name: website
     depends_on:
-      - path-loader
+      path-loader:
+        condition: service_started
+      thumbnail-service:
+        condition: service_healthy
     ports:
       - "${WEBSITE_PORT}:80"
     environment:
       ASPNETCORE_URLS: http://+:80
+      ThumbnailService__BaseAddress: http://thumbnail-service:${THUMBNAIL_SERVICE_PORT:-8080}/
       ConnectionStrings__DefaultConnection: "Server=db;Port=3306;Database=mydb;User=myuser;Password=mypassword;"
     volumes:
       - type: bind
