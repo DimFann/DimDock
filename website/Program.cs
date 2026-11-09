@@ -127,6 +127,8 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     .EnableDetailedErrors(false)
 );
 
+builder.Services.AddLegacyRedirects(builder.Configuration);
+
 var app = builder.Build();
 
 // Configure middleware
@@ -159,6 +161,7 @@ else
 }
 
 app.UseHttpsRedirection();
+app.UseLegacyRedirects();
 
 // Serve application assets from wwwroot.
 app.UseStaticFiles();

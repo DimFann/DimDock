@@ -125,6 +125,20 @@ breaks. Other raw HTML (including attributes on break tags) remains disabled;
 tags inside code spans/blocks or escaped with a backslash remain literal.
 Run renderer checks with `dotnet run --project tests\MarkdownChecks\MarkdownChecks.csproj`.
 
+## Legacy URL redirects
+
+Links from the old website are redirected (301) using the `LegacyRedirects`
+list in `website/appsettings.json`. Each rule has a `Path`, an optional `Query`
+of exact parameter values, and a `Target`; set `"Permanent": false` for a 302.
+Paths ignore case and trailing slashes. When several rules match, the one with
+the most matching query parameters wins, so a rule without `Query` acts as the
+fallback for that path. A running site reloads edits to that file; a Docker
+image needs a rebuild because the file is copied into the image.
+
+```json
+{ "Path": "/sketch", "Query": { "folderID": "1uiJ..." }, "Target": "/Gallery/Misc/Reference/PonyAnatomy" }
+```
+
 ## Export Google Drive shortcuts
 
 `gdrive_scripts/export_drive_shortcuts.py` (Python 3.10+, standard library only) walks ordinary
