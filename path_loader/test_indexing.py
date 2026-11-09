@@ -54,7 +54,8 @@ class IndexingParityTests(unittest.TestCase):
                     b'"items":{"note.txt":{"tags":["text"],"description":"Item description"}}}'),
                 ('gallery', 'WIP_draft/draft.txt'): b'draft',
                 ('gallery', '.shortcuts.json'): (
-                    b'{"shortcuts":{"root":["2023/2023-01/note.txt"]}}'),
+                    b'{"shortcuts":{"root":["2023/2023-01/note.txt"]},'
+                    b'"directory_shortcuts":{"root":[{"name":"Comic alias","target_path":"2023/2023-01"}]}}'),
                 ('blogs', 'UTC_20230101_120000.md'): b'# Fixture blog\n\nBlog body.',
                 ('about', 'about.md'): b'About fixture',
                 ('admin', 'admin-only-tags.json'): b'{"admin-only-tags":["hidden"]}',
@@ -81,7 +82,11 @@ class IndexingParityTests(unittest.TestCase):
                         load_paths.main()
                         load_paths.main()
                     with patch.object(build_shortcuts, 'STORE', store):
+                        # Existing databases are upgraded without resetting any gallery records.
+                        cursor.execute("DROP TABLE DirectoryShortcuts")
+                        build_shortcuts.process_shortcuts(cursor, directories_only=True)
                         build_shortcuts.process_shortcuts(cursor)
+                        build_shortcuts.process_shortcuts(cursor, directories_only=True)
                     connection.commit()
                     queries = (
                         'SELECT path,parent_path,description,type FROM Paths ORDER BY path',
@@ -91,6 +96,7 @@ class IndexingParityTests(unittest.TestCase):
                         'SELECT original_name,parent_path,shortcut_path FROM Shortcuts ORDER BY original_name',
                         'SELECT source_filename,alias,title,timestamp,`text` FROM Blogs ORDER BY source_filename',
                         'SELECT description FROM About',
+                        'SELECT p.path,s.name,t.path FROM DirectoryShortcuts s JOIN Paths p ON p.id=s.parent_path_id JOIN Paths t ON t.id=s.target_path_id ORDER BY p.path,s.name',
                     )
                     snapshot = []
                     for query in queries:
@@ -102,6 +108,7 @@ class IndexingParityTests(unittest.TestCase):
                 self.assertEqual(snapshots[0], snapshots[1])
                 self.assertEqual(len(snapshots[0][1]), 3)
                 self.assertEqual(len(snapshots[0][4]), 1)
+                self.assertEqual(snapshots[0][-1], [('root', 'Comic alias', '2023/2023-01')])
             finally:
                 for database in names:
                     cursor.execute(f'DROP DATABASE IF EXISTS `{database}`')

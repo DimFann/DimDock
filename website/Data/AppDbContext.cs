@@ -11,6 +11,7 @@ namespace Website.Data
         public DbSet<Item> Items { get; set; }
         public DbSet<PathEntry> Paths { get; set; }
         public DbSet<Shortcut> Shortcuts { get; set; }
+        public DbSet<DirectoryShortcut> DirectoryShortcuts { get; set; }
         public DbSet<Blog> Blogs { get; set; }
         public DbSet<Tag> Tags { get; set; }
         public DbSet<ItemTag> ItemTags { get; set; }
@@ -64,6 +65,16 @@ namespace Website.Data
                 .HasOne(s => s.OriginalItem)
                 .WithMany() // or .WithMany(i => i.Shortcuts) if you add a collection to Item
                 .HasForeignKey(s => s.OriginalId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DirectoryShortcut>()
+                .HasOne(shortcut => shortcut.TargetPath)
+                .WithMany()
+                .HasForeignKey(shortcut => shortcut.TargetPathId)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<DirectoryShortcut>()
+                .HasOne(shortcut => shortcut.ParentPath)
+                .WithMany()
+                .HasForeignKey(shortcut => shortcut.ParentPathId)
                 .OnDelete(DeleteBehavior.Cascade);
         }
     }

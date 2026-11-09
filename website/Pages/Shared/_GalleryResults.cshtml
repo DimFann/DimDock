@@ -16,19 +16,19 @@
                     <a href="@($"/Gallery/{(Model.ParentPath == "root" ? "" : Model.ParentPath)}")">..</a>
                 </td>
             </tr>
-            @if (Model.Paths.Any())
+            @if (Model.DirectoryLinks.Any())
             {
                 var rowIndex = 0;
-                foreach (var path in Model.Paths)
+                foreach (var link in Model.DirectoryLinks)
                 {
-                    var segments = path.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-                    var lastSegment = segments.Length > 0 ? segments[^1] : path.Path;
                     var rowClass = rowIndex % 2 == 0 ? "gallery-directory-row-even" : "gallery-directory-row-odd";
-                    var isAdminOnly = path.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
+                    var target = link.Path == "root" ? "" :
+                        string.Join("/", link.Path.Split('/').Select(Uri.EscapeDataString));
                     <tr class="@rowClass">
                         <td>
-                            <a class="@(isAdminOnly ? "admin-only-tagged" : "")"
-                               href="@($"/Gallery/{path.Path}")">@Html.Encode(lastSegment)</a>
+                            <a class="@(link.IsAdminOnly ? "admin-only-tagged" : "")"
+                               title="@(link.IsShortcut ? $"Directory shortcut to {link.Path}" : null)"
+                               href="@($"/Gallery/{target}")">@link.Name</a>
                         </td>
                     </tr>
                     rowIndex++;

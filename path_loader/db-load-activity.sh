@@ -47,6 +47,9 @@ fi
 write_marker ".initialized"
 
 # Check for shortcut initialization
+# Directory links are reconciled on every startup, including existing deployments.
+# This also creates the additive schema without resetting the database.
+python build_shortcuts.py --directories-only
 if ! marker_exists ".shortcuts_initialized"; then
   echo "Running shortcut builder for the first time..."
   python build_shortcuts.py

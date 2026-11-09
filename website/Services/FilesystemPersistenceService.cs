@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using Markdig;
 using Markdig.Syntax;
@@ -19,6 +20,37 @@ public sealed class FilesystemPersistenceService(
         new(StringComparer.OrdinalIgnoreCase) { ".gif", ".jpeg", ".jpg", ".png", ".webp" };
     private static readonly Regex ImportableBlogFilename =
         new(@"^[A-Z]{2,5}_\d{8}_\d{6}\.md$", RegexOptions.Compiled);
+
+    public async Task PersistDirectoryShortcutsAsync(CancellationToken cancellationToken = default)
+    {
+        const string key = ".shortcuts.json";
+        var sourceKey = await fileStore.FileExistsAsync(FileStoreArea.Gallery, key, cancellationToken)
+            ? key : "shortcuts.json";
+        var exists = await fileStore.FileExistsAsync(FileStoreArea.Gallery, sourceKey, cancellationToken);
+        var document = exists
+            ? JsonNode.Parse(await fileStore.ReadAllTextAsync(FileStoreArea.Gallery, sourceKey, cancellationToken)) as JsonObject
+                ?? throw new InvalidDataException("Shortcut configuration must be a JSON object.")
+            : new JsonObject();
+        var shortcuts = await context.DirectoryShortcuts.AsNoTracking()
+            .Include(shortcut => shortcut.TargetPath)
+            .Include(shortcut => shortcut.ParentPath)
+            .ToListAsync(cancellationToken);
+        if (!exists && shortcuts.Count == 0)
+        {
+            return;
+        }
+        document["directory_shortcuts"] = JsonSerializer.SerializeToNode(
+            shortcuts.GroupBy(shortcut => shortcut.ParentPath.Path)
+                .OrderBy(group => group.Key, StringComparer.Ordinal)
+                .ToDictionary(group => group.Key, group => group
+                    .OrderBy(shortcut => shortcut.Name, StringComparer.Ordinal)
+                    .ThenBy(shortcut => shortcut.TargetPath.Path, StringComparer.Ordinal)
+                    .Select(shortcut => new { name = shortcut.Name, target_path = shortcut.TargetPath.Path })
+                    .ToArray()));
+        await fileStore.WriteAllTextAsync(
+            FileStoreArea.Gallery, key,
+            document.ToJsonString(new JsonSerializerOptions { WriteIndented = true }), cancellationToken);
+    }
 
     public async Task PersistPathAsync(string path, CancellationToken cancellationToken = default)
     {
@@ -997,6 +1029,7 @@ public sealed class FilesystemPersistenceService(
         {
             await PersistPathAsync(renamedPath, cancellationToken);
         }
+        await PersistDirectoryShortcutsAsync(cancellationToken);
 
         return newPath;
     }
@@ -1019,6 +1052,7 @@ public sealed class FilesystemPersistenceService(
             recursive: true,
             cancellationToken);
 
+        await PersistDirectoryShortcutsAsync(cancellationToken);
         await context.PendingPathDeletions
             .Where(entry => entry.Path == path)
             .ExecuteDeleteAsync(cancellationToken);

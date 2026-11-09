@@ -93,6 +93,118 @@ Saving removes managed About images that were removed from the Markdown,
 including images uploaded and then removed during the same editing session.
 If no image embeds remain, saving also removes all lingering About assets.
 
+## Export Google Drive shortcuts
+
+`drive_shortcuts/export_drive_shortcuts.py` (Python 3.10+, standard library only) walks ordinary
+folders beneath a Drive root and exports file and directory shortcuts in the gallery's
+`.shortcuts.json` format. Enable the Google Drive API for your Google Cloud
+project and use an API key allowed to call it. Set the key in your environment,
+not in source control or the command's arguments:
+
+```powershell
+$env:GOOGLE_DRIVE_API_KEY = '<your-api-key>'
+python -m drive_shortcuts.export_drive_shortcuts --root-folder-id '<folder-id>' --output '.shortcuts.json'
+Remove-Item Env:\GOOGLE_DRIVE_API_KEY
+```
+
+You can also run `python export_drive_shortcuts.py --root-folder-id '<folder-id>'`
+from inside `drive_shortcuts`. Default output is `.shortcuts.json` in the current
+working directory; use `--output` to choose another location.
+
+On Linux/macOS, set `GOOGLE_DRIVE_API_KEY` in the environment and run the same
+Python command from the repository root. Supply the ID from the folder's sharing URL, not the entire URL.
+The script does not read `.env`. An API key does not authenticate a Drive user:
+the root and all descendants must be accessible without user authentication.
+Even a link-shared folder can require OAuth for API listing; HTTP access errors
+are reported, not treated as an empty folder. Private Drives require a separate
+OAuth-based workflow, which this script does not implement.
+
+If the sharing URL includes `resourcekey=...`, set its value (not the full URL):
+
+```powershell
+$env:GOOGLE_DRIVE_ROOT_RESOURCE_KEY = '<resourcekey-value>'
+```
+
+The exporter sends this via Google's resource-key header for root metadata and
+listing requests, and forwards resource keys returned for descendant folders.
+Keep it out of source control. A missing resource key can cause a 404 even when
+the folder is shared with anyone who has the link; supplying it does not replace
+OAuth when user authentication is required.
+
+The root folder's name is omitted. Shortcut destinations are their containing
+folder paths (`root` at the top level); sources use the actual target filename,
+not the shortcut label. Root-level sources use `root/<filename>` to match the
+current importer. The original files must already exist in your gallery with
+the same relative paths and names; this script does not download images.
+Directory shortcuts appear in the navigation list alongside ordinary directories
+and link to the real target gallery, using the Drive shortcut's label.
+Folder shortcuts are not recursively followed (including self-links and cycles).
+Missing metadata and targets outside the root are skipped with warnings and a
+summary count. File destination/target pairs are deduplicated; file shortcut
+labels are not preserved. Directory shortcut labels must be valid gallery names
+and unique within each destination.
+
+The existing file format is unchanged; directory links use an additional property:
+
+```json
+{
+  "shortcuts": {"root": ["Album/photo.png"]},
+  "directory_shortcuts": {
+    "root": [{"name": "Favourites", "target_path": "Album"}],
+    "Album": [{"name": "Home", "target_path": "root"}]
+  }
+}
+```
+
+Destination and target paths must already be indexed in `Paths`. Directory links
+inherit visibility from the target and its ancestors: hidden targets are omitted
+for visitors and marked dark red for admins. Links navigate to the canonical
+directory rather than creating virtual copies or duplicating files.
+
+Ambiguous duplicate paths (including case-only differences) and invalid entries
+are skipped with warnings. All files/folders sharing an ambiguous path are excluded,
+including duplicate folders' contents and shortcuts targeting these entries.
+Duplicate directory alias labels are also excluded rather than picking one.
+Valid shortcuts still export. Incomplete listings and API errors abort without
+replacing the output.
+Existing output is protected unless `--overwrite` is supplied; replacement
+does not merge existing shortcuts. Review the JSON and warnings before copying
+it to Local `img_src/.shortcuts.json` or uploading it to your configured Linode
+`<prefix>/img_src/.shortcuts.json`. The legacy `shortcuts.json` filename is also
+accepted by the importer. Rebuild and restart the path loader after updating
+these scripts. Startup automatically creates the additive `DirectoryShortcuts`
+table on existing databases and reconciles directory links from the JSON every
+run, even when file shortcuts were previously initialized. No database reset is
+needed. File shortcuts retain their existing one-time import behavior.
+Export alone does not update the database.
+Loader logs show the selected storage provider, shortcut manifest, imported
+directory/file counts, missing-manifest skips, and successful database commit.
+
+Directory links reference source/destination directory IDs, so path renames
+remain valid and deleting either directory removes the link. Rename/delete and
+Admin “Sync DB to disk” persist directory links back to the JSON, preserving
+the existing file-shortcut property. Invalid configuration or unresolved directory
+paths abort the importer without replacing its directory link index.
+
+Run the offline exporter checks with:
+
+```sh
+python -m unittest drive_shortcuts.test_export_drive_shortcuts
+```
+
+Importer checks are included in the storage test image below. Database-backed
+navigation/Razor and rename/delete persistence checks use a disposable MariaDB
+service on loopback (no database selected in the connection string):
+
+```powershell
+$env:DIRECTORY_SHORTCUT_TEST_CONNECTION = 'Server=127.0.0.1;Port=<test-port>;User ID=root;Password=<test-password>'
+dotnet run --project tests\DirectoryShortcutChecks\DirectoryShortcutChecks.csproj
+Remove-Item Env:\DIRECTORY_SHORTCUT_TEST_CONNECTION
+```
+
+The checker creates and drops only its own uniquely named database and local
+fixture directory. Run it from the repository root; never use a production server.
+
 ## Linode Object Storage
 
 ### Resetting deployment data

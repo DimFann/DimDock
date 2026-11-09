@@ -9,8 +9,7 @@ img_src/*
 img_db_thumbs/*
 website/wwwroot/lib/
 .env
-TODO.md
-FORDEV.md
+.shortcuts.json
 
 # User-specific files
 *.rsuser

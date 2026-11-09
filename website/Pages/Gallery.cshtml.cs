@@ -58,6 +58,7 @@ public class GalleryModel : PageModel
 
     public List<Item> Items { get; set; } = new();
     public List<PathEntry> Paths { get; set; } = new();
+    public List<GalleryDirectoryLink> DirectoryLinks { get; set; } = new();
     public List<Shortcut> Shortcuts { get; set; } = new();
 
     public PathEntry? PathEntry { get; set; }
@@ -89,9 +90,7 @@ public class GalleryModel : PageModel
         _logger.LogDebug("Gallery path: {Path}", sanitized);
 
         CurrentPath = sanitized;
-        var hiddenPaths = AdminEnabled
-            ? []
-            : await _context.Paths
+        var hiddenPaths = await _context.Paths
                 .Where(entry => entry.TagLinks.Any(link => AdminOnlyTags.Contains(link.Tag.Name)))
                 .Select(entry => entry.Path)
                 .ToListAsync(HttpContext.RequestAborted);
@@ -130,6 +129,24 @@ public class GalleryModel : PageModel
                     !hiddenPaths.Any(hidden => IsSameOrChildPath(item.ParentPath ?? string.Empty, hidden)))
                 .ToList();
         }
+
+        var directoryShortcuts = await _context.DirectoryShortcuts
+            .AsNoTracking()
+            .Include(shortcut => shortcut.TargetPath)
+            .Where(shortcut => shortcut.ParentPath.Path == sanitized)
+            .ToListAsync(HttpContext.RequestAborted);
+        DirectoryLinks = Paths.Select(entry => new GalleryDirectoryLink(
+                entry.Path.Split('/').Last(), entry.Path,
+                hiddenPaths.Any(hidden => IsSameOrChildPath(entry.Path, hidden)), false))
+            .Concat(directoryShortcuts
+                .Where(shortcut => AdminEnabled ||
+                    !hiddenPaths.Any(hidden => IsSameOrChildPath(shortcut.TargetPath.Path, hidden)))
+                .Select(shortcut => new GalleryDirectoryLink(
+                    shortcut.Name, shortcut.TargetPath.Path,
+                    hiddenPaths.Any(hidden => IsSameOrChildPath(shortcut.TargetPath.Path, hidden)), true)))
+            .OrderBy(link => link.Name, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(link => link.Path, StringComparer.Ordinal)
+            .ToList();
 
         Shortcuts = await _context.Shortcuts
             .Include(s => s.OriginalItem)
@@ -190,7 +207,7 @@ public class GalleryModel : PageModel
             ? sanitized.Substring(0, sanitized.LastIndexOf('/'))
             : "root";
 
-        if (!Items.Any() && !Paths.Any())
+        if (!Items.Any() && !DirectoryLinks.Any())
         {
             Message = $"No items or subpaths found for path '{sanitized}'.";
         }

@@ -156,6 +156,8 @@ public class AdminModel : PageModel
                 .ExecuteDeleteAsync(HttpContext.RequestAborted);
         }
 
+        await _filesystemPersistence.PersistDirectoryShortcutsAsync(HttpContext.RequestAborted);
+
         var paths = await _context.Paths
             .Include(path => path.TagLinks)
             .ThenInclude(link => link.Tag)

@@ -51,6 +51,17 @@ CREATE TABLE Tags (
     UNIQUE KEY uq_tags_name (name)
 ) AUTO_INCREMENT = 0;
 
+CREATE TABLE DirectoryShortcuts (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    target_path_id BIGINT UNSIGNED NOT NULL,
+    parent_path_id BIGINT UNSIGNED NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    CONSTRAINT fk_directory_shortcuts_target
+        FOREIGN KEY (target_path_id) REFERENCES Paths(id) ON DELETE CASCADE,
+    CONSTRAINT fk_directory_shortcuts_parent
+        FOREIGN KEY (parent_path_id) REFERENCES Paths(id) ON DELETE CASCADE
+);
+
 CREATE TABLE ItemTags (
     item_id BIGINT UNSIGNED NOT NULL,
     tag_id BIGINT UNSIGNED NOT NULL,
