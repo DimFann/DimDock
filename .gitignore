@@ -10,6 +10,7 @@ img_db_thumbs/*
 website/wwwroot/lib/
 .env
 .shortcuts.json
+/gdrive_scripts/output/
 
 # User-specific files
 *.rsuser

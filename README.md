@@ -95,7 +95,7 @@ If no image embeds remain, saving also removes all lingering About assets.
 
 ## Export Google Drive shortcuts
 
-`drive_shortcuts/export_drive_shortcuts.py` (Python 3.10+, standard library only) walks ordinary
+`gdrive_scripts/export_drive_shortcuts.py` (Python 3.10+, standard library only) walks ordinary
 folders beneath a Drive root and exports file and directory shortcuts in the gallery's
 `.shortcuts.json` format. Enable the Google Drive API for your Google Cloud
 project and use an API key allowed to call it. Set the key in your environment,
@@ -103,17 +103,21 @@ not in source control or the command's arguments:
 
 ```powershell
 $env:GOOGLE_DRIVE_API_KEY = '<your-api-key>'
-python -m drive_shortcuts.export_drive_shortcuts --root-folder-id '<folder-id>' --output '.shortcuts.json'
+python -m gdrive_scripts.export_drive_shortcuts --root-folder-id '<folder-id>'
 Remove-Item Env:\GOOGLE_DRIVE_API_KEY
 ```
 
 You can also run `python export_drive_shortcuts.py --root-folder-id '<folder-id>'`
-from inside `drive_shortcuts`. Default output is `.shortcuts.json` in the current
-working directory; use `--output` to choose another location.
+from inside `gdrive_scripts`. Default output is
+`gdrive_scripts/output/shortcuts/.shortcuts.json`, regardless of working directory;
+use `--output` to choose another location.
 
 On Linux/macOS, set `GOOGLE_DRIVE_API_KEY` in the environment and run the same
 Python command from the repository root. Supply the ID from the folder's sharing URL, not the entire URL.
-The script does not read `.env`. An API key does not authenticate a Drive user:
+Both scripts read the repository-root `.env` without executing it. Environment
+variables override file values. You can put `GOOGLE_DRIVE_API_KEY` and optional
+`GOOGLE_DRIVE_ROOT_RESOURCE_KEY` there instead of setting them in the shell.
+Keep `.env` untracked. An API key does not authenticate a Drive user:
 the root and all descendants must be accessible without user authentication.
 Even a link-shared folder can require OAuth for API listing; HTTP access errors
 are reported, not treated as an empty folder. Private Drives require a separate
@@ -189,8 +193,42 @@ paths abort the importer without replacing its directory link index.
 Run the offline exporter checks with:
 
 ```sh
-python -m unittest drive_shortcuts.test_export_drive_shortcuts
+python -m unittest discover -s gdrive_scripts -t .
 ```
+
+### Export folder descriptions
+
+Run from the repository root:
+
+```powershell
+python -m gdrive_scripts.export_folder_descriptions --root-folder-id '<folder-id>'
+```
+
+Or run `python export_folder_descriptions.py --root-folder-id '<folder-id>'`
+inside `gdrive_scripts`. It uses the same API key/resource-key configuration.
+Output is `gdrive_scripts/output/folder_descriptions/`, with the selected root's
+name omitted. Folders with descriptions and their required ancestors are recreated
+at their gallery-relative paths; empty branches are omitted.
+nonempty Drive `description` metadata is written verbatim as UTF-8 `.description.md`,
+including the root description. Empty descriptions produce no file, so copying
+the hierarchy does not blank existing descriptions. This does not download
+description files or images, convert HTML, or follow folder shortcuts.
+
+Copy the hierarchy's contents into your data's `img_src` directory (or merge
+the objects into your configured Linode gallery prefix). The loader supports
+`.description.md`, the canonical filename used by the website. The older
+`description.md` filename is also accepted for legacy imports. Review existing
+`.description.md` files before copying if you intend to overwrite descriptions.
+
+Duplicate/invalid folder paths are logged and skipped, including their contents.
+API failures abort before creating output. Existing output directories are refused
+to prevent stale descriptions from mixing with a new export; move the previous
+export aside or choose a fresh `--output` directory. Both default output trees
+are beneath `gdrive_scripts/output/`, which is ignored by Git.
+
+Use `python -m gdrive_scripts.export_folder_descriptions --prune-only` to prune
+empty subfolders from an existing export without contacting Drive. This preserves
+the output root, description files, other files, and their ancestors.
 
 Importer checks are included in the storage test image below. Database-backed
 navigation/Razor and rename/delete persistence checks use a disposable MariaDB

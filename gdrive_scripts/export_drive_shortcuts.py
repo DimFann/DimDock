@@ -15,11 +15,13 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from path_loader.file_store import validate_key
+from gdrive_scripts.configuration import drive_settings
 
 
 FOLDER_MIME = 'application/vnd.google-apps.folder'
 SHORTCUT_MIME = 'application/vnd.google-apps.shortcut'
-FILE_FIELDS = 'id,name,mimeType,resourceKey,shortcutDetails(targetId,targetMimeType)'
+FILE_FIELDS = 'id,name,mimeType,description,resourceKey,shortcutDetails(targetId,targetMimeType)'
+DEFAULT_OUTPUT = Path(__file__).resolve().parent / 'output' / 'shortcuts' / '.shortcuts.json'
 
 
 class DriveError(Exception):
@@ -76,7 +78,7 @@ class DriveClient:
 
     def get_folder(self, folder_id: str) -> dict:
         return self.request('files/' + validate_id(folder_id), {
-            'fields': 'id,mimeType', 'supportsAllDrives': 'true',
+            'fields': 'id,mimeType,description', 'supportsAllDrives': 'true',
         }, resource_id=folder_id)
 
     def list_children(self, folder_id: str) -> list[dict]:
@@ -224,20 +226,25 @@ def main(argv: list[str] | None = None) -> int:
         description='Export public Google Drive file and directory shortcuts to DimDock .shortcuts.json (Python 3.10+).',
     )
     parser.add_argument('--root-folder-id', required=True, help='ID of the gallery source root in Drive.')
-    parser.add_argument('--output', type=Path, default=Path('.shortcuts.json'))
+    parser.add_argument('--output', type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument('--overwrite', action='store_true', help='Replace existing output (does not merge).')
     args = parser.parse_args(argv)
-    api_key = os.environ.get('GOOGLE_DRIVE_API_KEY', '').strip()
+    try:
+        settings = drive_settings()
+    except (OSError, ValueError) as error:
+        parser.error(f'Cannot read repository .env: {error}')
+    api_key = settings['GOOGLE_DRIVE_API_KEY']
     if not api_key:
-        parser.error('Set GOOGLE_DRIVE_API_KEY in your environment; do not put it in source control.')
+        parser.error('Set GOOGLE_DRIVE_API_KEY in your environment or repository .env; do not commit it.')
     try:
         if args.output.exists() and not args.overwrite:
             raise ValueError(f'Output already exists: {args.output}. Use --overwrite to replace it.')
         client = DriveClient(api_key)
-        resource_key = os.environ.get('GOOGLE_DRIVE_ROOT_RESOURCE_KEY', '').strip()
+        resource_key = settings['GOOGLE_DRIVE_ROOT_RESOURCE_KEY']
         if resource_key:
             client.set_resource_key(args.root_folder_id, resource_key)
         data, warnings = export_shortcuts(client, args.root_folder_id)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
         write_output(args.output, data, args.overwrite)
     except (DriveError, OSError, ValueError) as error:
         print(f'ERROR: {error}', file=sys.stderr)

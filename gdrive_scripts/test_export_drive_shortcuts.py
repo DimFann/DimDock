@@ -14,8 +14,8 @@ from unittest.mock import patch
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urlparse
 
-from drive_shortcuts.export_drive_shortcuts import (
-    DriveClient, DriveError, FOLDER_MIME, SHORTCUT_MIME, export_shortcuts, main, write_output,
+from gdrive_scripts.export_drive_shortcuts import (
+    DEFAULT_OUTPUT, DriveClient, DriveError, FOLDER_MIME, SHORTCUT_MIME, export_shortcuts, main, write_output,
 )
 
 
@@ -43,11 +43,14 @@ class FakeDrive(DriveClient):
 
 
 class ExportTests(unittest.TestCase):
+    def test_default_output_is_anchored_under_script_directory(self):
+        self.assertEqual(DEFAULT_OUTPUT, Path(__file__).resolve().parent / 'output' / 'shortcuts' / '.shortcuts.json')
+
     def test_direct_and_module_entry_points(self):
         directory = Path(__file__).resolve().parent
         commands = [
             (directory, ['export_drive_shortcuts.py', '--help']),
-            (directory.parent, ['-m', 'drive_shortcuts.export_drive_shortcuts', '--help']),
+            (directory.parent, ['-m', 'gdrive_scripts.export_drive_shortcuts', '--help']),
         ]
         for cwd, arguments in commands:
             with self.subTest(arguments=arguments):
@@ -138,7 +141,7 @@ class ExportTests(unittest.TestCase):
         function = next(node for node in ast.parse(importer.read_text(encoding='utf-8')).body
                         if isinstance(node, ast.FunctionDef) and node.name == 'process_shortcuts')
         namespace = {
-            'json': json, 'logging': logging, 'SHORTCUTS_FILENAME': '.shortcuts.json',
+            'json': json, 'logging': logging, 'os': os, 'SHORTCUTS_FILENAME': '.shortcuts.json',
             'LEGACY_SHORTCUTS_FILENAME': 'shortcuts.json',
             'STORE': SimpleNamespace(exists=lambda *args: True, read_text=lambda *args: json.dumps(data)),
             'ensure_directory_shortcuts_table': lambda cursor: None,
@@ -202,7 +205,7 @@ class ExportTests(unittest.TestCase):
             {'files': [], 'nextPageToken': 'next'},
             {'files': [file('a', 'a.png')]},
         ]
-        with patch('drive_shortcuts.export_drive_shortcuts.urlopen', side_effect=[
+        with patch('gdrive_scripts.export_drive_shortcuts.urlopen', side_effect=[
             io.BytesIO(json.dumps(page).encode()) for page in pages
         ]) as http:
             self.assertEqual(DriveClient('secret-test-key').list_children('base'), pages[1]['files'])
@@ -224,7 +227,7 @@ class ExportTests(unittest.TestCase):
             {'files': []},
             {'files': []},
         ]
-        with patch('drive_shortcuts.export_drive_shortcuts.urlopen', side_effect=[
+        with patch('gdrive_scripts.export_drive_shortcuts.urlopen', side_effect=[
             io.BytesIO(json.dumps(data).encode()) for data in responses
         ]) as http:
             client.get_folder('base')
@@ -254,26 +257,26 @@ class ExportTests(unittest.TestCase):
 
     def test_http_errors_and_retry(self):
         denied = HTTPError('https://example.invalid?key=secret', 403, 'denied', {}, None)
-        with patch('drive_shortcuts.export_drive_shortcuts.urlopen', side_effect=denied):
+        with patch('gdrive_scripts.export_drive_shortcuts.urlopen', side_effect=denied):
             with self.assertRaises(DriveError) as result:
                 DriveClient('secret').get_folder('base')
         self.assertIn('OAuth', str(result.exception))
         self.assertNotIn('secret', str(result.exception))
         busy = HTTPError('https://example.invalid', 429, 'busy', {}, None)
-        with patch('drive_shortcuts.export_drive_shortcuts.time.sleep') as sleep:
-            with patch('drive_shortcuts.export_drive_shortcuts.urlopen', side_effect=[
+        with patch('gdrive_scripts.export_drive_shortcuts.time.sleep') as sleep:
+            with patch('gdrive_scripts.export_drive_shortcuts.urlopen', side_effect=[
                 busy, io.BytesIO(b'{"mimeType": "folder"}'),
             ]):
                 self.assertEqual(DriveClient('test').get_folder('base')['mimeType'], 'folder')
         sleep.assert_called_once_with(1)
-        with patch('drive_shortcuts.export_drive_shortcuts.time.sleep'):
-            with patch('drive_shortcuts.export_drive_shortcuts.urlopen', side_effect=[
+        with patch('gdrive_scripts.export_drive_shortcuts.time.sleep'):
+            with patch('gdrive_scripts.export_drive_shortcuts.urlopen', side_effect=[
                 HTTPError('https://example.invalid', 503, 'busy', {}, None) for _ in range(3)
             ]) as http:
                 with self.assertRaisesRegex(DriveError, 'HTTP 503'):
                     DriveClient('test').get_folder('base')
         self.assertEqual(http.call_count, 3)
-        with patch('drive_shortcuts.export_drive_shortcuts.urlopen', side_effect=URLError('secret')):
+        with patch('gdrive_scripts.export_drive_shortcuts.urlopen', side_effect=URLError('secret')):
             with self.assertRaises(DriveError) as result:
                 DriveClient('test').get_folder('base')
         self.assertNotIn('secret', str(result.exception))
@@ -294,7 +297,7 @@ class ExportTests(unittest.TestCase):
             output = Path(directory) / '.shortcuts.json'
             output.write_text('existing')
             with patch.dict(os.environ, {'GOOGLE_DRIVE_API_KEY': 'secret'}):
-                with patch('drive_shortcuts.export_drive_shortcuts.export_shortcuts', side_effect=DriveError('failure')):
+                with patch('gdrive_scripts.export_drive_shortcuts.export_shortcuts', side_effect=DriveError('failure')):
                     with redirect_stderr(io.StringIO()):
                         result = main(['--root-folder-id', 'base', '--output', str(output), '--overwrite'])
             self.assertEqual(result, 1)
@@ -304,7 +307,7 @@ class ExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory) / '.shortcuts.json'
             with patch.dict(os.environ, {'GOOGLE_DRIVE_API_KEY': 'test'}):
-                with patch('drive_shortcuts.export_drive_shortcuts.export_shortcuts', return_value=(
+                with patch('gdrive_scripts.export_drive_shortcuts.export_shortcuts', return_value=(
                     {'shortcuts': {'root': ['Album/photo.png']}}, ['External: skipped.'],
                 )):
                     stderr, stdout = io.StringIO(), io.StringIO()
