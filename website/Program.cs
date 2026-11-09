@@ -15,6 +15,7 @@ using Amazon.Runtime;
 using Amazon.S3;
 
 var builder = WebApplication.CreateBuilder(args);
+builder.Configuration.AddJsonFile(LegacyRedirects.FileName, optional: true, reloadOnChange: true);
 const long maximumUploadRequestBytes = 512L * 1024 * 1024;
 const long maximumBlogImageRequestBytes = 21L * 1024 * 1024;
 var fileStorageProvider = builder.Configuration["FileStorage:Provider"] ?? "Local";

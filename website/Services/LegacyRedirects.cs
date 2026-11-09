@@ -15,6 +15,7 @@ public sealed class LegacyRedirectRule
 public static class LegacyRedirects
 {
     public const string SectionName = "LegacyRedirects";
+    public const string FileName = "legacy_redirects.json";
 
     public static IServiceCollection AddLegacyRedirects(this IServiceCollection services, IConfiguration configuration)
     {
@@ -22,13 +23,24 @@ public static class LegacyRedirects
         return services;
     }
 
-    public static IApplicationBuilder UseLegacyRedirects(this IApplicationBuilder app) =>
-        app.Use(async (context, next) =>
+    public static IApplicationBuilder UseLegacyRedirects(this IApplicationBuilder app)
+    {
+        var monitor = app.ApplicationServices.GetRequiredService<IOptionsMonitor<List<LegacyRedirectRule>>>();
+        // Rebuilt only when the bound rule list changes (config reload), so requests just do dictionary lookups.
+        var cached = new LegacyRedirectIndex([]);
+
+        return app.Use(async (context, next) =>
         {
             if (HttpMethods.IsGet(context.Request.Method) || HttpMethods.IsHead(context.Request.Method))
             {
-                var rules = context.RequestServices.GetRequiredService<IOptionsMonitor<List<LegacyRedirectRule>>>().CurrentValue;
-                var rule = FindMatch(rules, context.Request.Path, context.Request.Query);
+                var rules = monitor.CurrentValue;
+                var index = cached;
+                if (!ReferenceEquals(index.Source, rules))
+                {
+                    cached = index = new LegacyRedirectIndex(rules);
+                }
+
+                var rule = index.FindMatch(context.Request.Path, context.Request.Query);
                 if (rule is not null)
                 {
                     context.Response.Redirect(rule.Target, rule.Permanent);
@@ -38,32 +50,78 @@ public static class LegacyRedirects
 
             await next();
         });
+    }
 
-    public static LegacyRedirectRule? FindMatch(IEnumerable<LegacyRedirectRule> rules, PathString path, IQueryCollection query)
+    internal static string NormalizePath(string? path)
     {
-        var requestPath = NormalizePath(path.Value);
-        LegacyRedirectRule? best = null;
+        var trimmed = (path ?? string.Empty).Trim().TrimEnd('/');
+        return trimmed.StartsWith('/') ? trimmed : "/" + trimmed;
+    }
+}
+
+public sealed class LegacyRedirectIndex
+{
+    private sealed record QueryGroup(string[] Keys, Dictionary<string, LegacyRedirectRule> RulesByValues);
+
+    // Per path: rule groups sharing the same query keys, most keys first (ties keep config order).
+    private readonly Dictionary<string, QueryGroup[]> _paths = new(StringComparer.OrdinalIgnoreCase);
+
+    public IEnumerable<LegacyRedirectRule> Source { get; }
+
+    public LegacyRedirectIndex(IEnumerable<LegacyRedirectRule> rules)
+    {
+        Source = rules;
+        var groups = new Dictionary<string, Dictionary<string, QueryGroup>>(StringComparer.OrdinalIgnoreCase);
+        var order = new Dictionary<string, List<QueryGroup>>(StringComparer.OrdinalIgnoreCase);
         foreach (var rule in rules)
         {
-            if (string.IsNullOrWhiteSpace(rule.Target) ||
-                !string.Equals(NormalizePath(rule.Path), requestPath, StringComparison.OrdinalIgnoreCase) ||
-                !rule.Query.All(q => string.Equals(query[q.Key].ToString(), q.Value, StringComparison.Ordinal)))
+            if (string.IsNullOrWhiteSpace(rule.Target))
             {
                 continue;
             }
 
-            if (best is null || rule.Query.Count > best.Query.Count)
+            var path = LegacyRedirects.NormalizePath(rule.Path);
+            if (!groups.TryGetValue(path, out var byKeys))
             {
-                best = rule;
+                groups[path] = byKeys = new(StringComparer.OrdinalIgnoreCase);
+                order[path] = [];
+            }
+
+            var keys = rule.Query.Keys.Order(StringComparer.OrdinalIgnoreCase).ToArray();
+            var keySignature = string.Join('\0', keys).ToUpperInvariant();
+            if (!byKeys.TryGetValue(keySignature, out var group))
+            {
+                byKeys[keySignature] = group = new QueryGroup(keys, new(StringComparer.Ordinal));
+                order[path].Add(group);
+            }
+
+            group.RulesByValues.TryAdd(string.Join('\0', keys.Select(k => rule.Query[k])), rule);
+        }
+
+        foreach (var (path, list) in order)
+        {
+            _paths[path] = [.. list.OrderByDescending(g => g.Keys.Length)];
+        }
+    }
+
+    public LegacyRedirectRule? FindMatch(PathString path, IQueryCollection query)
+    {
+        if (!_paths.TryGetValue(LegacyRedirects.NormalizePath(path.Value), out var groups))
+        {
+            return null;
+        }
+
+        foreach (var group in groups)
+        {
+            var values = group.Keys.Length == 0
+                ? string.Empty
+                : string.Join('\0', group.Keys.Select(k => query[k].ToString()));
+            if (group.RulesByValues.TryGetValue(values, out var rule))
+            {
+                return rule;
             }
         }
 
-        return best;
-    }
-
-    private static string NormalizePath(string? path)
-    {
-        var trimmed = (path ?? string.Empty).Trim().TrimEnd('/');
-        return trimmed.StartsWith('/') ? trimmed : "/" + trimmed;
+        return null;
     }
 }

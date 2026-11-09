@@ -128,7 +128,10 @@ Run renderer checks with `dotnet run --project tests\MarkdownChecks\MarkdownChec
 ## Legacy URL redirects
 
 Links from the old website are redirected (301) using the `LegacyRedirects`
-list in `website/appsettings.json`. Each rule has a `Path`, an optional `Query`
+list in the optional `website/legacy_redirects.json` (loaded alongside
+`appsettings.json` if present; without it, nothing is redirected). Keep the list
+in that one file only: .NET merges JSON arrays by index, so rules split across
+config files would mix. Each rule has a `Path`, an optional `Query`
 of exact parameter values, and a `Target`; set `"Permanent": false` for a 302.
 Paths ignore case and trailing slashes. When several rules match, the one with
 the most matching query parameters wins, so a rule without `Query` acts as the
@@ -136,7 +139,12 @@ fallback for that path. A running site reloads edits to that file; a Docker
 image needs a rebuild because the file is copied into the image.
 
 ```json
-{ "Path": "/sketch", "Query": { "folderID": "1uiJ..." }, "Target": "/Gallery/Misc/Reference/PonyAnatomy" }
+{
+  "LegacyRedirects": [
+    { "Path": "/sketch", "Query": { "folderID": "1uiJ..." }, "Target": "/Gallery/Misc/Reference/PonyAnatomy" },
+    { "Path": "/sketch", "Target": "/Gallery" }
+  ]
+}
 ```
 
 ## Export Google Drive shortcuts
@@ -160,9 +168,11 @@ use `--output` to choose another location.
 
 On Linux/macOS, set `GOOGLE_DRIVE_API_KEY` in the environment and run the same
 Python command from the repository root. Supply the ID from the folder's sharing URL, not the entire URL.
-Both scripts read the repository-root `.env` without executing it. Environment
-variables override file values. You can put `GOOGLE_DRIVE_API_KEY` and optional
-`GOOGLE_DRIVE_ROOT_RESOURCE_KEY` there instead of setting them in the shell.
+All `gdrive_scripts` exporters read the repository-root `.env` without executing it. Environment
+variables override file values. You can put `GOOGLE_DRIVE_API_KEY`, optional
+`GOOGLE_DRIVE_ROOT_RESOURCE_KEY`, and `GOOGLE_DRIVE_ROOT_FOLDER_ID` there instead of
+setting them in the shell. With `GOOGLE_DRIVE_ROOT_FOLDER_ID` set, `--root-folder-id`
+may be omitted; when both are given, the argument wins.
 Keep `.env` untracked. An API key does not authenticate a Drive user:
 the root and all descendants must be accessible without user authentication.
 Even a link-shared folder can require OAuth for API listing; HTTP access errors
@@ -275,6 +285,26 @@ are beneath `gdrive_scripts/output/`, which is ignored by Git.
 Use `python -m gdrive_scripts.export_folder_descriptions --prune-only` to prune
 empty subfolders from an existing export without contacting Drive. This preserves
 the output root, description files, other files, and their ancestors.
+
+### Export folder redirects
+
+Old website links such as `/sketch/?folderID=<drive-folder-id>` can be turned
+into [legacy URL redirects](#legacy-url-redirects) for every folder under the root:
+
+```powershell
+python -m gdrive_scripts.export_folder_redirects
+```
+
+This uses the same API key, resource key, and root folder settings, and writes
+`gdrive_scripts/output/folder_redirects.json` (overwriting it). The file contains
+a complete `LegacyRedirects` section: one rule per folder (the root maps to
+`/Gallery`), plus a final `/sketch` → `/Gallery` fallback. Copy it to
+`website/legacy_redirects.json` as-is. Use
+`--legacy-path` and `--query-key` if old links used a different path or
+parameter. Every folder gets a rule: a folder whose name is invalid or
+duplicated (so it has no gallery page of its own), and everything inside it,
+redirects to its nearest ancestor that does have one, with a warning. The
+export fails rather than writing a partial list if any folder ID is unusable.
 
 Importer checks are included in the storage test image below. Database-backed
 navigation/Razor and rename/delete persistence checks use a disposable MariaDB

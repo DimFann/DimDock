@@ -3,35 +3,37 @@ from collections import deque
 import os
 from pathlib import Path
 import sys
+from typing import Callable
 
 if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from gdrive_scripts.export_drive_shortcuts import DriveClient, DriveError, FOLDER_MIME, validate_id
 from path_loader.file_store import validate_key
-from gdrive_scripts.configuration import drive_settings
+from gdrive_scripts.configuration import drive_settings, root_folder_id
 from clean import is_link
 
 
 DEFAULT_OUTPUT = Path(__file__).resolve().parent / 'output' / 'folder_descriptions'
 
 
-def scrape_descriptions(client: DriveClient, root_id: str) -> tuple[dict[str, str], list[str]]:
+def walk_folders(client: DriveClient, root_id: str,
+                 on_skip: Callable[[object, str], None] | None = None) -> tuple[list[tuple[str, str, dict]], list[str]]:
+    """Breadth-first list of (folder ID, gallery-relative path, metadata); the root's path is ''.
+
+    on_skip(child ID, parent path) is called for each folder skipped for an invalid ID/name or a duplicate path.
+    """
     validate_id(root_id)
     root = client.get_folder(root_id)
     if root.get('mimeType') != FOLDER_MIME:
         raise DriveError('The selected root is not a Drive folder.')
     pending = deque([(root_id, '', root)])
     seen = {root_id}
-    descriptions = {}
+    folders = []
     warnings = []
     while pending:
         folder_id, parent, folder = pending.popleft()
-        description = folder.get('description', '')
-        if not isinstance(description, str):
-            warnings.append(f'{parent or "root"}: invalid description; description skipped.')
-            description = ''
-        descriptions[parent] = description
+        folders.append((folder_id, parent, folder))
         candidates = {}
         for item in client.list_children(folder_id):
             if item.get('mimeType') != FOLDER_MIME:
@@ -49,6 +51,8 @@ def scrape_descriptions(client: DriveClient, root_id: str) -> tuple[dict[str, st
                     raise ValueError('Folder path exceeds limits or conflicts with gallery root.')
             except ValueError as error:
                 warnings.append(f'Folder {name!r}: {error} Folder and contents skipped.')
+                if on_skip:
+                    on_skip(child_id, parent)
                 continue
             if child_id in seen:
                 warnings.append(f'Folder {path!r}: repeated ID or cycle; skipped.')
@@ -58,8 +62,23 @@ def scrape_descriptions(client: DriveClient, root_id: str) -> tuple[dict[str, st
         for entries in candidates.values():
             if len(entries) != 1:
                 warnings.append(f'Duplicate folder path {entries[0][1]!r}: all matching folders and contents skipped.')
+                if on_skip:
+                    for child_id, _, _ in entries:
+                        on_skip(child_id, parent)
                 continue
             pending.append(entries[0])
+    return folders, warnings
+
+
+def scrape_descriptions(client: DriveClient, root_id: str) -> tuple[dict[str, str], list[str]]:
+    folders, warnings = walk_folders(client, root_id)
+    descriptions = {}
+    for _, path, folder in folders:
+        description = folder.get('description', '')
+        if not isinstance(description, str):
+            warnings.append(f'{path or "root"}: invalid description; description skipped.')
+            description = ''
+        descriptions[path] = description
     return descriptions, warnings
 
 
@@ -96,7 +115,7 @@ def prune_empty_folders(output: Path) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description='Export Drive folder descriptions as a gallery directory tree.')
-    parser.add_argument('--root-folder-id')
+    parser.add_argument('--root-folder-id', help='Drive gallery root (default: GOOGLE_DRIVE_ROOT_FOLDER_ID).')
     parser.add_argument('--output', type=Path, default=DEFAULT_OUTPUT, help='New output directory for the hierarchy.')
     parser.add_argument('--prune-only', action='store_true', help='Remove empty subfolders from existing output without accessing Drive.')
     args = parser.parse_args(argv)
@@ -108,12 +127,13 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         print(f'Pruned {removed} empty folders from {args.output}.')
         return 0
-    if not args.root_folder_id:
-        parser.error('--root-folder-id is required unless using --prune-only.')
     try:
         settings = drive_settings()
     except (OSError, ValueError) as error:
         parser.error(f'Cannot read repository .env: {error}')
+    root_id = root_folder_id(args.root_folder_id, settings)
+    if not root_id:
+        parser.error('Pass --root-folder-id or set GOOGLE_DRIVE_ROOT_FOLDER_ID unless using --prune-only.')
     key = settings['GOOGLE_DRIVE_API_KEY']
     if not key:
         parser.error('Set GOOGLE_DRIVE_API_KEY in your environment or repository .env.')
@@ -123,8 +143,8 @@ def main(argv: list[str] | None = None) -> int:
         client = DriveClient(key)
         resource_key = settings['GOOGLE_DRIVE_ROOT_RESOURCE_KEY']
         if resource_key:
-            client.set_resource_key(args.root_folder_id, resource_key)
-        descriptions, warnings = scrape_descriptions(client, args.root_folder_id)
+            client.set_resource_key(root_id, resource_key)
+        descriptions, warnings = scrape_descriptions(client, root_id)
         count = write_descriptions(args.output, descriptions)
     except (DriveError, OSError, ValueError) as error:
         print(f'ERROR: {error}', file=sys.stderr)

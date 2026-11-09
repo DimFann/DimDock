@@ -15,7 +15,7 @@ if not __package__:
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from path_loader.file_store import validate_key
-from gdrive_scripts.configuration import drive_settings
+from gdrive_scripts.configuration import drive_settings, root_folder_id
 
 
 FOLDER_MIME = 'application/vnd.google-apps.folder'
@@ -225,7 +225,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description='Export public Google Drive file and directory shortcuts to DimDock .shortcuts.json (Python 3.10+).',
     )
-    parser.add_argument('--root-folder-id', required=True, help='ID of the gallery source root in Drive.')
+    parser.add_argument('--root-folder-id', help='ID of the gallery source root in Drive '
+                        '(default: GOOGLE_DRIVE_ROOT_FOLDER_ID).')
     parser.add_argument('--output', type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument('--overwrite', action='store_true', help='Replace existing output (does not merge).')
     args = parser.parse_args(argv)
@@ -233,6 +234,9 @@ def main(argv: list[str] | None = None) -> int:
         settings = drive_settings()
     except (OSError, ValueError) as error:
         parser.error(f'Cannot read repository .env: {error}')
+    root_id = root_folder_id(args.root_folder_id, settings)
+    if not root_id:
+        parser.error('Pass --root-folder-id or set GOOGLE_DRIVE_ROOT_FOLDER_ID in your environment or repository .env.')
     api_key = settings['GOOGLE_DRIVE_API_KEY']
     if not api_key:
         parser.error('Set GOOGLE_DRIVE_API_KEY in your environment or repository .env; do not commit it.')
@@ -242,8 +246,8 @@ def main(argv: list[str] | None = None) -> int:
         client = DriveClient(api_key)
         resource_key = settings['GOOGLE_DRIVE_ROOT_RESOURCE_KEY']
         if resource_key:
-            client.set_resource_key(args.root_folder_id, resource_key)
-        data, warnings = export_shortcuts(client, args.root_folder_id)
+            client.set_resource_key(root_id, resource_key)
+        data, warnings = export_shortcuts(client, root_id)
         args.output.parent.mkdir(parents=True, exist_ok=True)
         write_output(args.output, data, args.overwrite)
     except (DriveError, OSError, ValueError) as error:

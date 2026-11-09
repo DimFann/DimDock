@@ -1,0 +1,1296 @@
+{
+  "LegacyRedirects": [
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "0B2pqGm-YJFT0WXdqZ0tnbDFnMm8"
+      },
+      "Target": "/Gallery"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1Cll6RPRmjl-_h4j08XX-ZdBBFwiHMg-a"
+      },
+      "Target": "/Gallery/2013"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "131InmBF_OwjPAP8FCGo6-Txo7pTTPaDA"
+      },
+      "Target": "/Gallery/2013/Angel"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13N0nO8okGVekz0X4Aqx40xM0Pv7bvfw-"
+      },
+      "Target": "/Gallery/2013/Angel/comic_Storyboard"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13-hR3lEJ49BNg87h2Yq42vec-jfJcf5T"
+      },
+      "Target": "/Gallery/2013/ArmoredDash"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "131JXULiulvCPWB8FUCLNmyR-9-aEjHnL"
+      },
+      "Target": "/Gallery/2013/ArmoredGilda"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1318n8PW5ETmzrYsKz_d09uqnzcSApRCv"
+      },
+      "Target": "/Gallery/2013/TwilightVsRarity"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "130fhUPgg1Ag0UgRbcFz8_NfnpeQ1lW64"
+      },
+      "Target": "/Gallery/2013/TwiPrank"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13UdhoKOZlAcrTn8ETtGrDFoMTkP_p7aP"
+      },
+      "Target": "/Gallery/2014"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13UhS4Xfoqxvizikq7p5-Oo4EcVYJQwgZ"
+      },
+      "Target": "/Gallery/2014/2014-01"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13WTmvsiYxdhF_qzmeykURUVKOiHZROQ5"
+      },
+      "Target": "/Gallery/2014/2014-02"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13WVfrzKjCIvxjhy9PjJXWFAmAemSJfkZ"
+      },
+      "Target": "/Gallery/2014/2014-03"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13eqT-iCGZU9iyjeaQ-fC4rscu7ZmXQBM"
+      },
+      "Target": "/Gallery/2014/2014-04"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13fmjhVilgjXi-kOlv9OYhPkRyXratE82"
+      },
+      "Target": "/Gallery/2014/2014-05"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13g0mNEH1QQNIX35IfDFAz6EGLRPiklCL"
+      },
+      "Target": "/Gallery/2014/2014-06"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13gCT5n6z0lBa_uP3FP3eV0OnWqjly-Eo"
+      },
+      "Target": "/Gallery/2014/2014-07"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "14isrHbCgf5guCg0h8tPtXPHcK8871oLw"
+      },
+      "Target": "/Gallery/2014/2014-08"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "14iXimp-aPnJY9l3DUu6EpeLysdfyePVF"
+      },
+      "Target": "/Gallery/2014/2014-09"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "14go23sOkG8ONDTFAGFU5WBB57HH-4thc"
+      },
+      "Target": "/Gallery/2014/2014-10"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "14gSqRLMDF6iltx0re598DEQFqnNhwamO"
+      },
+      "Target": "/Gallery/2014/2014-11"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "14gOIp6qjAut2sbQWQzvVBTb5TfXR6Zc5"
+      },
+      "Target": "/Gallery/2014/2014-12"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10aCIvXMVmUmK0hU8g34yS2cfZl1KItFT"
+      },
+      "Target": "/Gallery/2015"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10dg0lRPr31f1h0TxqvENbf9IolBpHBpx"
+      },
+      "Target": "/Gallery/2015/2015-06"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10er6M_4bo5h2liyNcOs-V-vjBqb6-FRx"
+      },
+      "Target": "/Gallery/2015/2015-07"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10hElsR2aOd1RfmU3v9lEhTMPaj0yZyk3"
+      },
+      "Target": "/Gallery/2015/2015-08"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "13-rLND4M4qcAxgWn04npeyzVvgXU7CD0"
+      },
+      "Target": "/Gallery/2015/2015-10"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10ndg8b9K5XN5mDA69-bWr7yeW8uN2NWe"
+      },
+      "Target": "/Gallery/2015/2015-11"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10aKiRD-NDuEXireweMJCa734PAHfoJJx"
+      },
+      "Target": "/Gallery/2015/2015-12"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1tNki3Vf1xPwtW7nCQi0A5s26yHkPqDMS"
+      },
+      "Target": "/Gallery/2017"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1SZ8QU7if9uzQOWHFlJQAMA4Ay8pxQs7T"
+      },
+      "Target": "/Gallery/2017/2017-01"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1_oKNLxpVXT25KeR177PlYFsLqxjGnUOd"
+      },
+      "Target": "/Gallery/2017/2017-02"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1l4QtVHNowqNQHGw7ThQbupdpZ9wrTzhu"
+      },
+      "Target": "/Gallery/2017/2017-03"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1e6f223z3R0FDcilutaeo6Lf_gJFsr7TX"
+      },
+      "Target": "/Gallery/2017/2017-04"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1hcM6TpsnM3OsZtO0BnC4SqrvFu8Nn5CB"
+      },
+      "Target": "/Gallery/2017/2017-05"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-BthNx_pC06mSMvwJ0ZLLtGAe6ukTyUn"
+      },
+      "Target": "/Gallery/2017/2017-06"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1CyQJJ0gZBDiMEajB_Z9KwqQPw_wWBsR8"
+      },
+      "Target": "/Gallery/2017/2017-07"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "11m1EJ7WmF0TBr5mZ45Db3qIMjSsy_e9H"
+      },
+      "Target": "/Gallery/2017/2017-08"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1NwvHwJFkd--MtQxssaPaG9Mqsrq-6SHV"
+      },
+      "Target": "/Gallery/2017/2017-09"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10zNDEb7ydMgboMZxJuufd7EajVAZN3tb"
+      },
+      "Target": "/Gallery/2017/2017-10"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1e8pWRcryR4MXRu3NNOh80gMdpollf-KE"
+      },
+      "Target": "/Gallery/2017/2017-11"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1XM-PINDjGocrliOMUi5fxCmAF7nzFjZv"
+      },
+      "Target": "/Gallery/2017/2017-12"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1xmNhTBk2L9F_BgzaPWrVaS36qV8TuHUt"
+      },
+      "Target": "/Gallery/2018"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1x-fMaWWQu30gkgL--mQztKfnrNRPkwk9"
+      },
+      "Target": "/Gallery/2018/2018-01"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1dRBrjo3yepkEf6gkyRExUy0OFGUJ9lcQ"
+      },
+      "Target": "/Gallery/2018/2018-02"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1ZKNasDHn2mX3ZIkpOgXoCaaLaJmRQKwv"
+      },
+      "Target": "/Gallery/2018/2018-03"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1d9UlOFlzoYFQUS0-BVQn7FaSs8OtK1q-"
+      },
+      "Target": "/Gallery/2018/2018-04"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "14xGr2beLLTSJkSSIqLNUXqNCdxumurCT"
+      },
+      "Target": "/Gallery/2018/2018-05"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1qKsP3y_YpJj2KRR3Urbmdhi7aAp3lUX6"
+      },
+      "Target": "/Gallery/2018/2018-06"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "14l5KxjEAkMEHFzzrdUwkEnHdSUXovHKs"
+      },
+      "Target": "/Gallery/2018/2018-07"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1q88xhNf5ps-3lnuRDMMLQ_TBW8dGCnmo"
+      },
+      "Target": "/Gallery/2018/2018-08"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1HInuTWyXDXcbYdkGg8mgSYPxWf8m3Xh2"
+      },
+      "Target": "/Gallery/2018/2018-09"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "16sZwpwayRC9SN89GWdMSspAD2EbnqI3S"
+      },
+      "Target": "/Gallery/2018/2018-10"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1ax8rcw8iP2ks3JTMrFaVor0M_hmFUiVi"
+      },
+      "Target": "/Gallery/2018/2018-11"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1SRxB7O17TVHE5nE2eacGodxeF-zySOns"
+      },
+      "Target": "/Gallery/2018/2018-12"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-Dw6p4x1HhoJOfX3Ew3s0fVZJ9lysp58"
+      },
+      "Target": "/Gallery/2019"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10cVvkU0BvsCFSERgwlkXv_y8mHHwerrs"
+      },
+      "Target": "/Gallery/2019/2019-01"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1szRYa402ra6BbMpI9vQ8ybjfkAL_jQIV"
+      },
+      "Target": "/Gallery/2019/2019-02"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1hltREUUbshpz6jnO6W_ueMjVNKKDtjXP"
+      },
+      "Target": "/Gallery/2019/2019-03"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1SV-3fseG2hb5rUrta64iWii9wCDn5WXt"
+      },
+      "Target": "/Gallery/2019/2019-04"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-6QIIpZjHrtK4nsl5elojTs5NcOjEQ6z"
+      },
+      "Target": "/Gallery/2019/2019-05"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1UljZWrpGYMmiYLKTAl3DjUMwLmxx0Vmh"
+      },
+      "Target": "/Gallery/2019/2019-06"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1rsG0kHF77sk9eMVX4E0wJQtmZOkfS5Li"
+      },
+      "Target": "/Gallery/2019/2019-07"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1oCLT6Eayp8fGOAF7YU8bwETSdO6vj_Ar"
+      },
+      "Target": "/Gallery/2019/2019-08"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1cn52jK_MWbwOGeUu5tsqVDeHT90RVP2t"
+      },
+      "Target": "/Gallery/2019/2019-09"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1nKCsJMI_Ol6GAkTdNNUwUMeedGLVDk9x"
+      },
+      "Target": "/Gallery/2019/2019-10"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1HkwzhDLXePprTMWHc3y5nK-mtg1v7o15"
+      },
+      "Target": "/Gallery/2019/2019-11"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1fvH3qikSazCXxJElOAtPxNHXmgR0Z4Cj"
+      },
+      "Target": "/Gallery/2019/2019-12"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "16Xq3xnDnE22cz8isTxqko5VpTFm5HO4m"
+      },
+      "Target": "/Gallery/2020"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "17eMZu9OUL-hsCiKoUhQ6OZOcD7gbPbYu"
+      },
+      "Target": "/Gallery/2020/2020-01"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1pjbstC--v5V7EtZkV0t7aRVtodLrDORc"
+      },
+      "Target": "/Gallery/2020/2020-02"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1aPQXEDoGjiNckgaE9bU7PuEsqb5Vtv1f"
+      },
+      "Target": "/Gallery/2020/2020-03"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1bokpidyidZ6rpl6sI2y0mm26gyJleoNT"
+      },
+      "Target": "/Gallery/2020/2020-04"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1BNMpAPA9eDnpdj75ttXvU2Q1cpLGQYf_"
+      },
+      "Target": "/Gallery/2020/2020-05"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1ibrwNYPKjqeS9LcEXkdaEvBCoJQv0Z8-"
+      },
+      "Target": "/Gallery/2020/2020-06"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1q0LL8CEZeG3kIHSiJy0-VorJaUfB_NlK"
+      },
+      "Target": "/Gallery/2020/2020-07"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1D84L6ahFNgUyvpAXPKP1eJoyONBYRIYI"
+      },
+      "Target": "/Gallery/2020/2020-08"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1QO8TZZ-5nfHUZnIme2w1125WQduMdtuv"
+      },
+      "Target": "/Gallery/2020/2020-09"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1NTfpwiRJYyA7cfvKtCIcnHaf6s89cxnZ"
+      },
+      "Target": "/Gallery/2020/2020-10"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1h1xXPRsyPZYQW8sWt8smJHyRjY6nLXd6"
+      },
+      "Target": "/Gallery/2020/2020-11"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1_HDGv7AEfAgudlAMTYxe0qXZffck1KWy"
+      },
+      "Target": "/Gallery/2020/2020-12"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1LdmepNryOxBmLHrChHircE15fEhlha3P"
+      },
+      "Target": "/Gallery/2021"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1OiU8xSJ0icWYVR-wILQFrMue8vW0Yyyg"
+      },
+      "Target": "/Gallery/2021/2021-01"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1aASYNCCyOzh4fPpJ9eTYX8U7oog2Rsl5"
+      },
+      "Target": "/Gallery/2021/2021-02"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "105bz2xp2H-izQ68nZcnosLXc0kffcAdB"
+      },
+      "Target": "/Gallery/2021/2021-03"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1X_YERNgEiw8vE_1sy2-mqpd3_KH-dT3e"
+      },
+      "Target": "/Gallery/2021/2021-04"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1mpIGje8Z1SxXY2m0ROmEofB6DWUufVsz"
+      },
+      "Target": "/Gallery/2021/2021-05"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-oDreGzHDjHK92KvNd00lw-HQYd_lgt3"
+      },
+      "Target": "/Gallery/2021/2021-06"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-oHVuOeEBMCbCp-E7qHvVwkQ4vq-ae1c"
+      },
+      "Target": "/Gallery/2021/2021-07"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1CVCgLR5nFIOssaG13vgQkLZiDIVMTFkP"
+      },
+      "Target": "/Gallery/2021/2021-08"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-oqLIiz2YcquK6MJoj-qDOM96KRqxJDz"
+      },
+      "Target": "/Gallery/2021/2021-09"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-p6vew_YI_L4MXZlzWZPJsb9RDoxAV7d"
+      },
+      "Target": "/Gallery/2021/2021-10"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10VLQAV14dbb7i74mRw0FZD4XS5SDWlJJ"
+      },
+      "Target": "/Gallery/2021/2021-11"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "11qE2AHMnAMjbruwh7-vfoEDAnsnQnY6l"
+      },
+      "Target": "/Gallery/2021/2021-12"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1QT8bWk-5TKwJLioD85G5kYoBl7Qvc3ra"
+      },
+      "Target": "/Gallery/2022"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-EsblVxhvIDsUzOKPmK0AWCd4mOwZCSp"
+      },
+      "Target": "/Gallery/2022/2022-01"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1BDl4BUtJIxWbsVPWO6q_soA3SBCSytvV"
+      },
+      "Target": "/Gallery/2022/2022-02"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1QXrd_qopUD2o2glGxhY8TBSu-ORMAULi"
+      },
+      "Target": "/Gallery/2022/2022-03"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10Z2jGRWJ2VyT5iRUf3MW3IezUSvNxG5q"
+      },
+      "Target": "/Gallery/2022/2022-04"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "110YvXbfoMGUtSnYJIhX52KtLCNW46ptD"
+      },
+      "Target": "/Gallery/2022/2022-05"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "11Cc9obF8yUKZ9oz3Otuqj1L9podLk2k-"
+      },
+      "Target": "/Gallery/2022/2022-06"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "11cUxLtjrFpAYK0TkC0wFsdZGqU2-67WP"
+      },
+      "Target": "/Gallery/2022/2022-07"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "11g7XglD-VFPViF7jv2UC30PYqZ_ohHw8"
+      },
+      "Target": "/Gallery/2022/2022-08"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-G_cjmFdqLE4691Y9sxl321ViqYdOXox"
+      },
+      "Target": "/Gallery/2022/2022-09"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "11jb3gd7x0SkizkJUNm40GOW06cb4uuzE"
+      },
+      "Target": "/Gallery/2022/2022-10"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "11kn-T0Y3g2K13tA5o_P4MI2QSAvoBDPS"
+      },
+      "Target": "/Gallery/2022/2022-11"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-HnxCwBqIBmfxObnT4E5xkw9cUuGcqAP"
+      },
+      "Target": "/Gallery/2022/2022-12"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-08FEIU_M8NcwhDhQsxWBkodBDyK-6WZ"
+      },
+      "Target": "/Gallery/2023"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1oknpgIgY_z5jmQX_ScqriXZYU4tpMs64"
+      },
+      "Target": "/Gallery/2023/2023-01"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1stgdpvexRt_YIg4tr-9KWUDpkvzgJRVn"
+      },
+      "Target": "/Gallery/2023/2023-02"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1vgeSExzUVQjKUlMosUY7wluCb7fTVvqU"
+      },
+      "Target": "/Gallery/2023/2023-03"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1vFia3ChoVRNfYOmys3OdZVRTqvzK9rUG"
+      },
+      "Target": "/Gallery/2023/2023-04"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-9Ag04-dcZM-Rggmd6EgxYLEj4_SAsQq"
+      },
+      "Target": "/Gallery/2023/2023-05"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-4ybH_k9wZ9R-FS7L82XzgJuccfMW7gc"
+      },
+      "Target": "/Gallery/2023/2023-06"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-8FLhNDQIAM7toysJ0BYd-MU_o-Dhlxk"
+      },
+      "Target": "/Gallery/2023/2023-07"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-mv47fnEVzmkG-ZyvgNpQrwgzhKDMspy"
+      },
+      "Target": "/Gallery/2023/2023-08"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-n-YoeJcVNj1left-9Y3zCXzqnxt9L4q"
+      },
+      "Target": "/Gallery/2023/2023-09"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-n6whU4t06odOEVwdJq0VFB4rE2pISeO"
+      },
+      "Target": "/Gallery/2023/2023-10"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-bLlanjtPIys67PQ-2gn7REoPTtdfBhA"
+      },
+      "Target": "/Gallery/2023/2023-11"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1NNVP-CbB5QJn2tPTaZIWcn_dv-Yvti62"
+      },
+      "Target": "/Gallery/2023/2023-11/2023-11_FemDim_Facility02"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1k7rGSvcDdwL3fLxuPosDC6iuNSAyDv7P"
+      },
+      "Target": "/Gallery/2023/2023-11/2023-11_FemDim_Facility06"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "18B-ZQeuEauS8cdru2JzgXL7LDDSBBpy9"
+      },
+      "Target": "/Gallery/2023/2023-11/2023-11_FemDim_Facility06/comic_storyboard"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-gQxitzKN7uO-mDoPNI2bvWf_7sBfLn6"
+      },
+      "Target": "/Gallery/2023/2023-12"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1sFwoqMBJj4xMTNKjE6esAVa-YGsShWJX"
+      },
+      "Target": "/Gallery/2024"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1Y3oS7hd82esUnrD62o33matKKaokPzZi"
+      },
+      "Target": "/Gallery/2024/2024-01"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1AiLh82OrUAr0cP980_J1vIgEcd5CT7hS"
+      },
+      "Target": "/Gallery/2024/2024-02"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1ieqx_nhOcwOr7J9DGioc84PDz_d-vvdc"
+      },
+      "Target": "/Gallery/2024/2024-03"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-ge22sYiTo5gYTt7zD9xJZTYBoogi91l"
+      },
+      "Target": "/Gallery/2024/2024-04"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1VDXLhNAb_7f27PfkSDJVGev9s_qQFAJS"
+      },
+      "Target": "/Gallery/2024/2024-05"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1LQbVvqcPYcKOTp_jVMCzfv3tIgkMgosl"
+      },
+      "Target": "/Gallery/Misc"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-aSftDI9uFPE5_w5FVzHeMZHeZNTMvAG"
+      },
+      "Target": "/Gallery/Misc/BCON2016"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-Bf__rnH1fkvoDJyOdL3Abq1lO2B9QI_"
+      },
+      "Target": "/Gallery/Misc/BCON2017"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1piWQG26QhcMsla-LHBfHzL1ocNx8ju3M"
+      },
+      "Target": "/Gallery/Misc/BCON2018"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1PqwtvhOKwBXucyj7BUzv5e1Y9t1moNWh"
+      },
+      "Target": "/Gallery/Misc/BibleTreehugger"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "17FRxKFvz3swjY2So6ABxf9yxYy_4XiBS"
+      },
+      "Target": "/Gallery/Misc/Comics"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1fignKsCaeyt-GvzhuxvariU1OwxcFmTZ"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_Ass"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1MsPZ_8azPcwPpyedQxsooRjVZ3pkmjrX"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_Blorp"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1Nx__MzEKAc6b6HsN21B_xW3ye48iRmAv"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_Hands"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1uapZ55wKNTMI1HDqNpAx_S5m-dMSUANh"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_JanIsALewd"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1kYKjA_ABCqraYmCOmziwf0mv6v9HlpSv"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_NewSuits"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1pH0OSYEtHFvHpxy-LqvXWl8cXdLIKPdI"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_NotACelestiaEpisode"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1BioQSHSEy8pfKMNlEuLburRFSfI-JqZF"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_nut"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1fA4eVeKEx01clpIbQACrZ_bHI7vbwsTy"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_PecanPie"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1E-OVlhm_7fzvu-oXR7iFSqhMaGfj9ZDI"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_RoyalQuarrel"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1GiO3ApKy5zn3KFEY4AVvHjoic_8rFvdt"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_TheSingleSack"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1nDzMxK4eF49n-RSjILG8c3c47opEGNhz"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_Wiggle"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1VHy_1HyZo-X1SSw-Ok90VQxkj42LY41Z"
+      },
+      "Target": "/Gallery/Misc/Comics/comic_YodiYYodi"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1LVBz6tI8H4XK3ST78a-yHHGiM6RKFiFA"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1VYVLfonA8rgGTwa_M1Ov-iZSAgRzRFR_"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_AmazinArts"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1116z64mwhnFpRCPk4AF1qCOmrtI0-B7I"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_Chromaskunk"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1TcUZIqj9A8D5xF3lnFsmyGNNfr7VEShf"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_CrimmHarmony"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-4-ae_k2-ejhU1ZqWxrlwFgOK-X1lUaM"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_Nadnerbd"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "16_YIyL4P6yAK2pivPi-931KfIqEQrzcm"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_Swiftnicity"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1-0DUDdST_oBubl8UG_MOjNXvanlBqdiz"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_TG"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "17f9ldm5f6ZtsCQfGJ2LbDgYHX_Cdoe81"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_Verulence"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1sqG-LRAnNNsxT6m84LdCbdQf9Lnp8fkA"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_VibrantStar"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1KBaYlMZL0K-OS5skF0oihXTjQF85ZKQL"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_Vintyri"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1XfamELwOU4TXPzX7ZPin27Wk6tbdu9nL"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_Wenni"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1Cm-c3frWZo1pDNJgIk8GgEaoPyltvVB-"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/By_Yoditax"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1peAhP8cUTan23jQIYQItEc4Q6iQ9_fSs"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1AbieWPZ-XgsZShZJ3R2aRDu0iCHFYLTg"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Dim_X_Gun"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1U8tk7fkfKciwnTWO4s_025iJoslegyqT"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Dim_X_Other"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "11Pz2rY2V1jxrrLdrQsCTjFNjWEWzwkoe"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Dim_X_Spitte"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1ZGu-jKsMoIyMIlHPAHNLFBJ6OBXVDCf3"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Dim_X_Sylvine"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1e3VxMN6F7RO0LfycAn3WK_hXOyxchREY"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Dim_X_Sylvine/Inappropriate"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1BDLu6K97vVKCRAeTdxWyFEyjjJaawbOr"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Dim_X_Yodi"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1TYa97huHRR5DiKFOFB_3wHYhD4pv2vwJ"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Emotions"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1AaX3RGs8mgg4GT7QiXH0CduyyOLQd90A"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Emotions/General_Discontentment"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10nnB7N_029629voMjHN8sh_Qz894azTe"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Emotions/General_Discontentment/Work"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1yJ2PUIts9b8b91qMQSCsTC05OWa7ZP7e"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Emotions/General_Discontentment/Work/comic_impostor-syndrome"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1_MebALB63d1tJU7NLs-pG7dFAzatGcct"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Emotions/Loneliness_And_Heartbreak"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "10oFztXx6-y56AEFdB3KTmPiMIYaXet7I"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Emotions/Loneliness_And_Heartbreak/comic_clone"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1KIuE4rNGQLdY1i-3tm9ixMqtKRf4t-6F"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Emotions/Pain_And_Instability"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "14n7ovqw4TDApVIUadiq2jHA0cQwwBZfB"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Emotions/Sadness_And_Fatigue"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1uNQHuq6dpu0r6vZyiMuH1dYCsJyYz6rB"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Emotions/Uncertain_Positivity"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1NeJN9odWJuL0iORQs23yzk-pW-5nLflE"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/FemDim"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1cK7Sk90PeeOJEWiXLzp_RU-Tmqob9gmf"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/FemDim/Inappropriate"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1W7zsWFGSS5tl98SWoTbELmUvpXdkgQR9"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/FemDim/Inappropriate/comic_owo"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1sT3oGV8prAymRa0Vw0L0ZlXZyw1bXXl6"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/Inappropriate"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1ZnitfaiYuizT9GTrlaeftuBuX7G_DEN8"
+      },
+      "Target": "/Gallery/Misc/Dim_OC_Art/My_Art/ProtoDim"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1MKqiJorJQVfo9n0UVg-ihhkwdkbk2udt"
+      },
+      "Target": "/Gallery/Misc/Drawpile"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1TYPUDQW3vLOe8vGbJvWX3HQYtWYJFf4w"
+      },
+      "Target": "/Gallery/Misc/Reference"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1uiJCFxMLoznEmK7Zu8dNPYbkj1yJCaxz"
+      },
+      "Target": "/Gallery/Misc/Reference/PonyAnatomy"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "1euMtJWXHv-IwBdkFAaGGTFMhM-YaTgAh"
+      },
+      "Target": "/Gallery/Misc/Reference/PonyAnatomy/Extra"
+    },
+    {
+      "Path": "/sketch",
+      "Query": {
+        "folderID": "0B2pqGm-YJFT0S3NINnZRUldyY0U"
+      },
+      "Target": "/Gallery/Misc/Timelapse"
+    },
+    {
+      "Path": "/sketch",
+      "Target": "/Gallery"
+    }
+  ]
+}
