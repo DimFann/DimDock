@@ -62,7 +62,7 @@ services:
     container_name: website
     depends_on:
       path-loader:
-        condition: service_started
+        condition: service_completed_successfully
       thumbnail-service:
         condition: service_healthy
     ports:

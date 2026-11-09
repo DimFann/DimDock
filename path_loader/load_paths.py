@@ -9,6 +9,7 @@ import json
 import unicodedata
 import logging
 import io
+import time
 
 from file_store import LocalFileStore
 
@@ -532,7 +533,21 @@ def main():
             database=DB_NAME
         )
         cursor = conn.cursor()
-        total_files = traverse_and_insert(cursor)
+        for attempt in range(1, 4):
+            try:
+                total_files = traverse_and_insert(cursor)
+                conn.commit()
+                break
+            except mysql.connector.Error as error:
+                if error.errno not in (1020, 1205, 1213) or attempt == 3:
+                    raise
+                conn.rollback()
+                logging.warning(
+                    "Gallery scan transaction conflicted (MySQL %s); retrying attempt %s/3.",
+                    error.errno,
+                    attempt + 1
+                )
+                time.sleep(attempt)
         inserted_blogs = process_blogs(cursor)
         process_about(cursor)
         # process_shortcuts(cursor)

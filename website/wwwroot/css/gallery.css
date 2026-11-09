@@ -274,7 +274,10 @@
   padding: 0;
 }
 
-.gallery-image-result.admin-only-tagged,
+.gallery-image-result.admin-only-tagged {
+  border: 3px solid #a00;
+}
+
 .image-viewer.admin-only-tagged {
   border: 2px solid var(--admin-blue);
 }
@@ -283,7 +286,9 @@
   color: var(--admin-blue-dark);
 }
 
-.gallery-directory-table .admin-only-tagged {
+.gallery-directory-table a.admin-only-tagged,
+a.admin-only-tagged {
+  color: #a00;
   font-weight: 700;
 }
 

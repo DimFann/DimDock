@@ -36,6 +36,11 @@ use `localhost` for local HTTP development.
 
 Open the website at `http://localhost:<WEBSITE_PORT>` (set in `.env`).
 
+The website waits for the path loader to finish successfully before starting.
+Gallery indexing retries its full database transaction up to three attempts
+on record-change conflicts, deadlocks, or lock timeouts; other errors, or
+exhausted retries, fail startup rather than silently skipping indexing.
+
 The shared Razor layout loads the stylesheets in `website/wwwroot/css` in a
 fixed order. `site.css` contains site-wide styles; the other files group blog,
 editor, admin, gallery, image, search, shared component, and comic styles.
