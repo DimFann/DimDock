@@ -11,7 +11,7 @@ import logging
 import io
 import time
 
-from file_store import LocalFileStore
+from file_store import create_file_store
 
 # 🔧 Configuration
 logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
@@ -24,7 +24,7 @@ DB_USER = os.environ['DB_USER']
 DB_PASSWORD = os.environ['DB_PASSWORD']
 DB_NAME = os.environ['DB_NAME']
 DATA_ROOT = os.environ.get('DIMDOCK_DATA_ROOT', '/data')
-STORE = LocalFileStore(DATA_ROOT)
+STORE = create_file_store()
 TAG_MANIFEST_FILENAME = '.dimdock.json'
 DESCRIPTION_FILENAME = '.description.md'
 LEGACY_DESCRIPTION_FILENAME = 'description.md'
@@ -318,11 +318,30 @@ def process_blogs(cursor):
 
     return inserted_blogs
 
-def process_about(cursor):
+def read_or_create_text(area, key, default_content):
     try:
-        description = STORE.read_text('about', 'about.md')
+        try:
+            return STORE.read_text(area, key)
+        except FileNotFoundError:
+            try:
+                STORE.write(area, key, default_content.encode('utf-8'), overwrite=False)
+                logging.warning("Created missing %s/%s with default content.", area, key)
+            except FileExistsError:
+                # Another writer created the file after our read; import their content.
+                pass
+            return STORE.read_text(area, key)
     except (OSError, UnicodeError) as error:
-        raise RuntimeError(f"Unable to load About content from about/about.md: {error}") from error
+        raise RuntimeError(f"Unable to load content from {area}/{key}: {error}") from error
+
+
+def initialize_admin_only_tags():
+    read_or_create_text(
+        'admin', 'admin-only-tags.json',
+        json.dumps({'admin-only-tags': ['hidden']}, indent=2) + '\n')
+
+
+def process_about(cursor):
+    description = read_or_create_text('about', 'about.md', '')
 
     cursor.execute("""
         INSERT INTO About (id, description)
@@ -525,6 +544,8 @@ def main():
     try:
         for area in ('gallery', 'thumbnails', 'blogs', 'about', 'admin', 'state'):
             STORE.create_directory(area)
+
+        initialize_admin_only_tags()
 
         conn = mysql.connector.connect(
             host=DB_HOST,

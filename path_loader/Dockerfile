@@ -14,9 +14,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Install Python dependencies
-RUN pip install --no-cache-dir \
-    mysql-connector-python \
-    pillow
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
 # Set working directory
 WORKDIR /app
@@ -24,6 +23,9 @@ WORKDIR /app
 # Copy Python script and wait-for-db script
 COPY load_paths.py .
 COPY file_store.py .
+COPY linode_file_store.py .
+COPY storage_smoke.py .
+COPY storage_clean.py .
 COPY build_shortcuts.py .
 COPY db-load-activity.sh .
 

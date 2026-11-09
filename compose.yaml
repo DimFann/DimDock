@@ -43,6 +43,13 @@ services:
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       DB_NAME: ${DB_NAME:?Set DB_NAME in .env}
       DIMDOCK_DATA_ROOT: ${FILE_STORAGE_ROOT:-/data}
+      FILE_STORAGE_PROVIDER: ${FILE_STORAGE_PROVIDER:-Local}
+      LINODE_STORAGE_ENDPOINT: ${LINODE_STORAGE_ENDPOINT:-}
+      LINODE_STORAGE_REGION: ${LINODE_STORAGE_REGION:-}
+      LINODE_STORAGE_BUCKET: ${LINODE_STORAGE_BUCKET:-}
+      LINODE_STORAGE_PREFIX: ${LINODE_STORAGE_PREFIX:-}
+      LINODE_STORAGE_ACCESS_KEY: ${LINODE_STORAGE_ACCESS_KEY:-}
+      LINODE_STORAGE_SECRET_KEY: ${LINODE_STORAGE_SECRET_KEY:-}
     command: ["python", "/app/load_paths.py"]
 
   thumbnail-service:
@@ -76,6 +83,13 @@ services:
       DataProtection__KeysPath: ${FILE_STORAGE_ROOT:-/data}/app_state/data-protection-keys
       FileStorage__Provider: ${FILE_STORAGE_PROVIDER:-Local}
       FileStorage__RootPath: ${FILE_STORAGE_ROOT:-/data}
+      LinodeStorage__Endpoint: ${LINODE_STORAGE_ENDPOINT:-}
+      LinodeStorage__Region: ${LINODE_STORAGE_REGION:-}
+      LinodeStorage__Bucket: ${LINODE_STORAGE_BUCKET:-}
+      LinodeStorage__Prefix: ${LINODE_STORAGE_PREFIX:-}
+      LinodeStorage__AccessKey: ${LINODE_STORAGE_ACCESS_KEY:-}
+      LinodeStorage__SecretKey: ${LINODE_STORAGE_SECRET_KEY:-}
+      LinodeStorage__PublicBaseUrl: ${LINODE_STORAGE_PUBLIC_BASE_URL:-}
       Database__Host: db
       Database__Port: "3306"
       Database__Name: ${DB_NAME:?Set DB_NAME in .env}

@@ -3,6 +3,34 @@ import shutil
 import tempfile
 
 
+def validate_key(key, allow_root=True):
+    if not isinstance(key, str) or '\\' in key or key.startswith('/'):
+        raise ValueError(f'Invalid relative file key: {key!r}')
+    if key.endswith('/'):
+        if not allow_root:
+            raise ValueError(f'Invalid relative file key: {key!r}')
+        key = key[:-1]
+    segments = key.split('/') if key else []
+    if (not allow_root and (not segments or not key.strip())) or any(
+        not segment or segment in ('.', '..') or
+        any(ord(char) < 32 or 127 <= ord(char) <= 159 or char in '<>:"|?*' for char in segment)
+        for segment in segments
+    ):
+        raise ValueError(f'Invalid relative file key: {key!r}')
+    return '/'.join(segments)
+
+
+def create_file_store():
+    provider = os.environ.get('FILE_STORAGE_PROVIDER', 'Local')
+    root = os.environ.get('DIMDOCK_DATA_ROOT', '/data')
+    if provider.lower() == 'local':
+        return LocalFileStore(root)
+    if provider.lower() == 'linode':
+        from linode_file_store import LinodeFileStore
+        return LinodeFileStore.from_environment(LocalFileStore(root))
+    raise ValueError(f'Unsupported FILE_STORAGE_PROVIDER: {provider!r}')
+
+
 class LocalFileStore:
     _areas = {
         'gallery': 'img_src',
@@ -19,20 +47,8 @@ class LocalFileStore:
     def _path(self, area, key='', allow_root=True):
         if area not in self._areas:
             raise ValueError(f'Unknown file-store area: {area}')
-        if not isinstance(key, str) or '\\' in key or key.startswith('/'):
-            raise ValueError(f'Invalid relative file key: {key!r}')
-        if key.endswith('/'):
-            if not allow_root:
-                raise ValueError(f'Invalid relative file key: {key!r}')
-            key = key[:-1]
-        normalized = key
+        normalized = validate_key(key, allow_root)
         segments = normalized.split('/') if normalized else []
-        if (not allow_root and not segments) or any(
-            not segment or segment in ('.', '..') or
-            any(ord(char) < 32 or char in '<>:"|?*' for char in segment)
-            for segment in segments
-        ):
-            raise ValueError(f'Invalid relative file key: {key!r}')
 
         area_root = os.path.join(self.root, self._areas[area])
         path = os.path.abspath(os.path.join(area_root, *segments))
@@ -63,7 +79,7 @@ class LocalFileStore:
         return open(self._path(area, key, allow_root=False), 'rb')
 
     def read_text(self, area, key):
-        with open(self._path(area, key, allow_root=False), 'r', encoding='utf-8') as file:
+        with open(self._path(area, key, allow_root=False), 'r', encoding='utf-8-sig') as file:
             return file.read()
 
     def write(self, area, key, content, overwrite=True):

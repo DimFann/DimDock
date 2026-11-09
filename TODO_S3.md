@@ -172,6 +172,19 @@
 
 ## Phase 2 — Implement an S3-compatible adapter
 
+Implementation progress:
+
+- Local remains the default. `LinodeFileStore` (website) and the Python
+  `LinodeFileStore` (indexer/shortcuts) now share the configured bucket layout.
+- Configuration, private local runtime state, optional direct-media redirects,
+  paginated listing, streamed/spooled content, conditional puts, copy verification,
+  and explicit interrupted-move errors are wired.
+- Disposable S3 adapter checks and an explicit, isolated live smoke command are
+  available; see README. Mixed-fixture indexing parity passes against isolated
+  MariaDB. Live Linode compatibility, full deployment rebuild parity,
+  stable-ID migration, and deployment cost protection are not yet certified.
+- Do not enable public access before completing Phase 3 cost protection.
+
 - Implement the same storage contract using an S3-compatible SDK, configured
   with endpoint/region, bucket, key prefix, and credentials from environment
   variables or a deployment secret manager. Do not check credentials into

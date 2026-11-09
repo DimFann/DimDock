@@ -1,0 +1,3 @@
+mysql-connector-python
+boto3>=1.36,<2
+pillow

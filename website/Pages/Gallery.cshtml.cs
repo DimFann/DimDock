@@ -237,11 +237,7 @@ public class GalleryModel : PageModel
             string.Equals(entry.ShortcutPath, item.ParentPath, StringComparison.Ordinal));
         var parentPath = shortcut?.OriginalItem?.ParentPath ?? item.ParentPath;
         var fileName = shortcut?.OriginalItem?.OriginalName ?? item.OriginalName;
-        var segments = (parentPath ?? string.Empty)
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .Append(fileName)
-            .Select(Uri.EscapeDataString);
-        return "/img_src/" + string.Join('/', segments);
+        return FileStoreKeys.GallerySourceUrl(parentPath, fileName);
     }
 
     public BigInteger? GetComicLeadingNumber(string fileName)
@@ -1102,6 +1098,7 @@ public class GalleryModel : PageModel
             cancellationToken);
         using var content = new StreamContent(source);
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
+        content.Headers.ContentLength = source.Length;
         using var response = await _thumbnailClient.PostAsync(
             $"thumbnail/{thumbnailKey}",
             content,

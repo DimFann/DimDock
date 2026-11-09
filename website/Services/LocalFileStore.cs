@@ -5,8 +5,6 @@ namespace Website.Services;
 public sealed class LocalFileStore : IFileStore
 {
     private static readonly UTF8Encoding Utf8WithoutBom = new(false);
-    private static readonly HashSet<char> InvalidPortableFileNameCharacters =
-        ['<', '>', ':', '"', '|', '?', '*'];
     private readonly Dictionary<FileStoreArea, string> _roots;
 
     public LocalFileStore(IConfiguration configuration, IWebHostEnvironment environment)
@@ -354,44 +352,8 @@ public sealed class LocalFileStore : IFileStore
         return path;
     }
 
-    private static string[] ValidateKey(string key, bool allowEmpty)
-    {
-        ArgumentNullException.ThrowIfNull(key);
-        if (key.Contains('\\'))
-        {
-            throw new InvalidDataException($"Invalid relative file key: {key}");
-        }
-
-        var normalized = key;
-        if (normalized.StartsWith('/') || Path.IsPathRooted(key) ||
-            (!allowEmpty && string.IsNullOrWhiteSpace(normalized)))
-        {
-            throw new InvalidDataException($"Invalid relative file key: {key}");
-        }
-
-        if (normalized.EndsWith('/'))
-        {
-            if (!allowEmpty)
-            {
-                throw new InvalidDataException($"Invalid relative file key: {key}");
-            }
-
-            normalized = normalized[..^1];
-        }
-
-        var segments = normalized.Length == 0 ? [] : normalized.Split('/');
-        if (segments.Any(segment =>
-            string.IsNullOrEmpty(segment) ||
-            segment is "." or ".." ||
-            segment.Any(character =>
-                char.IsControl(character) ||
-                InvalidPortableFileNameCharacters.Contains(character))))
-        {
-            throw new InvalidDataException($"Invalid relative file key: {key}");
-        }
-
-        return segments;
-    }
+    private static string[] ValidateKey(string key, bool allowEmpty) =>
+        FileStoreKeys.Validate(key, allowEmpty);
 
     private void EnsureNoLinkedPath(FileStoreArea area, string key)
     {

@@ -1,4 +1,5 @@
 import unittest
+import json
 from unittest.mock import Mock, call, patch
 
 import mysql.connector
@@ -10,6 +11,88 @@ with patch.dict('os.environ', {
     'DB_NAME': 'test',
 }):
     import load_paths
+
+
+class AdminTagInitializationTests(unittest.TestCase):
+    def test_missing_configuration_is_created_with_hidden_tag(self):
+        store = Mock()
+        store.read_text.side_effect = [FileNotFoundError(), '{"admin-only-tags":["hidden"]}']
+        with patch.object(load_paths, 'STORE', store):
+            load_paths.initialize_admin_only_tags()
+        args = store.write.call_args
+        self.assertEqual(args.args[:2], ('admin', 'admin-only-tags.json'))
+        self.assertEqual(json.loads(args.args[2]), {'admin-only-tags': ['hidden']})
+        self.assertEqual(args.kwargs, {'overwrite': False})
+
+    def test_existing_configuration_is_preserved(self):
+        store = Mock()
+        store.read_text.return_value = '{"admin-only-tags":["draft","hidden"]}'
+        with patch.object(load_paths, 'STORE', store):
+            load_paths.initialize_admin_only_tags()
+        store.write.assert_not_called()
+
+    def test_concurrent_creation_is_preserved(self):
+        store = Mock()
+        store.read_text.side_effect = [FileNotFoundError(), '{"admin-only-tags":["draft"]}']
+        store.write.side_effect = FileExistsError()
+        with patch.object(load_paths, 'STORE', store):
+            load_paths.initialize_admin_only_tags()
+        self.assertEqual(store.read_text.call_count, 2)
+        self.assertEqual(store.write.call_count, 1)
+
+    def test_read_and_creation_failures_are_reported(self):
+        for missing in (False, True):
+            store = Mock()
+            if missing:
+                store.read_text.side_effect = FileNotFoundError()
+                store.write.side_effect = PermissionError('denied')
+            else:
+                store.read_text.side_effect = PermissionError('denied')
+            with patch.object(load_paths, 'STORE', store), self.assertRaises(RuntimeError):
+                load_paths.initialize_admin_only_tags()
+
+
+class AboutInitializationTests(unittest.TestCase):
+    def test_missing_about_is_created_and_imported(self):
+        store = Mock()
+        store.read_text.side_effect = [FileNotFoundError(), '']
+        cursor = Mock()
+        with patch.object(load_paths, 'STORE', store):
+            load_paths.process_about(cursor)
+        store.write.assert_called_once_with('about', 'about.md', b'', overwrite=False)
+        self.assertEqual(cursor.execute.call_args.args[1], ('',))
+
+    def test_existing_about_is_not_overwritten(self):
+        store = Mock()
+        store.read_text.return_value = 'Existing About'
+        cursor = Mock()
+        with patch.object(load_paths, 'STORE', store):
+            load_paths.process_about(cursor)
+        store.write.assert_not_called()
+        self.assertEqual(cursor.execute.call_args.args[1], ('Existing About',))
+
+    def test_concurrent_creation_imports_other_writers_content(self):
+        store = Mock()
+        store.read_text.side_effect = [FileNotFoundError(), 'Concurrent About']
+        store.write.side_effect = FileExistsError()
+        cursor = Mock()
+        with patch.object(load_paths, 'STORE', store):
+            load_paths.process_about(cursor)
+        self.assertEqual(cursor.execute.call_args.args[1], ('Concurrent About',))
+
+    def test_read_and_creation_failures_do_not_import_empty_content(self):
+        for failure in (PermissionError('denied'), OSError('network failure')):
+            for missing in (False, True):
+                store = Mock()
+                if missing:
+                    store.read_text.side_effect = FileNotFoundError()
+                    store.write.side_effect = failure
+                else:
+                    store.read_text.side_effect = failure
+                cursor = Mock()
+                with patch.object(load_paths, 'STORE', store), self.assertRaises(RuntimeError):
+                    load_paths.process_about(cursor)
+                cursor.execute.assert_not_called()
 
 
 class GalleryTransactionTests(unittest.TestCase):

@@ -760,11 +760,7 @@ public class ImageModel : PageModel
         Item = item;
         if (item.IsImage)
         {
-            var segments = (item.ParentPath ?? string.Empty)
-                .Split('/', StringSplitOptions.RemoveEmptyEntries)
-                .Append(item.OriginalName)
-                .Select(Uri.EscapeDataString);
-            SourceUrl = "/img_src/" + string.Join('/', segments);
+            SourceUrl = FileStoreKeys.GallerySourceUrl(item.ParentPath, item.OriginalName);
             DownloadUrl = SourceUrl;
         }
         else if (IsTextDocument)

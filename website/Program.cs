@@ -11,15 +11,38 @@ using MySqlConnector;
 using System.Threading.RateLimiting;
 using Website.Data;
 using Website.Services;
+using Amazon.Runtime;
+using Amazon.S3;
 
 var builder = WebApplication.CreateBuilder(args);
 const long maximumUploadRequestBytes = 512L * 1024 * 1024;
 const long maximumBlogImageRequestBytes = 21L * 1024 * 1024;
 var fileStorageProvider = builder.Configuration["FileStorage:Provider"] ?? "Local";
-if (!string.Equals(fileStorageProvider, "Local", StringComparison.OrdinalIgnoreCase))
+if (string.Equals(fileStorageProvider, "Local", StringComparison.OrdinalIgnoreCase))
 {
-    throw new InvalidOperationException(
-        $"Unsupported FileStorage:Provider '{fileStorageProvider}'. Only Local is currently available.");
+    builder.Services.AddSingleton<IFileStore, LocalFileStore>();
+}
+else if (string.Equals(fileStorageProvider, "Linode", StringComparison.OrdinalIgnoreCase))
+{
+    var storageOptions = builder.Configuration.GetSection("LinodeStorage").Get<LinodeStorageOptions>()
+        ?? throw new InvalidOperationException("LinodeStorage settings are required.");
+    storageOptions.Validate();
+    builder.Services.AddSingleton(storageOptions);
+    builder.Services.AddSingleton<IAmazonS3>(_ => new AmazonS3Client(
+        new BasicAWSCredentials(storageOptions.AccessKey, storageOptions.SecretKey),
+        new AmazonS3Config
+        {
+            ServiceURL = storageOptions.Endpoint,
+            AuthenticationRegion = storageOptions.Region,
+            ForcePathStyle = true,
+            RequestChecksumCalculation = RequestChecksumCalculation.WHEN_REQUIRED,
+            ResponseChecksumValidation = ResponseChecksumValidation.WHEN_REQUIRED
+        }));
+    builder.Services.AddSingleton<IFileStore, LinodeFileStore>();
+}
+else
+{
+    throw new InvalidOperationException($"Unsupported FileStorage:Provider '{fileStorageProvider}'. Use Local or Linode.");
 }
 
 var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
@@ -63,7 +86,6 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartBodyLengthLimit = maximumUploadRequestBytes;
     options.ValueCountLimit = 1024;
 });
-builder.Services.AddSingleton<IFileStore, LocalFileStore>();
 builder.Services.AddScoped<AdminOnlyTagsProvider>();
 builder.Services.AddScoped<FilesystemPersistenceService>();
 builder.Services.AddHttpClient("ThumbnailService", client =>
@@ -142,10 +164,10 @@ app.UseHttpsRedirection();
 app.UseStaticFiles();
 
 var fileContentTypes = new FileExtensionContentTypeProvider();
-app.MapGet("/img_src/{**key}", ServeStoredFileAsync(FileStoreArea.Gallery, addNosniff: false));
-app.MapGet("/img_db_thumbs/{**key}", ServeStoredFileAsync(FileStoreArea.Thumbnails, addNosniff: false));
-app.MapGet("/blogs/assets/{**key}", ServeStoredFileAsync(FileStoreArea.Blogs, addNosniff: true, keyPrefix: "assets/"));
-app.MapGet("/about/assets/{**key}", ServeStoredFileAsync(FileStoreArea.About, addNosniff: true, keyPrefix: "assets/"));
+app.MapMethods("/img_src/{**key}", ["GET", "HEAD"], ServeStoredFileAsync(FileStoreArea.Gallery, addNosniff: false));
+app.MapMethods("/img_db_thumbs/{**key}", ["GET", "HEAD"], ServeStoredFileAsync(FileStoreArea.Thumbnails, addNosniff: false));
+app.MapMethods("/blogs/assets/{**key}", ["GET", "HEAD"], ServeStoredFileAsync(FileStoreArea.Blogs, addNosniff: true, keyPrefix: "assets/"));
+app.MapMethods("/about/assets/{**key}", ["GET", "HEAD"], ServeStoredFileAsync(FileStoreArea.About, addNosniff: true, keyPrefix: "assets/"));
 
 RequestDelegate ServeStoredFileAsync(FileStoreArea area, bool addNosniff, string keyPrefix = "") =>
     async context =>
@@ -162,6 +184,11 @@ RequestDelegate ServeStoredFileAsync(FileStoreArea area, bool addNosniff, string
         try
         {
             var fileStore = context.RequestServices.GetRequiredService<IFileStore>();
+            if (fileStore is LinodeFileStore linodeStore && linodeStore.GetPublicUrl(area, key) is { } publicUrl)
+            {
+                context.Response.Redirect(publicUrl);
+                return;
+            }
             var stream = await fileStore.OpenReadAsync(area, key, context.RequestAborted);
             context.Response.ContentType = fileContentTypes.TryGetContentType(key, out var contentType)
                 ? contentType

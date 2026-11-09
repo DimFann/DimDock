@@ -3,7 +3,7 @@ import json
 import mysql.connector
 import logging
 
-from file_store import LocalFileStore
+from file_store import create_file_store
 
 # 🔧 Configuration
 logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
@@ -12,7 +12,7 @@ DB_USER = os.environ['DB_USER']
 DB_PASSWORD = os.environ['DB_PASSWORD']
 DB_NAME = os.environ['DB_NAME']
 DATA_ROOT = os.environ.get('DIMDOCK_DATA_ROOT', '/data')
-STORE = LocalFileStore(DATA_ROOT)
+STORE = create_file_store()
 SHORTCUTS_FILENAME = '.shortcuts.json'
 LEGACY_SHORTCUTS_FILENAME = 'shortcuts.json'
 
