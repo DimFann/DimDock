@@ -235,6 +235,11 @@ public sealed class FilesystemPersistenceService(
         {
             await DeleteBlogFileAsync(oldFilename, cancellationToken);
         }
+
+        if (!HasImageEmbeds(post.Text))
+        {
+            await DeleteBlogAssetsAsync(post.Id, cancellationToken);
+        }
     }
 
     public Task DeleteBlogFileAsync(
@@ -289,6 +294,16 @@ public sealed class FilesystemPersistenceService(
             return;
         }
 
+        if (!HasImageEmbeds(currentMarkdown))
+        {
+            await fileStore.DeleteDirectoryAsync(
+                FileStoreArea.About,
+                "assets",
+                recursive: true,
+                cancellationToken);
+            return;
+        }
+
         var candidates = GetAboutAssetNames(previousMarkdown);
         foreach (var url in uploadedUrls)
         {
@@ -308,6 +323,11 @@ public sealed class FilesystemPersistenceService(
             }
         }
     }
+
+    private static bool HasImageEmbeds(string? markdown) =>
+        Markdown.Parse(markdown ?? string.Empty, BlogMarkdownRenderer.Pipeline)
+            .Descendants<LinkInline>()
+            .Any(link => link.IsImage);
 
     private static HashSet<string> GetAboutAssetNames(string? markdown) =>
         Markdown.Parse(markdown ?? string.Empty, BlogMarkdownRenderer.Pipeline)

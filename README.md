@@ -74,7 +74,10 @@ Admins can create blog posts from the Blog page. Posts created in the website
 are stored in the database; posts imported from Markdown files in `/blogs`
 retain their existing file-based source. Images uploaded in a post's Markdown
 editor are stored under `DATA_DIR/blogs/assets/<post-id>` and are removed when
-that post is deleted. PNG, JPEG, GIF, and WebP images up to 20 MB can be
+that post is deleted. Saving a post with no image embeds also removes all
+lingering assets for that post, including images uploaded and then removed
+before saving. If any image embeds remain, the assets are left unchanged.
+PNG, JPEG, GIF, and WebP images up to 20 MB can be
 selected or dragged into the editor; the image scale selector inserts the
 chosen size using Markdown image syntax.
 
@@ -82,3 +85,4 @@ Admins can also edit the Home/About Markdown and upload or drop images using
 the same editor controls. Images are stored under `DATA_DIR/about/assets`.
 Saving removes managed About images that were removed from the Markdown,
 including images uploaded and then removed during the same editing session.
+If no image embeds remain, saving also removes all lingering About assets.
