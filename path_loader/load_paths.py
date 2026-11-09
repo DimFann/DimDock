@@ -617,8 +617,8 @@ def traverse_and_insert(cursor):
         samples['folder_total'][1].append((folder_seconds, 1))
         samples['sha256_keys'][1].append((hash_seconds, processed_files))
         logging.info("Finished processing folder: %s", path)
-        log_scan_statistics(samples)
 
+    log_scan_statistics(samples)
     logging.info(
         "Gallery timing: %s folders | thumbnail_listing=%.3fs initial_index=%.3fs listing=%.3fs metadata=%.3fs "
         "path_db=%.3fs files/thumbnail_checks=%.3fs tags_db=%.3fs "

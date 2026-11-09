@@ -96,6 +96,27 @@ class AboutInitializationTests(unittest.TestCase):
 
 
 class GalleryTransactionTests(unittest.TestCase):
+    def test_statistics_print_once_after_all_folders_finish(self):
+        cursor = Mock()
+        cursor.fetchall.side_effect = [
+            [('root', 1, None), ('Album', 2, None)], [], [], [],
+        ]
+        store = Mock()
+        store.walk.return_value = iter([('', ['Album'], []), ('Album', [], [])])
+        store.list_files.return_value = []
+        store.exists.return_value = False
+        with (
+            patch.object(load_paths, 'STORE', store),
+            patch.object(load_paths, 'get_entity_tags', return_value=set()),
+            self.assertLogs(level='INFO') as logs,
+        ):
+            load_paths.traverse_and_insert(cursor)
+        headers = [index for index, line in enumerate(logs.output) if 'Gallery statistics (' in line]
+        finishes = [index for index, line in enumerate(logs.output) if 'Finished processing folder:' in line]
+        self.assertEqual(len(headers), 1)
+        self.assertEqual(len(finishes), 2)
+        self.assertGreater(headers[0], max(finishes))
+
     def test_statistics_mean_median_and_normalized_rates(self):
         with self.assertLogs(level='INFO') as logs:
             load_paths.log_scan_statistics({
