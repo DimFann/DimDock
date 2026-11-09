@@ -104,6 +104,7 @@
                             <li class="nav-item">
                                 <form method="post" asp-page="/Login" asp-page-handler="Logout">
                                     @Html.AntiForgeryToken()
+                                    <input type="hidden" name="ReturnUrl" value="@(Context.Request.PathBase + Context.Request.Path + Context.Request.QueryString)" />
                                     <button type="submit" class="nav-link border-0 bg-transparent">Logout</button>
                                 </form>
                             </li>

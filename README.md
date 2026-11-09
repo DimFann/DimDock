@@ -70,13 +70,17 @@ They are loaded on every page because several components are shared across
 pages and partials.
 
 Use the **Admin Login** link to sign in. The website issues an HTTP-only,
-SameSite-protected cookie with an eight-hour sliding lifetime. Login attempts
-are rate-limited, and all write requests require an authenticated admin and a
+SameSite-protected cookie with an eight-hour sliding lifetime. Logging out
+returns to the current page, preserving its path and query string; admin-only
+pages still require signing in again. Login attempts are rate-limited, and all
+write requests require an authenticated admin and a
 valid antiforgery token. Environment variables keep credentials out of the
 repository, but they are visible to users with access to the Docker host;
 for remote deployments, use HTTPS and a deployment secret manager or Docker
 secrets. MariaDB's root and application-user credentials are also read from
 `.env`; keep these secrets private as well.
+
+Run logout checks with `dotnet run --project tests\LoginChecks\LoginChecks.csproj`.
 
 The local `http` and `https` launch profiles enable the development-only
 `Development__AllowAnyAdminPassword` switch, which accepts any password for

@@ -82,6 +82,12 @@ public class LoginModel(IConfiguration configuration, IWebHostEnvironment enviro
     public async Task<IActionResult> OnPostLogoutAsync()
     {
         await HttpContext.SignOutAsync(CookieAuthenticationDefaults.AuthenticationScheme);
+
+        if (!string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
+        {
+            return LocalRedirect(ReturnUrl);
+        }
+
         return RedirectToPage("/Index");
     }
 }

@@ -159,6 +159,12 @@
     grid-row: 1;
   }
 
+  .gallery-top-layout:has(.gallery-directory-table) .gallery-path-description {
+    justify-self: center;
+    max-width: 700px;
+    width: 100%;
+  }
+
   .gallery-top-layout .path-tags-section {
     grid-column: 1;
     grid-row: 2;
