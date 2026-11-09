@@ -89,7 +89,6 @@ services:
       LinodeStorage__Prefix: ${LINODE_STORAGE_PREFIX:-}
       LinodeStorage__AccessKey: ${LINODE_STORAGE_ACCESS_KEY:-}
       LinodeStorage__SecretKey: ${LINODE_STORAGE_SECRET_KEY:-}
-      LinodeStorage__PublicBaseUrl: ${LINODE_STORAGE_PUBLIC_BASE_URL:-}
       Database__Host: db
       Database__Port: "3306"
       Database__Name: ${DB_NAME:?Set DB_NAME in .env}

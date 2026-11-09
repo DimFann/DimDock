@@ -8,7 +8,6 @@ public sealed class LinodeStorageOptions
     public string Prefix { get; set; } = "";
     public string AccessKey { get; set; } = "";
     public string SecretKey { get; set; } = "";
-    public string PublicBaseUrl { get; set; } = "";
 
     public void Validate()
     {
@@ -25,12 +24,5 @@ public sealed class LinodeStorageOptions
             throw new InvalidOperationException("LinodeStorage requires Region, Bucket, AccessKey, and SecretKey.");
         }
         Prefix = FileStoreKeys.Normalize(Prefix);
-        if (!string.IsNullOrEmpty(PublicBaseUrl) &&
-            (!Uri.TryCreate(PublicBaseUrl, UriKind.Absolute, out var publicUri) ||
-             publicUri.Scheme != Uri.UriSchemeHttps || !string.IsNullOrEmpty(publicUri.UserInfo) ||
-             !string.IsNullOrEmpty(publicUri.Query) || !string.IsNullOrEmpty(publicUri.Fragment)))
-        {
-            throw new InvalidOperationException("LinodeStorage:PublicBaseUrl must be an HTTPS bucket/CDN URL without credentials, query, or fragment.");
-        }
     }
 }

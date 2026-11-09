@@ -11,22 +11,6 @@ public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions optio
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
     private bool UseUnsignedPayload => client.Config.ServiceURL.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 
-    public string? GetPublicUrl(FileStoreArea area, string key)
-    {
-        FileStoreKeys.Validate(key, allowEmpty: false);
-        if (area == FileStoreArea.Admin ||
-            (area is FileStoreArea.Blogs or FileStoreArea.About && !key.StartsWith("assets/", StringComparison.Ordinal)))
-        {
-            return null;
-        }
-        if (string.IsNullOrEmpty(options.PublicBaseUrl))
-        {
-            return null;
-        }
-        return options.PublicBaseUrl.TrimEnd('/') + "/" +
-            string.Join('/', ObjectKey(area, key).Split('/').Select(Uri.EscapeDataString));
-    }
-
     private string ObjectKey(FileStoreArea area, string key, bool allowEmpty = false)
     {
         var relative = FileStoreKeys.Normalize(key, allowEmpty);

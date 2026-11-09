@@ -7,6 +7,43 @@ import clean
 
 
 class CleanupTests(unittest.TestCase):
+    def test_antiforgery_reset_preserves_database_and_other_runtime_state(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            keys = root / 'app_state' / 'data-protection-keys'
+            keys.mkdir(parents=True)
+            (keys / 'key.xml').write_text('key')
+            marker = root / 'app_state' / '.initialized'
+            marker.write_text('marker')
+            (root / 'db_data').mkdir()
+            database = root / 'db_data' / 'data'
+            database.write_text('database')
+            clean.reset_antiforgery(root, dry_run=True)
+            self.assertTrue((keys / 'key.xml').exists())
+            clean.reset_antiforgery(root)
+            self.assertEqual(list(keys.iterdir()), [])
+            self.assertTrue(marker.exists())
+            self.assertTrue(database.exists())
+
+    def test_antiforgery_only_never_calls_remote_or_full_cleanup(self):
+        for provider in ('Local', 'Linode'):
+            with (
+                patch.object(clean, 'read_settings', return_value={'FILE_STORAGE_PROVIDER': provider}),
+                patch.object(clean, 'data_root', return_value=Path('test-root')),
+                patch.object(clean, 'reset_antiforgery') as reset,
+                patch.object(clean, 'clean_contents') as full,
+                patch.object(clean.subprocess, 'run') as remote,
+            ):
+                clean.main(['/antiforgery-only', '--dry-run'])
+            reset.assert_called_once_with(Path('test-root'), True)
+            full.assert_not_called()
+            remote.assert_not_called()
+
+    def test_antiforgery_only_rejects_thumbnail_cleanup(self):
+        with self.assertRaises(SystemExit) as error:
+            clean.main(['--antiforgery-only', '--thumbs'])
+        self.assertEqual(error.exception.code, 2)
+
     def test_local_cleanup_and_dry_run_preserve_content(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary).resolve()

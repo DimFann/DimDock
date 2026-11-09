@@ -184,11 +184,6 @@ RequestDelegate ServeStoredFileAsync(FileStoreArea area, bool addNosniff, string
         try
         {
             var fileStore = context.RequestServices.GetRequiredService<IFileStore>();
-            if (fileStore is LinodeFileStore linodeStore && linodeStore.GetPublicUrl(area, key) is { } publicUrl)
-            {
-                context.Response.Redirect(publicUrl);
-                return;
-            }
             var stream = await fileStore.OpenReadAsync(area, key, context.RequestAborted);
             context.Response.ContentType = fileContentTypes.TryGetContentType(key, out var contentType)
                 ? contentType

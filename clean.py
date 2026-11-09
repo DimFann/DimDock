@@ -58,7 +58,7 @@ def data_root(settings):
 
 
 def clean_contents(root, name, dry_run=False):
-    if name not in ('app_state', 'db_data', 'img_db_thumbs'):
+    if name not in ('app_state', 'db_data', 'img_db_thumbs', 'data-protection-keys'):
         raise ValueError('Unsupported cleanup directory.')
     directory = root / name
     if is_link(directory):
@@ -79,19 +79,37 @@ def clean_contents(root, name, dry_run=False):
         else:
             entry.unlink()
 
+def reset_antiforgery(root, dry_run=False):
+    state = root / 'app_state'
+    if is_link(state):
+        raise ValueError(f'Refusing linked runtime-state directory: {state}')
+    if state.exists() and (not state.is_dir() or state.resolve().parent != root):
+        raise ValueError(f'Unsafe runtime-state directory: {state}')
+    clean_contents(state, 'data-protection-keys', dry_run)
+    print('Data Protection reset invalidates antiforgery tokens and login cookies. Restart the website and reload forms.')
+
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description='Reset deployment state/database; preserve originals and metadata. Stop services first.')
     parser.add_argument('--thumbs', action='store_true', help='Also remove generated thumbnails from the selected storage backend.')
     parser.add_argument('--dry-run', action='store_true', help='Show local scope and list remote thumbnail count without deleting.')
-    arguments = parser.parse_args(['--thumbs' if arg.lower() == '/thumbs' else arg for arg in (sys.argv[1:] if argv is None else argv)])
+    parser.add_argument('--antiforgery-only', action='store_true', help='Reset only Data Protection keys, invalidating antiforgery tokens and login cookies.')
+    aliases = {'/thumbs': '--thumbs', '/antiforgery-only': '--antiforgery-only'}
+    arguments = parser.parse_args([aliases.get(arg.lower(), arg) for arg in (sys.argv[1:] if argv is None else argv)])
+    if arguments.antiforgery_only and arguments.thumbs:
+        parser.error('--antiforgery-only cannot be combined with --thumbs.')
     repository = Path(__file__).resolve().parent
     settings = read_settings(repository / '.env')
     provider = settings.get('FILE_STORAGE_PROVIDER', 'Local').lower()
     if provider not in ('local', 'linode'):
         raise ValueError('FILE_STORAGE_PROVIDER must be Local or Linode.')
     root = data_root(settings)
+    if arguments.antiforgery_only:
+        reset_antiforgery(root, arguments.dry_run)
+        print('Done.')
+        return
     print(f'Cleaning {provider} deployment. Originals and metadata are preserved. Services must be stopped.')
+    print('Resetting app_state also resets antiforgery tokens and login cookies. Restart the website and reload forms.')
     # Do remote work first: credential/permission failures must not reset local state.
     if provider == 'linode' and arguments.thumbs:
         command = ['docker', 'compose', '--env-file', str(repository / '.env'), 'run',

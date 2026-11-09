@@ -36,8 +36,7 @@ try
     IFileStore local = new LocalFileStore(configuration, new TestEnvironment());
     var options = new LinodeStorageOptions
     {
-        Bucket = bucket, Prefix = "deployment",
-        PublicBaseUrl = "https://media.example.test"
+        Bucket = bucket, Prefix = "deployment"
     };
     var remote = new LinodeFileStore(client, options);
     var snapshots = new List<string>();
@@ -72,10 +71,6 @@ try
         Console.WriteLine($"PASS {store.GetType().Name} CRUD/list/move/empty-directory/validation/cancellation");
     }
     Check(snapshots[0] == snapshots[1], "local/S3 logical key parity");
-    Check(remote.GetPublicUrl(FileStoreArea.Gallery, "2023/space café.png") ==
-        "https://media.example.test/deployment/img_src/2023/space%20caf%C3%A9.png", "public URL encoding");
-    Check(remote.GetPublicUrl(FileStoreArea.Admin, "admin-only-tags.json") is null, "admin settings have no public URL");
-    Check(remote.GetPublicUrl(FileStoreArea.Blogs, "post.md") is null, "blog metadata has no public URL");
     if (Environment.GetEnvironmentVariable("THUMBNAIL_TEST_ENDPOINT") is { } thumbnailEndpoint)
     {
         if (!Uri.TryCreate(thumbnailEndpoint, UriKind.Absolute, out var thumbnailUri) || !thumbnailUri.IsLoopback)
@@ -125,7 +120,7 @@ try
     using var denied = new DeniedClient(endpoint);
     var inaccessible = new LinodeFileStore(denied, options);
     await ExpectAsync<AmazonS3Exception>(() => inaccessible.FileExistsAsync(FileStoreArea.Gallery, "source/a.txt"));
-    Console.WriteLine("PASS cross-backend parity/public URLs/8MB non-seekable stream/pagination/interrupted copy");
+    Console.WriteLine("PASS cross-backend parity/8MB non-seekable stream/pagination/interrupted copy");
 }
 finally
 {

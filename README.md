@@ -104,6 +104,14 @@ Cleaning resets only local `app_state` and `db_data`, including Data Protection
 keys and initialization markers, for either backend. This deletes the database
 and invalidates existing login cookies; back up first.
 
+Use `python clean.py --antiforgery-only` (also accepted by either launcher) to
+clear only `app_state/data-protection-keys`, preserving the database, thumbnails,
+and initialization markers. Normal cleanup already clears these keys as part
+of `app_state`. Both invalidate antiforgery tokens **and login cookies** because
+they share Data Protection keys; restart the website, sign in again, and reload
+open forms afterward. Add `--dry-run` to preview. Do not combine
+`--antiforgery-only` with `--thumbs`; stop the website before resetting keys.
+
 Use `--thumbs` (or `/thumbs`) to also remove generated thumbnails: local
 `img_db_thumbs` in Local mode, or only the configured bucket's
 `<prefix>/img_db_thumbs/` in Linode mode. Originals and metadata are preserved.
@@ -125,7 +133,6 @@ LINODE_STORAGE_BUCKET=<bucket-name>
 LINODE_STORAGE_PREFIX=dimdock
 LINODE_STORAGE_ACCESS_KEY=<access-key>
 LINODE_STORAGE_SECRET_KEY=<secret-key>
-LINODE_STORAGE_PUBLIC_BASE_URL=
 ```
 
 Use the S3 endpoint and signing region shown for your Linode bucket; the endpoint
@@ -176,32 +183,24 @@ and stable-ID migration remain separate rollout tasks in `TODO_S3.md`.
 
 ### Hotlinks and access policy
 
-With `LINODE_STORAGE_PUBLIC_BASE_URL` empty, media streams through the website
-using authenticated S3 reads. For direct bucket/CDN delivery, configure anonymous
-`GetObject` access **only** for the media prefixes `img_src/`, `img_db_thumbs/`,
-`blogs/assets/`, and `about/assets/` under the deployment prefix. Do not grant
-anonymous bucket listing, or public access to `admin/` or runtime state.
-Gallery sidecar metadata shares `img_src/`; account for that when choosing a
-public policy. Set appropriate image content types and `nosniff` at a CDN when
-using direct delivery; upload operations set content types automatically.
+Keep the bucket private, denying anonymous reads and listing. Media is streamed
+through the website using authenticated S3 reads; browsers receive stable,
+hotlinkable application URLs such as `/img_src/...`. Hidden items are unlisted,
+not confidential: anyone who knows their application URL can fetch them.
 
-Then set `LINODE_STORAGE_PUBLIC_BASE_URL` to the HTTPS bucket/CDN base URL,
-without the deployment prefix. Existing media URLs redirect to
-`<base>/<prefix>/<area>/<key>` and can be hotlinked; hidden items are unlisted,
-not private. A private bucket without this setting can be used for initial testing.
-
-**Public deployment is not cost-protected yet.** The Linode monitoring and
-private-bucket circuit breaker in Phase 3 are not implemented. Do not treat
-private app listings, app rate limits, a CDN, or transfer allowances as a hard
-spending cap. Keep public reads disabled until that rollout work is complete.
+All public media traffic passes through the VPS. App/proxy request limits,
+global download-concurrency limits, and aggregate bandwidth/budget controls are
+planned in `TODO_RATE_LIMITING.md`; they are not implemented yet. Request counts
+and transfer allowances are not hard spending caps. Monitor VPS resources and
+transfer usage, and upgrade the VPS if measured capacity requires it.
 
 ### Failure and streaming behavior
 
 Objects stream over the network. Non-seekable website uploads and Pillow input
 use temporary scratch disk as needed; ensure free scratch space for concurrent
 uploads. No persistent local copy of S3 originals is required.
-The authenticated website streaming fallback does not offer S3 byte ranges or
-conditional caching; direct bucket/CDN delivery uses the origin's native support.
+Authenticated website streaming currently does not offer S3 byte ranges or
+conditional caching.
 Listings paginate and infer directories from prefixes as well as markers.
 Permission and network errors propagate; only missing keys become not-found.
 Create-only writes use conditional S3 puts and do not silently overwrite.
