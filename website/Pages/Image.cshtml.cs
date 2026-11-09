@@ -110,14 +110,17 @@ public class ImageModel : PageModel
 
         if (IsTextDocument)
         {
-            var filePath = _filesystemPersistence.GetItemFilePath(
-                Item.ParentPath ?? "root",
-                Item.OriginalName);
-            if (!System.IO.File.Exists(filePath))
+            if (!await _filesystemPersistence.ItemFileExistsAsync(
+                    Item.ParentPath ?? "root",
+                    Item.OriginalName,
+                    HttpContext.RequestAborted))
             {
                 return NotFound();
             }
-            TextContent = await System.IO.File.ReadAllTextAsync(filePath, HttpContext.RequestAborted);
+            TextContent = await _filesystemPersistence.ReadItemFileTextAsync(
+                Item.ParentPath ?? "root",
+                Item.OriginalName,
+                HttpContext.RequestAborted);
         }
 
         TagsInput = string.Join(", ", Tags);
@@ -140,18 +143,19 @@ public class ImageModel : PageModel
             return NotFound();
         }
 
-        var filePath = _filesystemPersistence.GetItemFilePath(
-            Item.ParentPath ?? "root",
-            Item.OriginalName);
-        if (!System.IO.File.Exists(filePath))
+        if (!await _filesystemPersistence.ItemFileExistsAsync(
+                Item.ParentPath ?? "root",
+                Item.OriginalName,
+                HttpContext.RequestAborted))
         {
             return NotFound();
         }
 
-        return PhysicalFile(
-            filePath,
-            "application/octet-stream",
-            Item.OriginalName);
+        var stream = await _filesystemPersistence.OpenItemFileAsync(
+            Item.ParentPath ?? "root",
+            Item.OriginalName,
+            HttpContext.RequestAborted);
+        return File(stream, "application/octet-stream", Item.OriginalName);
     }
 
     public async Task<IActionResult> OnGetSourceAsync(ulong id)
@@ -165,15 +169,18 @@ public class ImageModel : PageModel
             return NotFound();
         }
 
-        var filePath = _filesystemPersistence.GetItemFilePath(
-            Item.ParentPath ?? "root",
-            Item.OriginalName);
-        if (!System.IO.File.Exists(filePath))
+        if (!await _filesystemPersistence.ItemFileExistsAsync(
+                Item.ParentPath ?? "root",
+                Item.OriginalName,
+                HttpContext.RequestAborted))
         {
             return NotFound();
         }
 
-        var content = await System.IO.File.ReadAllTextAsync(filePath, HttpContext.RequestAborted);
+        var content = await _filesystemPersistence.ReadItemFileTextAsync(
+            Item.ParentPath ?? "root",
+            Item.OriginalName,
+            HttpContext.RequestAborted);
         return Content(content, "text/plain; charset=utf-8");
     }
 
@@ -196,18 +203,18 @@ public class ImageModel : PageModel
             return NotFound();
         }
 
-        var filePath = _filesystemPersistence.GetItemFilePath(
-            Item.ParentPath ?? "root",
-            Item.OriginalName);
-        if (!System.IO.File.Exists(filePath))
+        if (!await _filesystemPersistence.ItemFileExistsAsync(
+                Item.ParentPath ?? "root",
+                Item.OriginalName,
+                HttpContext.RequestAborted))
         {
             return NotFound();
         }
 
-        await System.IO.File.WriteAllTextAsync(
-            filePath,
+        await _filesystemPersistence.WriteItemFileTextAsync(
+            Item.ParentPath ?? "root",
+            Item.OriginalName,
             content ?? string.Empty,
-            new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
             HttpContext.RequestAborted);
 
         return RedirectToPage("/Image", new { id });

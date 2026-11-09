@@ -23,6 +23,7 @@ WORKDIR /app
 
 # Copy Python script and wait-for-db script
 COPY load_paths.py .
+COPY file_store.py .
 COPY build_shortcuts.py .
 COPY db-load-activity.sh .
 

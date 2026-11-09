@@ -4,10 +4,8 @@ using Website.Data;
 
 namespace Website.Services;
 
-public sealed class AdminOnlyTagsProvider(AppDbContext context, IWebHostEnvironment environment)
+public sealed class AdminOnlyTagsProvider(AppDbContext context, IFileStore fileStore)
 {
-    private readonly string _tagFilePath = Path.Combine(environment.ContentRootPath, "admin", "admin-only-tags.json");
-
     public async Task<HashSet<string>> GetTagsAsync(CancellationToken cancellationToken = default)
     {
         var settings = await context.AdminOnlyTagSettings
@@ -20,12 +18,15 @@ public sealed class AdminOnlyTagsProvider(AppDbContext context, IWebHostEnvironm
             return ValidateTags(configuredTags);
         }
 
-        await using var stream = File.OpenRead(_tagFilePath);
+        await using var stream = await fileStore.OpenReadAsync(
+            FileStoreArea.Admin,
+            "admin-only-tags.json",
+            cancellationToken);
         using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
         if (!document.RootElement.TryGetProperty("admin-only-tags", out var tagsElement) ||
             tagsElement.ValueKind != JsonValueKind.Array)
         {
-            throw new InvalidDataException($"Admin-only tag configuration must contain an 'admin-only-tags' array: {_tagFilePath}");
+            throw new InvalidDataException("Admin-only tag configuration must contain an 'admin-only-tags' array.");
         }
 
         var configuredFileTags = new List<string>();
@@ -34,7 +35,7 @@ public sealed class AdminOnlyTagsProvider(AppDbContext context, IWebHostEnvironm
             if (tagElement.ValueKind != JsonValueKind.String ||
                 string.IsNullOrWhiteSpace(tagElement.GetString()))
             {
-                throw new InvalidDataException($"Admin-only tag configuration contains an invalid tag: {_tagFilePath}");
+                throw new InvalidDataException("Admin-only tag configuration contains an invalid tag.");
             }
 
             configuredFileTags.Add(tagElement.GetString()!);

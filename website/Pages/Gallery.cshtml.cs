@@ -28,6 +28,7 @@ public class GalleryModel : PageModel
     private readonly IAntiforgery _antiforgery;
     private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
     private readonly FilesystemPersistenceService _filesystemPersistence;
+    private readonly IFileStore _fileStore;
     private readonly HttpClient _thumbnailClient;
 
     public GalleryModel(
@@ -38,6 +39,7 @@ public class GalleryModel : PageModel
         IAntiforgery antiforgery,
         AdminOnlyTagsProvider adminOnlyTagsProvider,
         FilesystemPersistenceService filesystemPersistence,
+        IFileStore fileStore,
         IHttpClientFactory httpClientFactory)
     {
         _context = context;
@@ -47,6 +49,7 @@ public class GalleryModel : PageModel
         _antiforgery = antiforgery;
         _adminOnlyTagsProvider = adminOnlyTagsProvider;
         _filesystemPersistence = filesystemPersistence;
+        _fileStore = fileStore;
         _thumbnailClient = httpClientFactory.CreateClient("ThumbnailService");
     }
 
@@ -522,8 +525,10 @@ public class GalleryModel : PageModel
                 "Sync pending path deletions before creating a path in that location.");
         }
 
-        var directory = ResolveImageDirectory("/img_src", newPath, allowRoot: false);
-        Directory.CreateDirectory(directory);
+        await _fileStore.CreateDirectoryAsync(
+            FileStoreArea.Gallery,
+            GalleryDirectoryKey(newPath),
+            HttpContext.RequestAborted);
 
         var pathEntry = new PathEntry
         {
@@ -933,14 +938,15 @@ public class GalleryModel : PageModel
             return NotFound("Gallery path not found.");
         }
 
-        var imageDirectory = ResolveImageDirectory("/img_src", sanitizedPath, allowRoot: true);
-        if (!Directory.Exists(imageDirectory))
+        var imageDirectory = GalleryDirectoryKey(sanitizedPath);
+        if (!await _fileStore.DirectoryExistsAsync(
+                FileStoreArea.Gallery,
+                imageDirectory,
+                HttpContext.RequestAborted))
         {
-            throw new DirectoryNotFoundException($"Gallery directory does not exist: {imageDirectory}");
+            throw new DirectoryNotFoundException($"Gallery directory does not exist: {sanitizedPath}");
         }
 
-        const string thumbnailDirectory = "/img_db_thumbs";
-        Directory.CreateDirectory(thumbnailDirectory);
         var uploaded = new List<string>();
         var errors = new List<string>();
         foreach (var file in files)
@@ -963,40 +969,35 @@ public class GalleryModel : PageModel
                 continue;
             }
 
-            var sourcePath = System.IO.Path.Combine(imageDirectory, fileName);
-            if (System.IO.File.Exists(sourcePath))
+            var sourceKey = JoinStorageKey(imageDirectory, fileName);
+            if (await _fileStore.FileExistsAsync(
+                    FileStoreArea.Gallery,
+                    sourceKey,
+                    HttpContext.RequestAborted))
             {
-                errors.Add($"{fileName}: a file with that name already exists on disk.");
+                errors.Add($"{fileName}: a file with that name already exists in storage.");
                 continue;
             }
 
             var thumbnailKey = CreateThumbnailKey(sanitizedPath, fileName);
-            var thumbnailPath = isImage
-                ? System.IO.Path.Combine(thumbnailDirectory, $"{thumbnailKey}.png")
-                : null;
-            var temporarySourcePath = System.IO.Path.Combine(imageDirectory, $".{Guid.NewGuid():N}.upload");
+            var thumbnailStorageKey = $"{thumbnailKey}.png";
             var sourceCreated = false;
             var thumbnailCreated = false;
             var uploadSucceeded = false;
             try
             {
-                await using (var destination = new FileStream(
-                    temporarySourcePath,
-                    FileMode.CreateNew,
-                    FileAccess.Write,
-                    FileShare.None,
-                    bufferSize: 81920,
-                    useAsync: true))
-                {
-                    await file.CopyToAsync(destination, HttpContext.RequestAborted);
-                }
-
-                System.IO.File.Move(temporarySourcePath, sourcePath);
+                await using var uploadStream = file.OpenReadStream();
+                await _fileStore.WriteAsync(
+                    FileStoreArea.Gallery,
+                    sourceKey,
+                    uploadStream,
+                    overwrite: false,
+                    HttpContext.RequestAborted);
                 sourceCreated = true;
                 if (isImage)
                 {
                     await GenerateThumbnailAsync(
-                        sourcePath,
+                        sourceKey,
                         thumbnailKey,
                         HttpContext.RequestAborted);
                     thumbnailCreated = true;
@@ -1049,21 +1050,21 @@ public class GalleryModel : PageModel
             }
             finally
             {
-                if (System.IO.File.Exists(temporarySourcePath))
-                {
-                    System.IO.File.Delete(temporarySourcePath);
-                }
                 if (!uploadSucceeded)
                 {
-                    if (sourceCreated && System.IO.File.Exists(sourcePath))
+                    if (sourceCreated)
                     {
-                        System.IO.File.Delete(sourcePath);
+                        await _fileStore.DeleteFileAsync(
+                            FileStoreArea.Gallery,
+                            sourceKey,
+                            CancellationToken.None);
                     }
-                    if (thumbnailCreated &&
-                        thumbnailPath is not null &&
-                        System.IO.File.Exists(thumbnailPath))
+                    if (thumbnailCreated)
                     {
-                        System.IO.File.Delete(thumbnailPath);
+                        await _fileStore.DeleteFileAsync(
+                            FileStoreArea.Thumbnails,
+                            thumbnailStorageKey,
+                            CancellationToken.None);
                     }
                     _context.ChangeTracker.Clear();
                 }
@@ -1091,11 +1092,14 @@ public class GalleryModel : PageModel
     }
 
     private async Task GenerateThumbnailAsync(
-        string sourcePath,
+        string sourceKey,
         string thumbnailKey,
         CancellationToken cancellationToken)
     {
-        await using var source = System.IO.File.OpenRead(sourcePath);
+        await using var source = await _fileStore.OpenReadAsync(
+            FileStoreArea.Gallery,
+            sourceKey,
+            cancellationToken);
         using var content = new StreamContent(source);
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
         using var response = await _thumbnailClient.PostAsync(
@@ -1110,7 +1114,27 @@ public class GalleryModel : PageModel
         }
 
         response.EnsureSuccessStatusCode();
+        await using var thumbnail = await response.Content.ReadAsStreamAsync(cancellationToken);
+        await _fileStore.WriteAsync(
+            FileStoreArea.Thumbnails,
+            $"{thumbnailKey}.png",
+            thumbnail,
+            overwrite: true,
+            cancellationToken);
     }
+
+    private static string GalleryDirectoryKey(string path)
+    {
+        if (string.Equals(path, "root", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Empty;
+        }
+
+        return path.TrimEnd('/');
+    }
+
+    private static string JoinStorageKey(string directory, string name) =>
+        string.IsNullOrEmpty(directory) ? name : $"{directory}/{name}";
 
     private sealed class InvalidImageUploadException(string message) : Exception(message)
     {
@@ -1200,67 +1224,6 @@ public class GalleryModel : PageModel
             .ExecuteDeleteAsync(HttpContext.RequestAborted);
 
         return (paths, items, shortcuts);
-    }
-
-    private static string ResolveImageDirectory(string imageRoot, string path, bool allowRoot)
-    {
-        var fullRoot = System.IO.Path.GetFullPath(imageRoot);
-        if (!Directory.Exists(fullRoot))
-        {
-            throw new DirectoryNotFoundException($"Image directory does not exist: {fullRoot}");
-        }
-        if ((System.IO.File.GetAttributes(fullRoot) & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidOperationException("The image directory cannot be a linked directory.");
-        }
-
-        var rootPrefix = fullRoot.EndsWith(System.IO.Path.DirectorySeparatorChar)
-            ? fullRoot
-            : fullRoot + System.IO.Path.DirectorySeparatorChar;
-        var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-
-        if (string.Equals(path, "root", StringComparison.OrdinalIgnoreCase))
-        {
-            if (allowRoot)
-            {
-                return fullRoot;
-            }
-
-            throw new InvalidOperationException("The root path cannot be modified.");
-        }
-
-        var segments = path.Split('/');
-        if (segments.Length == 0 ||
-            segments.Any(segment =>
-                segment.Length == 0 ||
-                segment is "." or ".." ||
-                segment.Any(character =>
-                    !char.IsAsciiLetterOrDigit(character) && character != '-' && character != '_')))
-        {
-            throw new InvalidOperationException($"Invalid image path: {path}");
-        }
-
-        var relativePath = string.Join(System.IO.Path.DirectorySeparatorChar, segments);
-        var directory = System.IO.Path.GetFullPath(System.IO.Path.Combine(fullRoot, relativePath));
-        if (!directory.StartsWith(rootPrefix, comparison))
-        {
-            throw new InvalidOperationException($"Path entry resolves outside the image directory: {path}");
-        }
-
-        var current = fullRoot;
-        foreach (var segment in segments)
-        {
-            current = System.IO.Path.Combine(current, segment);
-            if (Directory.Exists(current) &&
-                (System.IO.File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new InvalidOperationException($"Path entry contains a linked directory: {path}");
-            }
-        }
-
-        return directory;
     }
 
     private async Task EnsurePendingItemDeletionsTableAsync()

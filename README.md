@@ -14,14 +14,20 @@ use `localhost` for local HTTP development.
    `WSL_PROJECT_DIR` if Docker runs in WSL and cannot access Windows paths
    directly. Ensure
    `DATA_DIR/admin/admin-only-tags.json` and `DATA_DIR/about/about.md` exist.
+   Set `FILE_STORAGE_PROVIDER=Local` and `FILE_STORAGE_ROOT=/data` in `.env`.
+   `FILE_STORAGE_ROOT` is the shared data volume's path inside the containers;
+   the host directory remains `DATA_DIR`. Local is currently the only
+   supported file-storage provider. Gallery files, thumbnails, blog/About
+   content, and admin tag settings are accessed through the local file-store
+   abstraction; MariaDB remains a separate service.
    About Markdown is imported into the database on path-loader startup and
    written to disk automatically when edited. Gallery descriptions, tags,
    display types, blog posts, admin-only tags, and deletions are also persisted
    to their data files as changes are made. The Admin page's “Sync DB to disk”
-   control remains available to reconcile the database and files. ASP.NET Data Protection keys are stored in
-   `DATA_DIR/app_state/data-protection-keys` so antiforgery tokens remain valid
-   across website container restarts; preserve this directory with the rest of
-   the application data.
+   control remains available to reconcile the database and files. ASP.NET Data
+   Protection keys are stored in `DATA_DIR/app_state/data-protection-keys` so
+   antiforgery tokens remain valid across website container restarts; preserve
+   this directory with the rest of the application data.
 2. Build and start the services:
 
    ```sh
@@ -59,9 +65,10 @@ explicitly to rotate credentials without losing data.
 
 In admin mode, the Gallery page can upload up to 50 JPEG, PNG, or GIF images
 (50 MB each) to the current directory. The private thumbnail service uses
-Pillow to create the same 256-pixel thumbnails used by the path loader. Its
-internal port can be changed with `THUMBNAIL_SERVICE_PORT` in `.env` (default
-`8080`); the service is not published directly to the host.
+Pillow to return the same 256-pixel thumbnails used by the path loader; the
+website writes originals and generated thumbnails through the configured file
+store. Its internal port can be changed with `THUMBNAIL_SERVICE_PORT` in `.env`
+(default `8080`); the service is not published directly to the host.
 
 Admins can create blog posts from the Blog page. Posts created in the website
 are stored in the database; posts imported from Markdown files in `/blogs`

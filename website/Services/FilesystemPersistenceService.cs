@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Markdig;
@@ -13,19 +12,13 @@ namespace Website.Services;
 
 public sealed class FilesystemPersistenceService(
     AppDbContext context,
-    IWebHostEnvironment environment)
+    IFileStore fileStore)
 {
-    private const string ImageRoot = "/img_src";
-    private const string BlogRoot = "/blogs";
-    private const string BlogAssetsRoot = "/blogs/assets";
-    private const string AboutAssetsRoot = "/about/assets";
     private const long MaximumImageAssetBytes = 20L * 1024 * 1024;
     private static readonly HashSet<string> ImageAssetExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".gif", ".jpeg", ".jpg", ".png", ".webp" };
-    private const string AboutFile = "/about/about.md";
     private static readonly Regex ImportableBlogFilename =
         new(@"^[A-Z]{2,5}_\d{8}_\d{6}\.md$", RegexOptions.Compiled);
-    private static readonly UTF8Encoding Utf8WithoutBom = new(encoderShouldEmitUTF8Identifier: false);
 
     public async Task PersistPathAsync(string path, CancellationToken cancellationToken = default)
     {
@@ -42,32 +35,42 @@ public sealed class FilesystemPersistenceService(
             .Where(item => item.ParentPath == path)
             .ToListAsync(cancellationToken);
 
-        var directory = ResolveImageDirectory(path, allowRoot: true);
-        if (!Directory.Exists(directory))
+        var directoryKey = GalleryDirectoryKey(path);
+        if (!await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, directoryKey, cancellationToken))
         {
-            throw new DirectoryNotFoundException($"Gallery directory does not exist: {directory}");
+            throw new DirectoryNotFoundException($"Gallery directory does not exist: {path}");
         }
 
-        var descriptionPath = Path.Combine(directory, ".description.md");
-        var legacyDescriptionPath = Path.Combine(directory, "description.md");
-        if (File.Exists(legacyDescriptionPath) && !File.Exists(descriptionPath))
+        var descriptionKey = JoinKey(directoryKey, ".description.md");
+        var legacyDescriptionKey = JoinKey(directoryKey, "description.md");
+        if (await fileStore.FileExistsAsync(FileStoreArea.Gallery, legacyDescriptionKey, cancellationToken) &&
+            !await fileStore.FileExistsAsync(FileStoreArea.Gallery, descriptionKey, cancellationToken))
         {
-            File.Move(legacyDescriptionPath, descriptionPath);
+            await fileStore.MoveFileAsync(
+                FileStoreArea.Gallery,
+                legacyDescriptionKey,
+                descriptionKey,
+                cancellationToken);
         }
         if (string.IsNullOrWhiteSpace(entry.Description))
         {
-            if (File.Exists(descriptionPath))
+            if (await fileStore.FileExistsAsync(FileStoreArea.Gallery, descriptionKey, cancellationToken))
             {
-                File.Delete(descriptionPath);
+                await fileStore.DeleteFileAsync(FileStoreArea.Gallery, descriptionKey, cancellationToken);
             }
         }
         else
         {
-            await File.WriteAllTextAsync(descriptionPath, entry.Description, Utf8WithoutBom, cancellationToken);
+            await fileStore.WriteAllTextAsync(
+                FileStoreArea.Gallery,
+                descriptionKey,
+                entry.Description,
+                cancellationToken);
         }
 
-        var descriptionTrackedItems = ReadDescriptionTrackedItemNames(
-            Path.Combine(directory, ".dimdock.json"));
+        var descriptionTrackedItems = await ReadDescriptionTrackedItemNames(
+            JoinKey(directoryKey, ".dimdock.json"),
+            cancellationToken);
         var itemMetadata = items
             .Select(item =>
             {
@@ -104,12 +107,12 @@ public sealed class FilesystemPersistenceService(
             throw new InvalidOperationException($"Unsupported path type '{entry.Type}' for path '{entry.Path}'.");
         }
 
-        var manifestPath = Path.Combine(directory, ".dimdock.json");
+        var manifestKey = JoinKey(directoryKey, ".dimdock.json");
         if (manifestType is null && directoryTags.Length == 0 && itemMetadata.Count == 0)
         {
-            if (File.Exists(manifestPath))
+            if (await fileStore.FileExistsAsync(FileStoreArea.Gallery, manifestKey, cancellationToken))
             {
-                File.Delete(manifestPath);
+                await fileStore.DeleteFileAsync(FileStoreArea.Gallery, manifestKey, cancellationToken);
             }
             return;
         }
@@ -121,18 +124,25 @@ public sealed class FilesystemPersistenceService(
                 PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                 WriteIndented = true
             });
-        await File.WriteAllTextAsync(manifestPath, manifest, Utf8WithoutBom, cancellationToken);
+        await fileStore.WriteAllTextAsync(
+            FileStoreArea.Gallery,
+            manifestKey,
+            manifest,
+            cancellationToken);
     }
 
-    private static HashSet<string> ReadDescriptionTrackedItemNames(string manifestPath)
+    private async Task<HashSet<string>> ReadDescriptionTrackedItemNames(
+        string manifestKey,
+        CancellationToken cancellationToken)
     {
         var itemNames = new HashSet<string>(StringComparer.Ordinal);
-        if (!File.Exists(manifestPath))
+        if (!await fileStore.FileExistsAsync(FileStoreArea.Gallery, manifestKey, cancellationToken))
         {
             return itemNames;
         }
 
-        using var document = JsonDocument.Parse(File.ReadAllText(manifestPath));
+        using var document = JsonDocument.Parse(
+            await fileStore.ReadAllTextAsync(FileStoreArea.Gallery, manifestKey, cancellationToken));
         if (!document.RootElement.TryGetProperty("items", out var items) ||
             items.ValueKind != JsonValueKind.Object)
         {
@@ -158,28 +168,34 @@ public sealed class FilesystemPersistenceService(
             .Where(entry => entry.Id == 1)
             .Select(entry => entry.Description)
             .FirstOrDefaultAsync(cancellationToken) ?? string.Empty;
-        await File.WriteAllTextAsync(AboutFile, content, Utf8WithoutBom, cancellationToken);
+        await fileStore.WriteAllTextAsync(
+            FileStoreArea.About,
+            "about.md",
+            content,
+            cancellationToken);
     }
 
     public async Task PersistAdminOnlyTagsAsync(
         IReadOnlyCollection<string> tags,
         CancellationToken cancellationToken = default)
     {
-        var tagsFile = Path.Combine(environment.ContentRootPath, "admin", "admin-only-tags.json");
-        var directory = Path.GetDirectoryName(tagsFile)
-            ?? throw new InvalidOperationException("Admin-only tags file has no parent directory.");
-        Directory.CreateDirectory(directory);
         var content = JsonSerializer.Serialize(
             new Dictionary<string, IReadOnlyCollection<string>>
             {
                 ["admin-only-tags"] = tags
             },
             new JsonSerializerOptions { WriteIndented = true });
-        await File.WriteAllTextAsync(tagsFile, content, Utf8WithoutBom, cancellationToken);
+        await fileStore.WriteAllTextAsync(
+            FileStoreArea.Admin,
+            "admin-only-tags.json",
+            content,
+            cancellationToken);
     }
 
-    public bool BlogFileExists(string sourceFilename) =>
-        File.Exists(ResolveBlogFile(sourceFilename));
+    public Task<bool> BlogFileExistsAsync(
+        string sourceFilename,
+        CancellationToken cancellationToken = default) =>
+        fileStore.FileExistsAsync(FileStoreArea.Blogs, ResolveBlogFileKey(sourceFilename), cancellationToken);
 
     public async Task PersistBlogAsync(Blog post, CancellationToken cancellationToken = default)
     {
@@ -191,7 +207,7 @@ public sealed class FilesystemPersistenceService(
             while (await context.Blogs.AnyAsync(
                        blog => blog.Id != post.Id && blog.SourceFilename == candidate,
                        cancellationToken) ||
-                   File.Exists(ResolveBlogFile(candidate)))
+                   await BlogFileExistsAsync(candidate, cancellationToken))
             {
                 timestamp = timestamp.AddSeconds(1);
                 candidate = $"UTC_{timestamp:yyyyMMdd_HHmmss}.md";
@@ -208,25 +224,26 @@ public sealed class FilesystemPersistenceService(
             post.SourceFilename = candidate;
         }
 
-        var filePath = ResolveBlogFile(post.SourceFilename);
-        Directory.CreateDirectory(BlogRoot);
-        await File.WriteAllTextAsync(filePath, post.Text ?? string.Empty, Utf8WithoutBom, cancellationToken);
+        var fileKey = ResolveBlogFileKey(post.SourceFilename);
+        await fileStore.WriteAllTextAsync(
+            FileStoreArea.Blogs,
+            fileKey,
+            post.Text ?? string.Empty,
+            cancellationToken);
         if (!string.IsNullOrWhiteSpace(oldFilename) &&
             !string.Equals(oldFilename, post.SourceFilename, StringComparison.Ordinal))
         {
-            DeleteBlogFile(oldFilename);
+            await DeleteBlogFileAsync(oldFilename, cancellationToken);
         }
     }
 
-    public void DeleteBlogFile(string sourceFilename)
-    {
-        var filePath = ResolveBlogFile(sourceFilename);
-        if (File.Exists(filePath))
-        {
-            EnsureNotLinkedFile(filePath);
-            File.Delete(filePath);
-        }
-    }
+    public Task DeleteBlogFileAsync(
+        string sourceFilename,
+        CancellationToken cancellationToken = default) =>
+        fileStore.DeleteFileAsync(
+            FileStoreArea.Blogs,
+            ResolveBlogFileKey(sourceFilename),
+            cancellationToken);
 
     public async Task<string> SaveBlogAssetAsync(
         ulong postId,
@@ -238,14 +255,13 @@ public sealed class FilesystemPersistenceService(
             throw new InvalidDataException("The blog post is not ready to receive images.");
         }
 
-        Directory.CreateDirectory(BlogAssetsRoot);
-        EnsureNotLinkedDirectory(BlogAssetsRoot);
-
-        var postDirectory = ResolveBlogAssetsDirectory(postId);
-        Directory.CreateDirectory(postDirectory);
-        EnsureNotLinkedDirectory(postDirectory);
-
-        var fileName = await SaveImageAssetAsync(postDirectory, file, cancellationToken);
+        var postDirectory = $"assets/{postId}";
+        await fileStore.CreateDirectoryAsync(FileStoreArea.Blogs, postDirectory, cancellationToken);
+        var fileName = await SaveImageAssetAsync(
+            FileStoreArea.Blogs,
+            postDirectory,
+            file,
+            cancellationToken);
         return $"/blogs/assets/{postId}/{fileName}";
     }
 
@@ -253,23 +269,26 @@ public sealed class FilesystemPersistenceService(
         IFormFile file,
         CancellationToken cancellationToken = default)
     {
-        Directory.CreateDirectory(AboutAssetsRoot);
-        EnsureNotLinkedDirectory(AboutAssetsRoot);
-        var fileName = await SaveImageAssetAsync(AboutAssetsRoot, file, cancellationToken);
+        await fileStore.CreateDirectoryAsync(FileStoreArea.About, "assets", cancellationToken);
+        var fileName = await SaveImageAssetAsync(
+            FileStoreArea.About,
+            "assets",
+            file,
+            cancellationToken);
         return $"/about/assets/{fileName}";
     }
 
-    public void DeleteUnreferencedAboutAssets(
+    public async Task DeleteUnreferencedAboutAssetsAsync(
         string? previousMarkdown,
         string? currentMarkdown,
-        IEnumerable<string> uploadedUrls)
+        IEnumerable<string> uploadedUrls,
+        CancellationToken cancellationToken = default)
     {
-        if (!Directory.Exists(AboutAssetsRoot))
+        if (!await fileStore.DirectoryExistsAsync(FileStoreArea.About, "assets", cancellationToken))
         {
             return;
         }
 
-        EnsureNotLinkedDirectory(AboutAssetsRoot);
         var candidates = GetAboutAssetNames(previousMarkdown);
         foreach (var url in uploadedUrls)
         {
@@ -283,11 +302,9 @@ public sealed class FilesystemPersistenceService(
         candidates.ExceptWith(GetAboutAssetNames(currentMarkdown));
         foreach (var name in candidates)
         {
-            var path = Path.Combine(AboutAssetsRoot, name);
-            if (File.Exists(path))
+            if (await fileStore.FileExistsAsync(FileStoreArea.About, $"assets/{name}", cancellationToken))
             {
-                EnsureNotLinkedFile(path);
-                File.Delete(path);
+                await fileStore.DeleteFileAsync(FileStoreArea.About, $"assets/{name}", cancellationToken);
             }
         }
     }
@@ -330,8 +347,9 @@ public sealed class FilesystemPersistenceService(
             : null;
     }
 
-    private static async Task<string> SaveImageAssetAsync(
-        string directory,
+    private async Task<string> SaveImageAssetAsync(
+        FileStoreArea area,
+        string directoryKey,
         IFormFile file,
         CancellationToken cancellationToken)
     {
@@ -347,7 +365,6 @@ public sealed class FilesystemPersistenceService(
         }
 
         var fileName = $"{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
-        var filePath = Path.Combine(directory, fileName);
         await using var input = file.OpenReadStream();
         var signature = new byte[12];
         var signatureLength = 0;
@@ -367,44 +384,35 @@ public sealed class FilesystemPersistenceService(
             throw new InvalidDataException("The uploaded file does not match its image extension.");
         }
 
-        input.Position = 0;
-        try
-        {
-            await using var output = new FileStream(
-                filePath,
-                FileMode.CreateNew,
-                FileAccess.Write,
-                FileShare.None,
-                bufferSize: 81920,
-                useAsync: true);
-            await input.CopyToAsync(output, cancellationToken);
-        }
-        catch
-        {
-            if (File.Exists(filePath))
-            {
-                File.Delete(filePath);
-            }
-
-            throw;
-        }
+        await input.DisposeAsync();
+        await using var content = file.OpenReadStream();
+        await fileStore.WriteAsync(
+            area,
+            JoinKey(directoryKey, fileName),
+            content,
+            overwrite: false,
+            cancellationToken);
 
         return fileName;
     }
 
-    public void DeleteBlogAssets(ulong postId)
+    public async Task DeleteBlogAssetsAsync(
+        ulong postId,
+        CancellationToken cancellationToken = default)
     {
-        if (postId == 0 || !Directory.Exists(BlogAssetsRoot))
+        if (postId == 0)
         {
             return;
         }
 
-        EnsureNotLinkedDirectory(BlogAssetsRoot);
-        var directory = ResolveBlogAssetsDirectory(postId);
-        if (Directory.Exists(directory))
+        var directoryKey = $"assets/{postId}";
+        if (await fileStore.DirectoryExistsAsync(FileStoreArea.Blogs, directoryKey, cancellationToken))
         {
-            EnsureNotLinkedDirectory(directory);
-            Directory.Delete(directory, recursive: true);
+            await fileStore.DeleteDirectoryAsync(
+                FileStoreArea.Blogs,
+                directoryKey,
+                recursive: true,
+                cancellationToken);
         }
     }
 
@@ -413,31 +421,55 @@ public sealed class FilesystemPersistenceService(
         string originalName,
         CancellationToken cancellationToken = default)
     {
-        var filePath = ResolveItemFile(parentPath, originalName);
-        if (Directory.Exists(filePath))
+        var key = ItemFileKey(parentPath, originalName);
+        if (await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, key, cancellationToken))
         {
             throw new InvalidOperationException($"Item deletion resolves to a directory: {parentPath}/{originalName}");
         }
-        if (File.Exists(filePath))
-        {
-            EnsureNotLinkedFile(filePath);
-            File.Delete(filePath);
-        }
+        await fileStore.DeleteFileAsync(FileStoreArea.Gallery, key, cancellationToken);
 
         await context.PendingItemDeletions
             .Where(entry => entry.ParentPath == parentPath && entry.OriginalName == originalName)
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    public string GetItemFilePath(string parentPath, string originalName)
-    {
-        var filePath = ResolveItemFile(parentPath, originalName);
-        if (File.Exists(filePath))
-        {
-            EnsureNotLinkedFile(filePath);
-        }
-        return filePath;
-    }
+    public Task<bool> ItemFileExistsAsync(
+        string parentPath,
+        string originalName,
+        CancellationToken cancellationToken = default) =>
+        fileStore.FileExistsAsync(
+            FileStoreArea.Gallery,
+            ItemFileKey(parentPath, originalName),
+            cancellationToken);
+
+    public Task<Stream> OpenItemFileAsync(
+        string parentPath,
+        string originalName,
+        CancellationToken cancellationToken = default) =>
+        fileStore.OpenReadAsync(
+            FileStoreArea.Gallery,
+            ItemFileKey(parentPath, originalName),
+            cancellationToken);
+
+    public Task<string> ReadItemFileTextAsync(
+        string parentPath,
+        string originalName,
+        CancellationToken cancellationToken = default) =>
+        fileStore.ReadAllTextAsync(
+            FileStoreArea.Gallery,
+            ItemFileKey(parentPath, originalName),
+            cancellationToken);
+
+    public Task WriteItemFileTextAsync(
+        string parentPath,
+        string originalName,
+        string content,
+        CancellationToken cancellationToken = default) =>
+        fileStore.WriteAllTextAsync(
+            FileStoreArea.Gallery,
+            ItemFileKey(parentPath, originalName),
+            content,
+            cancellationToken);
 
     public async Task MoveEntriesAsync(
         IReadOnlyCollection<Item> items,
@@ -501,31 +533,40 @@ public sealed class FilesystemPersistenceService(
         var fileMoves = items.Select(item =>
         {
             var sourceParentPath = item.ParentPath ?? "root";
-            var source = ResolveItemFile(sourceParentPath, item.OriginalName);
-            var destination = ResolveItemFile(targetPath, item.OriginalName);
-            if (!File.Exists(source))
-            {
-                if (Directory.Exists(source))
-                {
-                    throw new GalleryMoveException($"The image source resolves to a directory: {sourceParentPath}/{item.OriginalName}");
-                }
-                throw new GalleryMoveException($"The image source file was not found: {sourceParentPath}/{item.OriginalName}");
-            }
-            EnsureNotLinkedFile(source);
-            if (File.Exists(destination) || Directory.Exists(destination))
-            {
-                throw new GalleryMoveException($"The destination already contains a file named '{item.OriginalName}'.");
-            }
-
+            var source = ItemFileKey(sourceParentPath, item.OriginalName);
+            var destination = ItemFileKey(targetPath, item.OriginalName);
             return (Item: item, SourceParentPath: sourceParentPath, Source: source, Destination: destination);
         }).ToList();
+        foreach (var fileMove in fileMoves)
+        {
+            if (!await fileStore.FileExistsAsync(FileStoreArea.Gallery, fileMove.Source, cancellationToken))
+            {
+                if (await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, fileMove.Source, cancellationToken))
+                {
+                    throw new GalleryMoveException(
+                        $"The image source resolves to a directory: {fileMove.SourceParentPath}/{fileMove.Item.OriginalName}");
+                }
+                throw new GalleryMoveException(
+                    $"The image source file was not found: {fileMove.SourceParentPath}/{fileMove.Item.OriginalName}");
+            }
+            if (await fileStore.FileExistsAsync(FileStoreArea.Gallery, fileMove.Destination, cancellationToken) ||
+                await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, fileMove.Destination, cancellationToken))
+            {
+                throw new GalleryMoveException(
+                    $"The destination already contains a file named '{fileMove.Item.OriginalName}'.");
+            }
+        }
 
         var movedFiles = new List<(string Source, string Destination)>();
         try
         {
             foreach (var fileMove in fileMoves)
             {
-                File.Move(fileMove.Source, fileMove.Destination);
+                await fileStore.MoveFileAsync(
+                    FileStoreArea.Gallery,
+                    fileMove.Source,
+                    fileMove.Destination,
+                    cancellationToken);
                 movedFiles.Add((fileMove.Source, fileMove.Destination));
             }
 
@@ -616,7 +657,11 @@ public sealed class FilesystemPersistenceService(
             {
                 try
                 {
-                    File.Move(movedFile.Destination, movedFile.Source);
+                    await fileStore.MoveFileAsync(
+                        FileStoreArea.Gallery,
+                        movedFile.Destination,
+                        movedFile.Source,
+                        CancellationToken.None);
                 }
                 catch (Exception rollbackError)
                 {
@@ -759,21 +804,22 @@ public sealed class FilesystemPersistenceService(
                 "Finish queued item deletions before renaming this path.");
         }
 
-        var sourceDirectory = ResolveImageDirectory(oldPath, allowRoot: false);
-        var destinationDirectory = ResolveImageDirectory(newPath, allowRoot: false);
-        if (!Directory.Exists(sourceDirectory))
+        var sourceDirectory = GalleryDirectoryKey(oldPath);
+        var destinationDirectory = GalleryDirectoryKey(newPath);
+        if (!await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, sourceDirectory, cancellationToken))
         {
-            throw new DirectoryNotFoundException($"Gallery directory does not exist: {sourceDirectory}");
+            throw new DirectoryNotFoundException($"Gallery directory does not exist: {oldPath}");
         }
         foreach (var subtreePath in subtreePaths)
         {
-            var subtreeDirectory = ResolveImageDirectory(subtreePath, allowRoot: false);
-            if (!Directory.Exists(subtreeDirectory))
+            var subtreeDirectory = GalleryDirectoryKey(subtreePath);
+            if (!await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, subtreeDirectory, cancellationToken))
             {
-                throw new DirectoryNotFoundException($"Gallery directory does not exist: {subtreeDirectory}");
+                throw new DirectoryNotFoundException($"Gallery directory does not exist: {subtreePath}");
             }
         }
-        if (Directory.Exists(destinationDirectory) || File.Exists(destinationDirectory))
+        if (await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, destinationDirectory, cancellationToken) ||
+            await fileStore.FileExistsAsync(FileStoreArea.Gallery, destinationDirectory, cancellationToken))
         {
             throw new GalleryPathRenameException("A filesystem path with that name already exists.");
         }
@@ -798,7 +844,11 @@ public sealed class FilesystemPersistenceService(
             })
             .ToList();
 
-        Directory.Move(sourceDirectory, destinationDirectory);
+        await fileStore.MoveDirectoryAsync(
+            FileStoreArea.Gallery,
+            sourceDirectory,
+            destinationDirectory,
+            cancellationToken);
         try
         {
             var executionStrategy = context.Database.CreateExecutionStrategy();
@@ -906,7 +956,11 @@ public sealed class FilesystemPersistenceService(
         {
             try
             {
-                Directory.Move(destinationDirectory, sourceDirectory);
+                await fileStore.MoveDirectoryAsync(
+                    FileStoreArea.Gallery,
+                    destinationDirectory,
+                    sourceDirectory,
+                    CancellationToken.None);
             }
             catch (Exception rollbackError)
             {
@@ -929,121 +983,70 @@ public sealed class FilesystemPersistenceService(
 
     public async Task DeletePathDirectoryAsync(string path, CancellationToken cancellationToken = default)
     {
-        var directory = ResolveImageDirectory(path, allowRoot: false);
-        if (Directory.Exists(directory))
+        if (string.Equals(path, "root", StringComparison.OrdinalIgnoreCase))
         {
-            Directory.Delete(directory, recursive: true);
+            throw new InvalidOperationException("The root gallery path cannot be deleted.");
         }
-        else if (File.Exists(directory))
+
+        var directory = GalleryDirectoryKey(path);
+        if (await fileStore.FileExistsAsync(FileStoreArea.Gallery, directory, cancellationToken))
         {
             throw new InvalidOperationException($"Path deletion resolves to a file: {path}");
         }
+        await fileStore.DeleteDirectoryAsync(
+            FileStoreArea.Gallery,
+            directory,
+            recursive: true,
+            cancellationToken);
 
         await context.PendingPathDeletions
             .Where(entry => entry.Path == path)
             .ExecuteDeleteAsync(cancellationToken);
     }
 
-    private static string ResolveImageDirectory(string path, bool allowRoot)
+    private static string GalleryDirectoryKey(string path)
     {
-        var root = Path.GetFullPath(ImageRoot);
-        if (!Directory.Exists(root))
-        {
-            throw new DirectoryNotFoundException($"Image directory does not exist: {root}");
-        }
-        EnsureNotLinkedDirectory(root);
-
         if (string.Equals(path, "root", StringComparison.OrdinalIgnoreCase))
         {
-            return allowRoot
-                ? root
-                : throw new InvalidOperationException("The root gallery path cannot be deleted.");
+            return string.Empty;
         }
 
-        var segments = path.Split('/');
-        if (segments.Length == 0 ||
-            segments.Any(segment =>
-                segment.Length == 0 ||
-                segment is "." or ".." ||
-                segment.Any(character =>
-                    !char.IsAsciiLetterOrDigit(character) && character != '-' && character != '_')))
+        if (string.IsNullOrWhiteSpace(path) || path.StartsWith('/'))
         {
-            throw new InvalidOperationException($"Invalid gallery path: {path}");
+            throw new InvalidDataException($"Invalid gallery path: {path}");
         }
 
-        var directory = Path.GetFullPath(Path.Combine(root, Path.Combine(segments)));
-        var rootPrefix = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        if (!directory.StartsWith(rootPrefix, comparison))
-        {
-            throw new InvalidOperationException($"Gallery path resolves outside the image directory: {path}");
-        }
-
-        var current = root;
-        foreach (var segment in segments)
-        {
-            current = Path.Combine(current, segment);
-            if (Directory.Exists(current))
-            {
-                EnsureNotLinkedDirectory(current);
-            }
-        }
-
-        return directory;
+        return path.TrimEnd('/');
     }
 
-    private static string ResolveItemFile(string parentPath, string originalName)
+    private static string ItemFileKey(string parentPath, string originalName)
     {
         if (string.IsNullOrWhiteSpace(originalName) ||
             originalName is "." or ".." ||
-            originalName != Path.GetFileName(originalName) ||
             originalName.Contains('/') ||
             originalName.Contains('\\') ||
             originalName.Any(char.IsControl))
         {
-            throw new InvalidOperationException($"Invalid image filename: {originalName}");
+            throw new InvalidDataException($"Invalid image filename: {originalName}");
         }
 
-        var directory = ResolveImageDirectory(parentPath, allowRoot: true);
-        var filePath = Path.GetFullPath(Path.Combine(directory, originalName));
-        var root = Path.GetFullPath(ImageRoot);
-        var rootPrefix = root.EndsWith(Path.DirectorySeparatorChar) ? root : root + Path.DirectorySeparatorChar;
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        if (!filePath.StartsWith(rootPrefix, comparison))
-        {
-            throw new InvalidOperationException($"Image file resolves outside the image directory: {parentPath}/{originalName}");
-        }
-        return filePath;
+        return JoinKey(GalleryDirectoryKey(parentPath), originalName);
     }
 
-    private static string ResolveBlogFile(string sourceFilename)
+    private static string ResolveBlogFileKey(string sourceFilename)
     {
         if (string.IsNullOrWhiteSpace(sourceFilename) ||
-            sourceFilename != Path.GetFileName(sourceFilename) ||
+            sourceFilename.Contains('/') ||
+            sourceFilename.Contains('\\') ||
             !string.Equals(Path.GetExtension(sourceFilename), ".md", StringComparison.OrdinalIgnoreCase))
         {
             throw new InvalidOperationException($"Invalid blog source filename: {sourceFilename}");
         }
-        return Path.GetFullPath(Path.Combine(BlogRoot, sourceFilename));
+        return sourceFilename;
     }
 
-    private static string ResolveBlogAssetsDirectory(ulong postId)
-    {
-        var root = Path.GetFullPath(BlogAssetsRoot);
-        var directory = Path.GetFullPath(Path.Combine(root, postId.ToString()));
-        var rootPrefix = root.EndsWith(Path.DirectorySeparatorChar)
-            ? root
-            : root + Path.DirectorySeparatorChar;
-        var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
-        if (!directory.StartsWith(rootPrefix, comparison))
-        {
-            throw new InvalidOperationException($"Blog assets resolve outside their root: {postId}");
-        }
-
-        return directory;
-    }
+    private static string JoinKey(string directoryKey, string name) =>
+        string.IsNullOrEmpty(directoryKey) ? name : $"{directoryKey.TrimEnd('/')}/{name}";
 
     private static bool HasImageSignature(string extension, ReadOnlySpan<byte> signature) =>
         extension.ToLowerInvariant() switch
@@ -1065,22 +1068,6 @@ public sealed class FilesystemPersistenceService(
                 signature[8..12].SequenceEqual("WEBP"u8),
             _ => false
         };
-
-    private static void EnsureNotLinkedDirectory(string path)
-    {
-        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidOperationException($"Filesystem path cannot be a linked directory: {path}");
-        }
-    }
-
-    private static void EnsureNotLinkedFile(string path)
-    {
-        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidOperationException($"Filesystem path cannot be a linked file: {path}");
-        }
-    }
 
     private static bool IsSameOrChildPath(string candidate, string parent) =>
         string.Equals(candidate, parent, StringComparison.OrdinalIgnoreCase) ||

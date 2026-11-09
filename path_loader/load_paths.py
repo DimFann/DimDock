@@ -8,6 +8,9 @@ import re
 import json
 import unicodedata
 import logging
+import io
+
+from file_store import LocalFileStore
 
 # 🔧 Configuration
 logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
@@ -19,11 +22,8 @@ DB_HOST = os.environ['DB_HOST']
 DB_USER = os.environ['DB_USER']
 DB_PASSWORD = os.environ['DB_PASSWORD']
 DB_NAME = os.environ['DB_NAME']
-ROOT_DIR = '/img_src'
-THUMB_DIR = '/img_db_thumbs'
-BLOG_DIR = '/blogs'
-ABOUT_FILE = '/about/about.md'
-BLOGS_INITIALIZED_FILE = '/app_state/.blogs_initialized'
+DATA_ROOT = os.environ.get('DIMDOCK_DATA_ROOT', '/data')
+STORE = LocalFileStore(DATA_ROOT)
 TAG_MANIFEST_FILENAME = '.dimdock.json'
 DESCRIPTION_FILENAME = '.description.md'
 LEGACY_DESCRIPTION_FILENAME = 'description.md'
@@ -115,14 +115,16 @@ def date_path_tags(path):
                 tags.add(segment)
     return sorted(tags)
 
+def join_key(directory, name):
+    return f"{directory}/{name}" if directory else name
+
 def read_tag_manifest(directory):
-    manifest_path = os.path.join(directory, TAG_MANIFEST_FILENAME)
-    if not os.path.isfile(manifest_path):
+    manifest_path = join_key(directory, TAG_MANIFEST_FILENAME)
+    if not STORE.exists('gallery', manifest_path):
         return {'type': None, 'tags': [], 'items': {}}
 
     try:
-        with open(manifest_path, 'r', encoding='utf-8') as manifest_file:
-            manifest = json.load(manifest_file)
+        manifest = json.loads(STORE.read_text('gallery', manifest_path))
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ValueError(f"Unable to read tag manifest {manifest_path}: {error}") from error
 
@@ -251,12 +253,12 @@ def create_blog_alias(title, timestamp, used_aliases):
     return alias
 
 def process_blogs(cursor):
-    if os.path.exists(BLOGS_INITIALIZED_FILE):
+    if STORE.exists('state', '.blogs_initialized'):
         logging.info("Blogs already initialized. Skipping blog import.")
         return 0
 
-    if not os.path.isdir(BLOG_DIR):
-        raise FileNotFoundError(f"Blogs directory not found: {BLOG_DIR}")
+    if not STORE.is_directory('blogs'):
+        raise FileNotFoundError("Blogs directory not found in the selected file store.")
 
     cursor.execute("DROP TABLE IF EXISTS Blogs")
     cursor.execute("""
@@ -274,7 +276,7 @@ def process_blogs(cursor):
 
     inserted_blogs = 0
     used_aliases = set()
-    for filename in sorted(os.listdir(BLOG_DIR)):
+    for filename in STORE.list_files('blogs'):
         match = BLOG_FILENAME_PATTERN.fullmatch(filename)
         if not match:
             continue
@@ -295,15 +297,13 @@ def process_blogs(cursor):
             logging.error("Invalid date in blog filename %s: %s; skipping.", filename, e)
             continue
 
-        file_path = os.path.join(BLOG_DIR, filename)
-        if not os.path.isfile(file_path):
+        if not STORE.exists('blogs', filename):
             continue
 
         try:
-            with open(file_path, "r", encoding="utf-8") as blog_file:
-                blog_text = blog_file.read()
+            blog_text = STORE.read_text('blogs', filename)
         except (OSError, UnicodeError) as e:
-            logging.error("Error reading blog file %s: %s; skipping.", file_path, e)
+            logging.error("Error reading blog file %s: %s; skipping.", filename, e)
             continue
 
         title = extract_blog_title(blog_text)
@@ -319,50 +319,59 @@ def process_blogs(cursor):
 
 def process_about(cursor):
     try:
-        with open(ABOUT_FILE, 'r', encoding='utf-8') as about_file:
-            description = about_file.read()
+        description = STORE.read_text('about', 'about.md')
     except (OSError, UnicodeError) as error:
-        raise RuntimeError(f"Unable to load About content from {ABOUT_FILE}: {error}") from error
+        raise RuntimeError(f"Unable to load About content from about/about.md: {error}") from error
 
     cursor.execute("""
         INSERT INTO About (id, description)
         VALUES (1, %s)
         ON DUPLICATE KEY UPDATE description = VALUES(description)
     """, (description,))
-    logging.info("Loaded About content from %s", ABOUT_FILE)
+    logging.info("Loaded About content from about/about.md")
 
 def migrate_legacy_metadata(directory):
     for legacy_name, hidden_name in (
         (LEGACY_DESCRIPTION_FILENAME, DESCRIPTION_FILENAME),
         (LEGACY_SHORTCUTS_FILENAME, SHORTCUTS_FILENAME),
     ):
-        legacy_path = os.path.join(directory, legacy_name)
-        hidden_path = os.path.join(directory, hidden_name)
-        if os.path.isfile(legacy_path):
-            if os.path.exists(hidden_path):
+        legacy_path = join_key(directory, legacy_name)
+        hidden_path = join_key(directory, hidden_name)
+        if STORE.exists('gallery', legacy_path):
+            if STORE.exists('gallery', hidden_path):
                 logging.error(
                     "Both legacy and hidden metadata files exist in %s; keeping %s.",
                     directory,
                     hidden_name
                 )
                 continue
-            os.replace(legacy_path, hidden_path)
+            STORE.move_file('gallery', legacy_path, hidden_path)
 
-def process_image(file_path, thumbnail_key):
-    logging.info("Generating thumbnail: %s", file_path)
+def process_image(file_key, thumbnail_key):
+    logging.info("Generating thumbnail: %s", file_key)
     try:
-        with Image.open(file_path) as img:
-            img = img.convert("RGB")
-            thumb = img.copy()
-            thumb.thumbnail(MAX_THUMBNAIL_SIZE)
-            thumb_with_bg = Image.new("RGB", MAX_THUMBNAIL_SIZE, (255, 255, 255))
-            thumb_with_bg.paste(
-                thumb, ((MAX_THUMBNAIL_SIZE[0] - thumb.width) // 2, (MAX_THUMBNAIL_SIZE[1] - thumb.height) // 2)
-            )
-            thumb_path = os.path.join(THUMB_DIR, f"{thumbnail_key}.png")
-            thumb_with_bg.save(thumb_path, format="PNG", optimize=True, quality=85)
+        with STORE.open_read('gallery', file_key) as source:
+            with Image.open(source) as img:
+                img = img.convert("RGB")
+                thumb = img.copy()
+                thumb.thumbnail(MAX_THUMBNAIL_SIZE)
+                thumb_with_bg = Image.new("RGB", MAX_THUMBNAIL_SIZE, (255, 255, 255))
+                thumb_with_bg.paste(
+                    thumb,
+                    (
+                        (MAX_THUMBNAIL_SIZE[0] - thumb.width) // 2,
+                        (MAX_THUMBNAIL_SIZE[1] - thumb.height) // 2,
+                    ),
+                )
+                thumbnail_content = io.BytesIO()
+                thumb_with_bg.save(thumbnail_content, format="PNG", optimize=True, quality=85)
+        STORE.write(
+            'thumbnails',
+            f"{thumbnail_key}.png",
+            thumbnail_content.getvalue(),
+        )
     except Exception as e:
-        logging.error("Error processing image %s", file_path, exc_info=e)
+        logging.error("Error processing image %s", file_key, exc_info=e)
 
 def traverse_and_insert(cursor):
     total_files = 0
@@ -379,29 +388,27 @@ def traverse_and_insert(cursor):
     for (item_path, filename), item in existing_items.items():
         existing_items_by_path.setdefault(item_path, {})[filename] = item['id']
 
-    for current_path, dirs, files in os.walk(ROOT_DIR):
-        logging.info("Processing folder: %s", current_path)
+    for current_key, dirs, files in STORE.walk('gallery'):
+        logging.info("Processing folder: %s", current_key or "root")
         dirs[:] = sorted(directory for directory in dirs if not directory.startswith('.'))
-        migrate_legacy_metadata(current_path)
-        rel_path = os.path.relpath(current_path, ROOT_DIR)
-        path = "root" if rel_path == "." else rel_path
-        parent_dir = os.path.dirname(rel_path)
-        parent = "root" if parent_dir in ("", ".") else parent_dir
-        tag_manifest = read_tag_manifest(current_path)
-        directory_name = os.path.basename(path)
+        migrate_legacy_metadata(current_key)
+        path = current_key or "root"
+        parent_dir = current_key.rpartition('/')[0]
+        parent = parent_dir or "root"
+        tag_manifest = read_tag_manifest(current_key)
+        directory_name = current_key.rsplit('/', 1)[-1] if current_key else ''
         path_type = 'comic' if directory_name.casefold().startswith('comic_') else tag_manifest['type']
         path_tags = set(tag_manifest['tags'])
         if directory_name.casefold().startswith('wip_'):
             path_tags.add('hidden')
 
-        description_path = os.path.join(current_path, DESCRIPTION_FILENAME)
+        description_path = join_key(current_key, DESCRIPTION_FILENAME)
         description = None
-        if os.path.isfile(description_path):
+        if STORE.exists('gallery', description_path):
             try:
-                with open(description_path, "r", encoding="utf-8") as f:
-                    description = f.read()
+                description = STORE.read_text('gallery', description_path)
             except Exception as e:
-                logging.error("Error reading %s in %s: %s", DESCRIPTION_FILENAME, current_path, e)
+                logging.error("Error reading %s in %s: %s", DESCRIPTION_FILENAME, path, e)
 
         if path not in existing_paths:
             existing_paths[path] = insert_path(cursor, path, parent, description)
@@ -451,9 +458,9 @@ def traverse_and_insert(cursor):
                     )
                     item['thumbnail_key'] = thumbnail_key
 
-            thumb_path = os.path.join(THUMB_DIR, f"{thumbnail_key}.png")
-            if file_type == 'image' and not os.path.isfile(thumb_path):
-                image_tasks.append((os.path.join(current_path, file), thumbnail_key))
+            thumb_key = f"{thumbnail_key}.png"
+            if file_type == 'image' and not STORE.exists('thumbnails', thumb_key):
+                image_tasks.append((join_key(current_key, file), thumbnail_key))
 
         directory_items = existing_items_by_path.get(path, {})
         cursor.execute("""
@@ -484,7 +491,7 @@ def traverse_and_insert(cursor):
             if filename not in directory_items:
                 logging.error(
                     "Tag manifest entry has no indexed item in %s: %s",
-                    current_path,
+                    path,
                     filename
                 )
 
@@ -507,7 +514,7 @@ def traverse_and_insert(cursor):
                 except Exception as e:
                     logging.error("Unhandled thumbnail worker error: %s", e, exc_info=e)
 
-        logging.info("Finished processing folder: %s", current_path)
+        logging.info("Finished processing folder: %s", path)
 
     return total_files
 
@@ -515,6 +522,9 @@ def main():
     conn = None
     cursor = None
     try:
+        for area in ('gallery', 'thumbnails', 'blogs', 'about', 'admin', 'state'):
+            STORE.create_directory(area)
+
         conn = mysql.connector.connect(
             host=DB_HOST,
             user=DB_USER,

@@ -75,8 +75,11 @@ public class IndexModel(
         about.Description = markdown ?? string.Empty;
         await context.SaveChangesAsync(HttpContext.RequestAborted);
         await filesystemPersistence.PersistAboutAsync(HttpContext.RequestAborted);
-        filesystemPersistence.DeleteUnreferencedAboutAssets(
-            previousMarkdown, about.Description, uploadedImageUrls ?? []);
+        await filesystemPersistence.DeleteUnreferencedAboutAssetsAsync(
+            previousMarkdown,
+            about.Description,
+            uploadedImageUrls ?? [],
+            HttpContext.RequestAborted);
 
         return new JsonResult(new { html = RenderMarkdown(about.Description) });
     }

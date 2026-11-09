@@ -3,28 +3,28 @@ import json
 import mysql.connector
 import logging
 
+from file_store import LocalFileStore
+
 # 🔧 Configuration
 logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
 DB_HOST = os.environ['DB_HOST']
 DB_USER = os.environ['DB_USER']
 DB_PASSWORD = os.environ['DB_PASSWORD']
 DB_NAME = os.environ['DB_NAME']
-ROOT_DIR = '/img_src'
+DATA_ROOT = os.environ.get('DIMDOCK_DATA_ROOT', '/data')
+STORE = LocalFileStore(DATA_ROOT)
 SHORTCUTS_FILENAME = '.shortcuts.json'
 LEGACY_SHORTCUTS_FILENAME = 'shortcuts.json'
 
 def process_shortcuts(cursor):
-    shortcuts_path = os.path.join(ROOT_DIR, SHORTCUTS_FILENAME)
-    legacy_path = os.path.join(ROOT_DIR, LEGACY_SHORTCUTS_FILENAME)
-    if not os.path.isfile(shortcuts_path) and os.path.isfile(legacy_path):
-        os.replace(legacy_path, shortcuts_path)
-    if not os.path.isfile(shortcuts_path):
+    if not STORE.exists('gallery', SHORTCUTS_FILENAME) and STORE.exists('gallery', LEGACY_SHORTCUTS_FILENAME):
+        STORE.move_file('gallery', LEGACY_SHORTCUTS_FILENAME, SHORTCUTS_FILENAME)
+    if not STORE.exists('gallery', SHORTCUTS_FILENAME):
         logging.info("No %s found, skipping shortcut processing.", SHORTCUTS_FILENAME)
         return
 
     try:
-        with open(shortcuts_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        data = json.loads(STORE.read_text('gallery', SHORTCUTS_FILENAME))
     except Exception as e:
         logging.error("Error reading %s: %s", SHORTCUTS_FILENAME, e)
         return
@@ -38,7 +38,7 @@ def process_shortcuts(cursor):
             continue
 
         for full_rel_path in source_files:
-            parent_path, original_name = os.path.split(full_rel_path)
+            parent_path, _, original_name = full_rel_path.rpartition('/')
             query = """
                 SELECT id, original_name, parent_path
                 FROM Items

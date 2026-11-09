@@ -17,6 +17,7 @@ public class AdminModel : PageModel
     private readonly IAntiforgery _antiforgery;
     private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
     private readonly FilesystemPersistenceService _filesystemPersistence;
+    private readonly IFileStore _fileStore;
 
     public AdminModel(
         IConfiguration configuration,
@@ -24,7 +25,8 @@ public class AdminModel : PageModel
         AppDbContext context,
         IAntiforgery antiforgery,
         AdminOnlyTagsProvider adminOnlyTagsProvider,
-        FilesystemPersistenceService filesystemPersistence)
+        FilesystemPersistenceService filesystemPersistence,
+        IFileStore fileStore)
     {
         _configuration = configuration;
         _environment = environment;
@@ -32,6 +34,7 @@ public class AdminModel : PageModel
         _antiforgery = antiforgery;
         _adminOnlyTagsProvider = adminOnlyTagsProvider;
         _filesystemPersistence = filesystemPersistence;
+        _fileStore = fileStore;
     }
 
     [BindProperty]
@@ -98,11 +101,6 @@ public class AdminModel : PageModel
             return BadRequest("Invalid anti-forgery token.");
         }
 
-        const string imageRoot = "/img_src";
-        var fullImageRoot = Path.GetFullPath(imageRoot);
-        var rootPrefix = fullImageRoot.EndsWith(Path.DirectorySeparatorChar)
-            ? fullImageRoot
-            : fullImageRoot + Path.DirectorySeparatorChar;
         await EnsurePendingItemDeletionsTableAsync();
         var pendingItemDeletions = await _context.PendingItemDeletions
             .AsNoTracking()
@@ -110,26 +108,16 @@ public class AdminModel : PageModel
             .ToListAsync(HttpContext.RequestAborted);
         foreach (var pendingDeletion in pendingItemDeletions)
         {
-            var filePath = ResolveItemFilePath(
-                fullImageRoot,
-                rootPrefix,
-                pendingDeletion.ParentPath,
-                pendingDeletion.OriginalName);
-            if (Directory.Exists(filePath))
+            var fileKey = GalleryItemKey(pendingDeletion.ParentPath, pendingDeletion.OriginalName);
+            if (await _fileStore.DirectoryExistsAsync(
+                    FileStoreArea.Gallery,
+                    fileKey,
+                    HttpContext.RequestAborted))
             {
                 throw new InvalidOperationException(
                     $"Pending item deletion resolves to a directory: {pendingDeletion.ParentPath}/{pendingDeletion.OriginalName}");
             }
-            if (System.IO.File.Exists(filePath))
-            {
-                if ((System.IO.File.GetAttributes(filePath) & FileAttributes.ReparsePoint) != 0)
-                {
-                    throw new InvalidOperationException(
-                        $"Pending item deletion resolves to a linked file: {pendingDeletion.ParentPath}/{pendingDeletion.OriginalName}");
-                }
-
-                System.IO.File.Delete(filePath);
-            }
+            await _fileStore.DeleteFileAsync(FileStoreArea.Gallery, fileKey, HttpContext.RequestAborted);
 
             await _context.PendingItemDeletions
                 .Where(entry => entry.Id == pendingDeletion.Id)
@@ -143,16 +131,24 @@ public class AdminModel : PageModel
             .ToListAsync(HttpContext.RequestAborted);
         foreach (var pendingDeletion in pendingPathDeletions)
         {
-            var directory = ResolvePathDirectory(fullImageRoot, rootPrefix, pendingDeletion.Path);
-            if (Directory.Exists(directory))
+            if (string.Equals(pendingDeletion.Path, "root", StringComparison.OrdinalIgnoreCase))
             {
-                Directory.Delete(directory, recursive: true);
+                throw new InvalidOperationException("The root gallery path cannot be deleted.");
             }
-            else if (System.IO.File.Exists(directory))
+            var directoryKey = GalleryDirectoryKey(pendingDeletion.Path);
+            if (await _fileStore.FileExistsAsync(
+                    FileStoreArea.Gallery,
+                    directoryKey,
+                    HttpContext.RequestAborted))
             {
                 throw new InvalidOperationException(
                     $"Pending path deletion is not a directory: {pendingDeletion.Path}");
             }
+            await _fileStore.DeleteDirectoryAsync(
+                FileStoreArea.Gallery,
+                directoryKey,
+                recursive: true,
+                HttpContext.RequestAborted);
 
             await DeletePathRecordsAsync(pendingDeletion.Path);
             await _context.PendingPathDeletions
@@ -181,46 +177,68 @@ public class AdminModel : PageModel
 
         foreach (var entry in paths)
         {
-            var relativePath = entry.Path == "root"
-                ? string.Empty
-                : entry.Path.Replace('/', Path.DirectorySeparatorChar);
-            var directory = Path.GetFullPath(Path.Combine(fullImageRoot, relativePath));
-            if (directory != fullImageRoot && !directory.StartsWith(rootPrefix, StringComparison.Ordinal))
-            {
-                throw new InvalidOperationException($"Path entry resolves outside the image directory: {entry.Path}");
-            }
-
-            if (!Directory.Exists(directory))
+            var directoryKey = GalleryDirectoryKey(entry.Path);
+            if (!await _fileStore.DirectoryExistsAsync(
+                    FileStoreArea.Gallery,
+                    directoryKey,
+                    HttpContext.RequestAborted))
             {
                 skipped++;
                 continue;
             }
 
-            var descriptionPath = Path.Combine(directory, ".description.md");
-            var legacyDescriptionPath = Path.Combine(directory, "description.md");
-            if (System.IO.File.Exists(legacyDescriptionPath) && !System.IO.File.Exists(descriptionPath))
+            var descriptionKey = JoinKey(directoryKey, ".description.md");
+            var legacyDescriptionKey = JoinKey(directoryKey, "description.md");
+            if (await _fileStore.FileExistsAsync(
+                    FileStoreArea.Gallery,
+                    legacyDescriptionKey,
+                    HttpContext.RequestAborted) &&
+                !await _fileStore.FileExistsAsync(
+                    FileStoreArea.Gallery,
+                    descriptionKey,
+                    HttpContext.RequestAborted))
             {
-                System.IO.File.Move(legacyDescriptionPath, descriptionPath);
+                await _fileStore.MoveFileAsync(
+                    FileStoreArea.Gallery,
+                    legacyDescriptionKey,
+                    descriptionKey,
+                    HttpContext.RequestAborted);
             }
             if (string.IsNullOrWhiteSpace(entry.Description))
             {
-                if (System.IO.File.Exists(descriptionPath))
+                if (await _fileStore.FileExistsAsync(
+                        FileStoreArea.Gallery,
+                        descriptionKey,
+                        HttpContext.RequestAborted))
                 {
-                    System.IO.File.Delete(descriptionPath);
+                    await _fileStore.DeleteFileAsync(
+                        FileStoreArea.Gallery,
+                        descriptionKey,
+                        HttpContext.RequestAborted);
                     deleted++;
                 }
             }
-            else if (System.IO.File.Exists(descriptionPath) &&
-                string.Equals(await System.IO.File.ReadAllTextAsync(descriptionPath), entry.Description, StringComparison.Ordinal))
+            else if (await _fileStore.FileExistsAsync(
+                         FileStoreArea.Gallery,
+                         descriptionKey,
+                         HttpContext.RequestAborted) &&
+                     string.Equals(
+                         await _fileStore.ReadAllTextAsync(
+                             FileStoreArea.Gallery,
+                             descriptionKey,
+                             HttpContext.RequestAborted),
+                         entry.Description,
+                         StringComparison.Ordinal))
             {
                 unchanged++;
             }
             else
             {
-                await System.IO.File.WriteAllTextAsync(
-                    descriptionPath,
+                await _fileStore.WriteAllTextAsync(
+                    FileStoreArea.Gallery,
+                    descriptionKey,
                     entry.Description!,
-                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                    HttpContext.RequestAborted);
                 written++;
             }
 
@@ -254,13 +272,19 @@ public class AdminModel : PageModel
                 throw new InvalidOperationException($"Unsupported path type '{entry.Type}' for path '{entry.Path}'.");
             }
 
-            var manifestPath = Path.Combine(directory, ".dimdock.json");
+            var manifestKey = JoinKey(directoryKey, ".dimdock.json");
 
             if (manifestType is null && directoryTags.Length == 0 && itemTags.Count == 0)
             {
-                if (System.IO.File.Exists(manifestPath))
+                if (await _fileStore.FileExistsAsync(
+                        FileStoreArea.Gallery,
+                        manifestKey,
+                        HttpContext.RequestAborted))
                 {
-                    System.IO.File.Delete(manifestPath);
+                    await _fileStore.DeleteFileAsync(
+                        FileStoreArea.Gallery,
+                        manifestKey,
+                        HttpContext.RequestAborted);
                     manifestsDeleted++;
                 }
                 continue;
@@ -273,37 +297,50 @@ public class AdminModel : PageModel
                     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
                     WriteIndented = true
                 });
-            if (!System.IO.File.Exists(manifestPath) ||
+            if (!await _fileStore.FileExistsAsync(
+                    FileStoreArea.Gallery,
+                    manifestKey,
+                    HttpContext.RequestAborted) ||
                 !string.Equals(
-                    await System.IO.File.ReadAllTextAsync(manifestPath),
+                    await _fileStore.ReadAllTextAsync(
+                        FileStoreArea.Gallery,
+                        manifestKey,
+                        HttpContext.RequestAborted),
                     manifest,
                     StringComparison.Ordinal))
             {
-                await System.IO.File.WriteAllTextAsync(
-                    manifestPath,
+                await _fileStore.WriteAllTextAsync(
+                    FileStoreArea.Gallery,
+                    manifestKey,
                     manifest,
-                    new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                    HttpContext.RequestAborted);
                 manifestsWritten++;
             }
         }
 
-        const string aboutFile = "/about/about.md";
+        const string aboutFile = "about.md";
         var aboutContent = await _context.About
             .AsNoTracking()
             .Where(entry => entry.Id == 1)
             .Select(entry => entry.Description)
             .FirstOrDefaultAsync(HttpContext.RequestAborted) ?? string.Empty;
         var aboutWritten = false;
-        if (!System.IO.File.Exists(aboutFile) ||
+        if (!await _fileStore.FileExistsAsync(
+                FileStoreArea.About,
+                aboutFile,
+                HttpContext.RequestAborted) ||
             !string.Equals(
-                await System.IO.File.ReadAllTextAsync(aboutFile, HttpContext.RequestAborted),
+                await _fileStore.ReadAllTextAsync(
+                    FileStoreArea.About,
+                    aboutFile,
+                    HttpContext.RequestAborted),
                 aboutContent,
                 StringComparison.Ordinal))
         {
-            await System.IO.File.WriteAllTextAsync(
+            await _fileStore.WriteAllTextAsync(
+                FileStoreArea.About,
                 aboutFile,
                 aboutContent,
-                new UTF8Encoding(encoderShouldEmitUTF8Identifier: false),
                 HttpContext.RequestAborted);
             aboutWritten = true;
         }
@@ -383,65 +420,24 @@ public class AdminModel : PageModel
             .ExecuteDeleteAsync(HttpContext.RequestAborted);
     }
 
-    private static string ResolvePathDirectory(string fullImageRoot, string rootPrefix, string path)
+    private static string GalleryDirectoryKey(string path)
     {
-        var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
         if (string.Equals(path, "root", StringComparison.OrdinalIgnoreCase))
         {
-            throw new InvalidOperationException("The root path cannot be deleted.");
+            return string.Empty;
         }
-        if (Directory.Exists(fullImageRoot) &&
-            (System.IO.File.GetAttributes(fullImageRoot) & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidOperationException("The image directory cannot be a linked directory.");
-        }
-
-        var segments = path.Split('/');
-        if (segments.Length == 0 ||
-            segments.Any(segment =>
-                segment.Length == 0 ||
-                segment is "." or ".." ||
-                segment.Any(character =>
-                    !char.IsAsciiLetterOrDigit(character) && character != '-' && character != '_')))
+        if (string.IsNullOrWhiteSpace(path) || path.StartsWith('/'))
         {
             throw new InvalidOperationException($"Invalid pending path deletion: {path}");
         }
 
-        var relativePath = string.Join(Path.DirectorySeparatorChar, segments);
-        var directory = Path.GetFullPath(Path.Combine(fullImageRoot, relativePath));
-        if (!directory.StartsWith(rootPrefix, comparison))
-        {
-            throw new InvalidOperationException($"Path entry resolves outside the image directory: {path}");
-        }
-
-        var current = fullImageRoot;
-        foreach (var segment in segments)
-        {
-            current = Path.Combine(current, segment);
-            if (Directory.Exists(current) &&
-                (System.IO.File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new InvalidOperationException($"Pending path contains a linked directory: {path}");
-            }
-        }
-
-        return directory;
+        return path.TrimEnd('/');
     }
 
-    private static string ResolveItemFilePath(
-        string fullImageRoot,
-        string rootPrefix,
-        string parentPath,
-        string originalName)
+    private static string GalleryItemKey(string parentPath, string originalName)
     {
-        var comparison = OperatingSystem.IsWindows()
-            ? StringComparison.OrdinalIgnoreCase
-            : StringComparison.Ordinal;
         if (string.IsNullOrWhiteSpace(originalName) ||
             originalName is "." or ".." ||
-            originalName != Path.GetFileName(originalName) ||
             originalName.Contains('/') ||
             originalName.Contains('\\') ||
             originalName.Any(char.IsControl))
@@ -449,44 +445,14 @@ public class AdminModel : PageModel
             throw new InvalidOperationException($"Invalid pending item filename: {originalName}");
         }
 
-        var segments = parentPath == "root"
-            ? Array.Empty<string>()
-            : parentPath.Split('/');
-        if (segments.Any(segment =>
-            string.IsNullOrWhiteSpace(segment) ||
-            segment is "." or ".." ||
-            segment.Contains('\\') ||
-            segment.Contains(':')))
-        {
-            throw new InvalidOperationException($"Invalid pending item path: {parentPath}");
-        }
-
-        if (Directory.Exists(fullImageRoot) &&
-            (System.IO.File.GetAttributes(fullImageRoot) & FileAttributes.ReparsePoint) != 0)
-        {
-            throw new InvalidOperationException("The image directory cannot be a linked directory.");
-        }
-
-        var current = fullImageRoot;
-        foreach (var segment in segments)
-        {
-            current = Path.Combine(current, segment);
-            if (Directory.Exists(current) &&
-                (System.IO.File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
-            {
-                throw new InvalidOperationException($"Pending item path contains a linked directory: {parentPath}");
-            }
-        }
-
-        var filePath = Path.GetFullPath(Path.Combine(current, originalName));
-        if (!filePath.StartsWith(rootPrefix, comparison))
-        {
-            throw new InvalidOperationException(
-                $"Pending item deletion resolves outside the image directory: {parentPath}/{originalName}");
-        }
-
-        return filePath;
+        var directory = string.Equals(parentPath, "root", StringComparison.OrdinalIgnoreCase)
+            ? string.Empty
+            : GalleryDirectoryKey(parentPath);
+        return JoinKey(directory, originalName);
     }
+
+    private static string JoinKey(string directory, string name) =>
+        string.IsNullOrEmpty(directory) ? name : $"{directory.TrimEnd('/')}/{name}";
 
     private bool IsAdminEnabled() =>
         AdminAccess.IsAdmin(

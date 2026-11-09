@@ -4,17 +4,14 @@ import logging
 import os
 import re
 import signal
-import tempfile
 import threading
 import warnings
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from PIL import Image, UnidentifiedImageError
 
 logging.basicConfig(level=logging.ERROR, format="%(levelname)s: %(message)s")
-THUMB_DIR = Path("/img_db_thumbs")
 MAX_THUMBNAIL_SIZE = (256, 256)
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
 MAX_IMAGE_PIXELS = 100_000_000
@@ -84,29 +81,14 @@ class ThumbnailHandler(BaseHTTPRequestHandler):
             ),
         )
 
-        THUMB_DIR.mkdir(parents=True, exist_ok=True)
-        thumbnail_path = THUMB_DIR / f"{thumbnail_key}.png"
-        temporary_path = None
-        try:
-            with tempfile.NamedTemporaryFile(
-                mode="wb",
-                suffix=".png",
-                prefix=".thumbnail-",
-                dir=THUMB_DIR,
-                delete=False,
-            ) as temporary_file:
-                temporary_path = Path(temporary_file.name)
-                canvas.save(temporary_file, format="PNG", optimize=True)
-                temporary_file.flush()
-                os.fsync(temporary_file.fileno())
-            os.replace(temporary_path, thumbnail_path)
-        finally:
-            if temporary_path is not None and temporary_path.exists():
-                temporary_path.unlink()
-
-        self.send_response(201)
-        self.send_header("Content-Length", "0")
+        thumbnail_bytes = io.BytesIO()
+        canvas.save(thumbnail_bytes, format="PNG", optimize=True)
+        thumbnail_content = thumbnail_bytes.getvalue()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/png")
+        self.send_header("Content-Length", str(len(thumbnail_content)))
         self.end_headers()
+        self.wfile.write(thumbnail_content)
 
     def _send_error(self, status, message):
         body = message.encode("utf-8")
@@ -131,7 +113,6 @@ def main():
     if not 1 <= port <= 65535:
         raise ValueError("THUMBNAIL_SERVICE_PORT must be an integer between 1 and 65535.")
 
-    THUMB_DIR.mkdir(parents=True, exist_ok=True)
     server = ThreadingHTTPServer(("0.0.0.0", port), ThumbnailHandler)
     server.daemon_threads = True
     shutdown_requested = threading.Event()

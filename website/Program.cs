@@ -3,10 +3,10 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Cookies;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Http.Features;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.StaticFiles;
 using MySqlConnector;
 using System.Threading.RateLimiting;
 using Website.Data;
@@ -15,6 +15,12 @@ using Website.Services;
 var builder = WebApplication.CreateBuilder(args);
 const long maximumUploadRequestBytes = 512L * 1024 * 1024;
 const long maximumBlogImageRequestBytes = 21L * 1024 * 1024;
+var fileStorageProvider = builder.Configuration["FileStorage:Provider"] ?? "Local";
+if (!string.Equals(fileStorageProvider, "Local", StringComparison.OrdinalIgnoreCase))
+{
+    throw new InvalidOperationException(
+        $"Unsupported FileStorage:Provider '{fileStorageProvider}'. Only Local is currently available.");
+}
 
 var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
 if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
@@ -57,6 +63,7 @@ builder.Services.Configure<FormOptions>(options =>
     options.MultipartBodyLengthLimit = maximumUploadRequestBytes;
     options.ValueCountLimit = 1024;
 });
+builder.Services.AddSingleton<IFileStore, LocalFileStore>();
 builder.Services.AddScoped<AdminOnlyTagsProvider>();
 builder.Services.AddScoped<FilesystemPersistenceService>();
 builder.Services.AddHttpClient("ThumbnailService", client =>
@@ -131,34 +138,57 @@ else
 
 app.UseHttpsRedirection();
 
-// Serve static files from wwwroot
+// Serve application assets from wwwroot.
 app.UseStaticFiles();
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider("/img_src"),
-    RequestPath = "/img_src"
-});
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider("/img_db_thumbs"),
-    RequestPath = "/img_db_thumbs"
-});
-Directory.CreateDirectory("/blogs/assets");
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider("/blogs/assets"),
-    RequestPath = "/blogs/assets",
-    OnPrepareResponse = context =>
-        context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff"
-});
-Directory.CreateDirectory("/about/assets");
-app.UseStaticFiles(new StaticFileOptions
-{
-    FileProvider = new PhysicalFileProvider("/about/assets"),
-    RequestPath = "/about/assets",
-    OnPrepareResponse = context =>
-        context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff"
-});
+
+var fileContentTypes = new FileExtensionContentTypeProvider();
+app.MapGet("/img_src/{**key}", ServeStoredFileAsync(FileStoreArea.Gallery, addNosniff: false));
+app.MapGet("/img_db_thumbs/{**key}", ServeStoredFileAsync(FileStoreArea.Thumbnails, addNosniff: false));
+app.MapGet("/blogs/assets/{**key}", ServeStoredFileAsync(FileStoreArea.Blogs, addNosniff: true, keyPrefix: "assets/"));
+app.MapGet("/about/assets/{**key}", ServeStoredFileAsync(FileStoreArea.About, addNosniff: true, keyPrefix: "assets/"));
+
+RequestDelegate ServeStoredFileAsync(FileStoreArea area, bool addNosniff, string keyPrefix = "") =>
+    async context =>
+    {
+        var key = context.Request.RouteValues["key"]?.ToString() ?? string.Empty;
+        if (string.IsNullOrEmpty(key))
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+            return;
+        }
+
+        key = keyPrefix + key;
+
+        try
+        {
+            var fileStore = context.RequestServices.GetRequiredService<IFileStore>();
+            var stream = await fileStore.OpenReadAsync(area, key, context.RequestAborted);
+            context.Response.ContentType = fileContentTypes.TryGetContentType(key, out var contentType)
+                ? contentType
+                : "application/octet-stream";
+            if (addNosniff)
+            {
+                context.Response.Headers["X-Content-Type-Options"] = "nosniff";
+            }
+
+            await Results.Stream(
+                stream,
+                context.Response.ContentType,
+                enableRangeProcessing: true).ExecuteAsync(context);
+        }
+        catch (FileNotFoundException)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+        catch (DirectoryNotFoundException)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+        catch (InvalidDataException)
+        {
+            context.Response.StatusCode = StatusCodes.Status404NotFound;
+        }
+    };
 
 app.UseRouting();
 

@@ -209,8 +209,8 @@ public class BlogPostModel : PageModel
 
         _context.Blogs.Remove(post);
         await _context.SaveChangesAsync(HttpContext.RequestAborted);
-        _filesystemPersistence.DeleteBlogAssets(post.Id);
-        _filesystemPersistence.DeleteBlogFile(post.SourceFilename);
+        await _filesystemPersistence.DeleteBlogAssetsAsync(post.Id, HttpContext.RequestAborted);
+        await _filesystemPersistence.DeleteBlogFileAsync(post.SourceFilename, HttpContext.RequestAborted);
         return RedirectToPage("/Blog");
     }
 

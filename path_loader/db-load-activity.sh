@@ -7,8 +7,28 @@ until nc -z "$DB_HOST" 3306; do
   sleep 1
 done
 
+marker_exists() {
+  python -c '
+import os
+import sys
+from file_store import LocalFileStore
+store = LocalFileStore(os.environ.get("DIMDOCK_DATA_ROOT", "/data"))
+sys.exit(0 if store.exists("state", sys.argv[1]) else 1)
+' "$1"
+}
+
+write_marker() {
+  python -c '
+import os
+import sys
+from file_store import LocalFileStore
+store = LocalFileStore(os.environ.get("DIMDOCK_DATA_ROOT", "/data"))
+store.write("state", sys.argv[1], b"")
+' "$1"
+}
+
 # Scan the data directories on each run; the loader only inserts new records.
-if [ ! -f "/app_state/.initialized" ]; then
+if ! marker_exists ".initialized"; then
   echo "Running path-loader for the first time..."
 else
   echo "Path-loader already initialized. Scanning for new files..."
@@ -17,20 +37,20 @@ python load_paths.py
 
 # The blog importer rebuilds Blogs when this marker is absent. Only mark it
 # initialized after the loader has completed successfully.
-if [ ! -f "/app_state/.blogs_initialized" ]; then
-  touch /app_state/.blogs_initialized
+if ! marker_exists ".blogs_initialized"; then
+  write_marker ".blogs_initialized"
   echo "Blog table rebuilt and initialized."
 else
   echo "Blogs already initialized."
 fi
 
-touch /app_state/.initialized
+write_marker ".initialized"
 
 # Check for shortcut initialization
-if [ ! -f "/app_state/.shortcuts_initialized" ]; then
+if ! marker_exists ".shortcuts_initialized"; then
   echo "Running shortcut builder for the first time..."
   python build_shortcuts.py
-  touch /app_state/.shortcuts_initialized
+  write_marker ".shortcuts_initialized"
 else
   echo "Shortcuts already initialized. Skipping."
 fi

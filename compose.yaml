@@ -34,26 +34,15 @@ services:
       - db
     volumes:
       - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/app_state
-        target: /app_state
-      - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_src
-        target: /img_src
-      - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_db_thumbs
-        target: /img_db_thumbs
-      - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/blogs
-        target: /blogs
-      - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/about
-        target: /about
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}
+        target: ${FILE_STORAGE_ROOT:-/data}
     environment:
       DB_HOST: db
       DB_PORT: "3306"
       DB_USER: ${DB_USER:?Set DB_USER in .env}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       DB_NAME: ${DB_NAME:?Set DB_NAME in .env}
+      DIMDOCK_DATA_ROOT: ${FILE_STORAGE_ROOT:-/data}
     command: ["python", "/app/load_paths.py"]
 
   thumbnail-service:
@@ -62,10 +51,6 @@ services:
     restart: unless-stopped
     environment:
       THUMBNAIL_SERVICE_PORT: ${THUMBNAIL_SERVICE_PORT:-8080}
-    volumes:
-      - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_db_thumbs
-        target: /img_db_thumbs
     healthcheck:
       test: ["CMD", "python", "-c", "import os, urllib.request; urllib.request.urlopen(f'http://127.0.0.1:{os.environ.get(\"THUMBNAIL_SERVICE_PORT\", \"8080\")}/health', timeout=2)"]
       interval: 5s
@@ -88,7 +73,9 @@ services:
       Development__AllowAnyAdminPassword: ${DEV_ALLOW_ANY_ADMIN_PASSWORD:-false}
       AdminAuth__Username: ${ADMIN_USERNAME:-}
       AdminAuth__Password: ${ADMIN_PASSWORD:-}
-      DataProtection__KeysPath: /app_state/data-protection-keys
+      DataProtection__KeysPath: ${FILE_STORAGE_ROOT:-/data}/app_state/data-protection-keys
+      FileStorage__Provider: ${FILE_STORAGE_PROVIDER:-Local}
+      FileStorage__RootPath: ${FILE_STORAGE_ROOT:-/data}
       Database__Host: db
       Database__Port: "3306"
       Database__Name: ${DB_NAME:?Set DB_NAME in .env}
@@ -97,20 +84,5 @@ services:
       ThumbnailService__BaseAddress: http://thumbnail-service:${THUMBNAIL_SERVICE_PORT:-8080}/
     volumes:
       - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/app_state
-        target: /app_state
-      - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_src
-        target: /img_src
-      - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/img_db_thumbs
-        target: /img_db_thumbs
-      - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/blogs
-        target: /blogs
-      - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/admin
-        target: /app/admin
-      - type: bind
-        source: ${WSL_DATA_DIR:-${DATA_DIR}}/about
-        target: /about
+        source: ${WSL_DATA_DIR:-${DATA_DIR}}
+        target: ${FILE_STORAGE_ROOT:-/data}

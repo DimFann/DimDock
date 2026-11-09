@@ -78,8 +78,8 @@ public class BlogModel : PageModel
 
         _context.Blogs.Remove(post);
         await _context.SaveChangesAsync(HttpContext.RequestAborted);
-        _filesystemPersistence.DeleteBlogAssets(post.Id);
-        _filesystemPersistence.DeleteBlogFile(post.SourceFilename);
+        await _filesystemPersistence.DeleteBlogAssetsAsync(post.Id, HttpContext.RequestAborted);
+        await _filesystemPersistence.DeleteBlogFileAsync(post.SourceFilename, HttpContext.RequestAborted);
 
         var remainingPosts = await _context.Blogs.CountAsync(HttpContext.RequestAborted);
         var lastPage = Math.Max(1, (int)Math.Ceiling(remainingPosts / (double)PageSize));
@@ -117,7 +117,7 @@ public class BlogModel : PageModel
         while (await _context.Blogs.AnyAsync(
                    blog => blog.SourceFilename == sourceFilename,
                    HttpContext.RequestAborted) ||
-               _filesystemPersistence.BlogFileExists(sourceFilename))
+               await _filesystemPersistence.BlogFileExistsAsync(sourceFilename, HttpContext.RequestAborted))
         {
             timestamp = timestamp.AddSeconds(1);
             sourceFilename = $"UTC_{timestamp:yyyyMMdd_HHmmss}.md";
