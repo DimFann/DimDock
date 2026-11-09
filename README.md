@@ -94,12 +94,25 @@ when initializing an empty database directory. Changing these values later
 does not update users inside an existing database; update the MariaDB users
 explicitly to rotate credentials without losing data.
 
-In admin mode, the Gallery page can upload up to 50 JPEG, PNG, or GIF images
-(50 MB each) to the current directory. The private thumbnail service uses
-Pillow to return the same 256-pixel thumbnails used by the path loader; the
-website writes originals and generated thumbnails through the configured file
-store. Its internal port can be changed with `THUMBNAIL_SERVICE_PORT` in `.env`
-(default `8080`); the service is not published directly to the host.
+In admin mode, the Gallery page can upload any number of files to the current
+directory, one at a time. Images (JPEG, PNG, GIF, ...) get thumbnails and must
+be at most 50 MB and 100 megapixels; an image that exceeds these limits or
+cannot be thumbnailed is rejected and its stored file deleted. Other file types
+need no thumbnail and have no size limit beyond the storage limits below. The
+private thumbnail service uses Pillow to return the same 256-pixel thumbnails
+used by the path loader; the website writes originals and generated thumbnails
+through the configured file store. Its internal port can be changed with
+`THUMBNAIL_SERVICE_PORT` in `.env` (default `8080`); the service is not
+published directly to the host.
+
+With Linode storage, the browser uploads each file straight to the bucket using
+a short-lived (6-hour) presigned PUT URL. The website never relays the bytes, so
+proxy/Cloudflare body limits do not apply; the single-PUT S3 limit is 5 GB per
+file. Once the PUT finishes, the website streams the object back from the bucket
+to generate its thumbnail and registers it in the database. This requires a
+one-time bucket CORS rule (see [Direct browser uploads](#direct-browser-uploads)).
+With Local storage, each file is posted through the website instead (512 MB per
+file, and subject to any reverse-proxy body limit).
 
 Admins can create blog posts from the Blog page. Posts created in the website
 are stored in the database; posts imported from Markdown files in `/blogs`
@@ -411,6 +424,27 @@ MariaDB, and Data Protection keys still live on the VPS under `DATA_DIR`.
 Existing import markers retain their previous meaning: switching providers does
 not force reimport of blogs or regenerate database IDs. A full database rebuild
 and stable-ID migration remain separate rollout tasks in `TODO_S3.md`.
+
+### Direct browser uploads
+
+Gallery uploads PUT files from the admin's browser directly to the bucket, so
+the bucket must allow cross-origin PUTs from the website's origin. Set this
+once (it replaces the bucket's existing CORS configuration; pass every origin
+the site is served from, e.g. with and without `www`):
+
+```sh
+docker compose build path-loader
+docker compose run --rm --no-deps -e FILE_STORAGE_PROVIDER=Linode --entrypoint python path-loader /app/storage_cors.py https://your.site
+```
+
+The rule allows only `PUT` with a `Content-Type` header; it grants no read or
+list access, and the bucket stays private. Each upload URL is signed by the
+website for one admin-chosen key and content type and expires after 6 hours.
+If the browser closes between the PUT and the website's completion step, the
+object stays in the bucket unregistered. On a later upload with that name, the
+site offers to finish registering the existing object instead of uploading it
+again. Recovery validates images and generates their thumbnails as usual; an
+image that cannot be thumbnailed is rejected and deleted.
 
 ### Hotlinks and access policy
 

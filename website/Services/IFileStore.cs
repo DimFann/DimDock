@@ -9,6 +9,18 @@ public enum FileStoreArea
     Admin
 }
 
+public sealed record DirectUpload(string Url, string ContentType);
+
+// Stores that let the browser upload straight to storage with a short-lived signed URL.
+public interface IDirectUploadStore
+{
+    Task<DirectUpload> CreateDirectUploadAsync(
+        FileStoreArea area,
+        string key,
+        TimeSpan lifetime,
+        CancellationToken cancellationToken = default);
+}
+
 public interface IFileStore
 {
     Task<bool> FileExistsAsync(

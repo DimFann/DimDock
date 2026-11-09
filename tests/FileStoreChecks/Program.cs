@@ -121,6 +121,43 @@ try
     var inaccessible = new LinodeFileStore(denied, options);
     await ExpectAsync<AmazonS3Exception>(() => inaccessible.FileExistsAsync(FileStoreArea.Gallery, "source/a.txt"));
     Console.WriteLine("PASS cross-backend parity/8MB non-seekable stream/pagination/interrupted copy");
+
+    var direct = await remote.CreateDirectUploadAsync(FileStoreArea.Gallery, "direct/large café.bin", TimeSpan.FromMinutes(5));
+    Check(direct.ContentType == "application/octet-stream", "direct upload content type");
+    using (var browser = new HttpClient())
+    {
+        var payload = new byte[3 * 1024 * 1024];
+        Random.Shared.NextBytes(payload);
+        using var put = new ByteArrayContent(payload);
+        put.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(direct.ContentType);
+        using var response = await browser.PutAsync(direct.Url, put);
+        Check(response.IsSuccessStatusCode, $"signed PUT accepted ({(int)response.StatusCode})");
+        await using var stored = await remote.OpenReadAsync(FileStoreArea.Gallery, "direct/large café.bin");
+        using var copy = new MemoryStream();
+        await stored.CopyToAsync(copy);
+        Check(copy.ToArray().SequenceEqual(payload), "signed PUT bytes stored under the logical key");
+        Check(Uri.UnescapeDataString(new Uri(direct.Url).Query).Contains("X-Amz-SignedHeaders=content-type;host")
+            || Uri.UnescapeDataString(new Uri(direct.Url).Query).Contains("X-Amz-SignedHeaders=content-type"),
+            "signed PUT binds the content type");
+    }
+    await ExpectAsync<IOException>(() => remote.CreateDirectUploadAsync(FileStoreArea.Gallery, "direct", TimeSpan.FromMinutes(5)));
+
+    await using (var oversized = new MemoryStream(new byte[50 * 1024 * 1024 + 1]))
+        await remote.WriteAsync(FileStoreArea.Gallery, "oversized.png", oversized);
+    var unreachable = new GalleryModel(null!, null!, null!, null!, null!, null!, null!, remote,
+        new TestClientFactory(new HttpClient { BaseAddress = new Uri("http://127.0.0.1:9/") }));
+    var thumbnailMethod = typeof(GalleryModel).GetMethod("GenerateThumbnailAsync", BindingFlags.NonPublic | BindingFlags.Instance)
+        ?? throw new Exception("Thumbnail generation method not found");
+    try
+    {
+        await (Task)thumbnailMethod.Invoke(unreachable, ["oversized.png", new string('b', 64), CancellationToken.None])!;
+        Check(false, "oversized image rejected");
+    }
+    catch (Exception error)
+    {
+        Check(error.GetType().Name == "InvalidImageUploadException", $"oversized image rejected before thumbnailing ({error.GetType().Name})");
+    }
+    Console.WriteLine("PASS signed direct upload/content-type binding/directory guard/oversized image rejection");
 }
 finally
 {

@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.StaticFiles;
 
 namespace Website.Services;
 
-public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions options) : IFileStore
+public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions options) : IFileStore, IDirectUploadStore
 {
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
     private bool UseUnsignedPayload => client.Config.ServiceURL.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
@@ -161,6 +161,29 @@ public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions optio
         {
             throw new IOException($"Destination file already exists: {key}", error);
         }
+    }
+
+    public async Task<DirectUpload> CreateDirectUploadAsync(FileStoreArea area, string key, TimeSpan lifetime,
+        CancellationToken cancellationToken = default)
+    {
+        var objectKey = ObjectKey(area, key);
+        if (await DirectoryExistsAsync(area, key, cancellationToken))
+        {
+            throw new IOException($"File key resolves to a directory: {key}");
+        }
+        var contentType = ContentTypes.TryGetContentType(key, out var type) ? type : "application/octet-stream";
+        var url = await client.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+        {
+            BucketName = options.Bucket,
+            Key = objectKey,
+            Verb = HttpVerb.PUT,
+            ContentType = contentType,
+            Expires = DateTime.UtcNow.Add(lifetime),
+            Protocol = client.Config.ServiceURL?.StartsWith("http://", StringComparison.OrdinalIgnoreCase) == true
+                ? Protocol.HTTP
+                : Protocol.HTTPS
+        });
+        return new DirectUpload(url, contentType);
     }
 
     public async Task<string> ReadAllTextAsync(FileStoreArea area, string key, CancellationToken cancellationToken = default)

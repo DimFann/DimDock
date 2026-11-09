@@ -26,6 +26,7 @@ COPY file_store.py .
 COPY linode_file_store.py .
 COPY storage_smoke.py .
 COPY storage_clean.py .
+COPY storage_cors.py .
 COPY build_shortcuts.py .
 COPY db-load-activity.sh .
 

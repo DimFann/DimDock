@@ -779,78 +779,112 @@
         }
     });
 
-    uploadPicker?.addEventListener("change", () => {
-        if (uploadPicker.files.length === 0) {
+    uploadPicker?.addEventListener("change", async () => {
+        const files = Array.from(uploadPicker.files);
+        uploadPicker.value = "";
+        if (files.length === 0) {
             return;
         }
 
-        const formData = new FormData();
-        formData.append("path", "@Model.CurrentPath");
-        formData.append("__RequestVerificationToken",
-            document.querySelector("[data-add-path-form] input[name='__RequestVerificationToken']").value);
-        for (const file of uploadPicker.files) {
-            formData.append("files", file, file.name);
-        }
+        const token = document.querySelector("[data-add-path-form] input[name='__RequestVerificationToken']").value;
+        const totalBytes = files.reduce((sum, file) => sum + file.size, 0) || 1;
+        let finishedBytes = 0;
+        const uploaded = [];
+        const errors = [];
+        const skipped = [];
+
+        const handlerUrl = (handler) => new URL(`?handler=${handler}`, window.location.href);
+        const postForm = async (handler, fields) => {
+            const body = new FormData();
+            body.append("path", "@Model.CurrentPath");
+            body.append("__RequestVerificationToken", token);
+            for (const [name, value] of Object.entries(fields)) {
+                body.append(name, value);
+            }
+            const response = await fetch(handlerUrl(handler), {
+                method: "POST",
+                body,
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || `${handler} failed.`);
+            }
+            return response.json();
+        };
+        // XHR (not fetch) so upload progress can be reported.
+        const send = (method, url, body, headers, file, index) => new Promise((resolve, reject) => {
+            const request = new XMLHttpRequest();
+            request.open(method, url);
+            for (const [name, value] of Object.entries(headers)) {
+                request.setRequestHeader(name, value);
+            }
+            request.upload.addEventListener("progress", (event) => {
+                if (event.lengthComputable) {
+                    const loaded = Math.min(event.loaded, file.size);
+                    uploadProgress.value = Math.round(((finishedBytes + loaded) / totalBytes) * 100);
+                    uploadMessage.textContent = `Uploading ${file.name} (${index + 1} of ${files.length}): ${uploadProgress.value}%`;
+                }
+            });
+            request.addEventListener("load", () => request.status >= 200 && request.status < 300
+                ? resolve(request.responseText)
+                : reject(new Error(request.responseText && method === "POST"
+                    ? request.responseText
+                    : `storage rejected the upload (HTTP ${request.status}).`)));
+            request.addEventListener("error", () => reject(new Error("the connection was interrupted.")));
+            request.addEventListener("abort", () => reject(new Error("upload canceled.")));
+            request.send(body);
+        });
 
         uploadStatus.hidden = false;
         uploadProgress.value = 0;
-        uploadProgress.removeAttribute("value");
         refreshGalleryButton.hidden = true;
-        uploadMessage.textContent = "Uploading selected files...";
         uploadButton.disabled = true;
 
-        const request = new XMLHttpRequest();
-        request.open("POST", new URL("?handler=Upload", window.location.href));
-        request.setRequestHeader("X-Requested-With", "XMLHttpRequest");
-        request.upload.addEventListener("progress", (event) => {
-            if (!event.lengthComputable) {
-                return;
-            }
-
-            uploadProgress.value = Math.round((event.loaded / event.total) * 100);
-            uploadMessage.textContent = event.loaded === event.total
-                ? "Saving files to the gallery..."
-                : `Uploading files: ${uploadProgress.value}%`;
-        });
-        request.addEventListener("load", () => {
-            uploadButton.disabled = false;
-            uploadPicker.value = "";
-            if (request.status < 200 || request.status >= 300) {
-                uploadProgress.value = 0;
-                uploadMessage.textContent = request.responseText || "Upload failed.";
-                return;
-            }
-
+        for (const [index, file] of files.entries()) {
+            uploadMessage.textContent = `Uploading ${file.name} (${index + 1} of ${files.length})...`;
             try {
-                const result = JSON.parse(request.responseText);
-                const successes = result.uploaded ?? [];
-                const errors = result.errors ?? [];
-                uploadProgress.value = 100;
-                if (successes.length > 0) {
-                    refreshGalleryButton.hidden = false;
+                const begin = await postForm("BeginUpload", { fileName: file.name });
+                if (begin.recover) {
+                    if (window.confirm(`${file.name} already exists in storage but is not registered in the gallery. Add the existing file to the gallery?`)) {
+                        uploadMessage.textContent = `Recovering ${file.name}...`;
+                        await postForm("CompleteUpload", { fileName: file.name });
+                        uploaded.push(file.name);
+                    } else {
+                        skipped.push(file.name);
+                    }
+                } else if (begin.direct) {
+                    await send("PUT", begin.url, file, { "Content-Type": begin.contentType }, file, index);
+                    uploadMessage.textContent = `Saving ${file.name} to the gallery...`;
+                    await postForm("CompleteUpload", { fileName: file.name });
+                    uploaded.push(file.name);
+                } else {
+                    const body = new FormData();
+                    body.append("path", "@Model.CurrentPath");
+                    body.append("__RequestVerificationToken", token);
+                    body.append("files", file, file.name);
+                    const result = JSON.parse(await send("POST", handlerUrl("Upload"), body,
+                        { "X-Requested-With": "XMLHttpRequest" }, file, index));
+                    uploaded.push(...(result.uploaded ?? []));
+                    errors.push(...(result.errors ?? []));
                 }
-
-                const summary = `${successes.length} file${successes.length === 1 ? "" : "s"} uploaded.`;
-                uploadMessage.textContent = errors.length > 0
-                    ? `${summary} ${errors.join(" ")}`
-                    : summary;
-                if (errors.length === 0 && successes.length > 0) {
-                    window.location.reload();
-                }
-            } catch {
-                uploadMessage.textContent = "Upload completed, but the server response could not be read.";
+            } catch (uploadError) {
+                const message = uploadError.message;
+                errors.push(message.startsWith(file.name) ? message : `${file.name}: ${message}`);
             }
-        });
-        request.addEventListener("error", () => {
-            uploadButton.disabled = false;
-            uploadPicker.value = "";
-            uploadMessage.textContent = "Upload failed because the connection was interrupted.";
-        });
-        request.addEventListener("abort", () => {
-            uploadButton.disabled = false;
-            uploadPicker.value = "";
-            uploadMessage.textContent = "Upload canceled.";
-        });
-        request.send(formData);
+            finishedBytes += file.size;
+            uploadProgress.value = Math.round((finishedBytes / totalBytes) * 100);
+        }
+
+        uploadButton.disabled = false;
+        uploadProgress.value = 100;
+        if (uploaded.length > 0) {
+            refreshGalleryButton.hidden = false;
+        }
+        const summary = `${uploaded.length} file${uploaded.length === 1 ? "" : "s"} uploaded.`;
+        const skippedSummary = skipped.length > 0 ? `Skipped recovery for: ${skipped.join(", ")}.` : "";
+        uploadMessage.textContent = [summary, skippedSummary, ...errors].filter(Boolean).join(" ");
+        if (errors.length === 0 && skipped.length === 0 && uploaded.length > 0) {
+            window.location.reload();
+        }
     });
 </script>

@@ -15,7 +15,8 @@ using Website.Services;
 
 public class GalleryModel : PageModel
 {
-    private const int MaximumUploadFiles = 50;
+    private const long MaximumThumbnailSourceBytes = 50L * 1024 * 1024;
+    private static readonly TimeSpan DirectUploadLifetime = TimeSpan.FromHours(6);
     private static readonly HashSet<string> ThumbnailImageExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".gif" };
 
@@ -915,38 +916,163 @@ public class GalleryModel : PageModel
         [FromForm] string? path,
         [FromForm] List<IFormFile>? files)
     {
-        if (!AdminEnabled)
+        var (target, failure) = await ResolveUploadTargetAsync(path);
+        if (target is null)
         {
-            return NotFound();
-        }
-
-        if (!await IsAntiForgeryTokenValidAsync())
-        {
-            return BadRequest("Invalid anti-forgery token.");
-        }
-
-        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
-        if (!string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal) ||
-            string.IsNullOrEmpty(sanitizedPath))
-        {
-            return BadRequest("Invalid gallery path.");
+            return failure!;
         }
 
         if (files is null || files.Count == 0)
         {
             return BadRequest("Select at least one file to upload.");
         }
-        if (files.Count > MaximumUploadFiles)
+
+        var uploaded = new List<string>();
+        var errors = new List<string>();
+        foreach (var file in files)
         {
-            return BadRequest($"Select no more than {MaximumUploadFiles} files at a time.");
+            HttpContext.RequestAborted.ThrowIfCancellationRequested();
+            var fileName = System.IO.Path.GetFileName((file.FileName ?? string.Empty).Replace('\\', '/'));
+            var error = await CheckUploadNameAsync(target, fileName);
+            if (error is null)
+            {
+                await using (var uploadStream = file.OpenReadStream())
+                {
+                    await _fileStore.WriteAsync(
+                        FileStoreArea.Gallery,
+                        JoinStorageKey(target.Directory, fileName),
+                        uploadStream,
+                        overwrite: false,
+                        HttpContext.RequestAborted);
+                }
+                error = await FinalizeUploadAsync(target, fileName);
+            }
+
+            if (error is null)
+            {
+                uploaded.Add(fileName);
+            }
+            else
+            {
+                errors.Add(error);
+            }
         }
 
-        var pathExists = await _context.Paths.AnyAsync(
-            entry => entry.Path == sanitizedPath,
-            HttpContext.RequestAborted);
-        if (!pathExists)
+        return new JsonResult(new { uploaded, errors });
+    }
+
+    // Step 1 of a direct upload: validate the name and, if storage supports it, hand the browser a signed URL.
+    // Without direct-upload support the browser posts the file to OnPostUploadAsync instead.
+    public async Task<IActionResult> OnPostBeginUploadAsync(
+        [FromForm] string? path,
+        [FromForm] string? fileName)
+    {
+        var (target, failure) = await ResolveUploadTargetAsync(path);
+        if (target is null)
         {
-            return NotFound("Gallery path not found.");
+            return failure!;
+        }
+
+        var name = fileName ?? string.Empty;
+        if (_fileStore is not IDirectUploadStore directStore)
+        {
+            var error = await CheckUploadNameAsync(target, name);
+            if (error is not null)
+            {
+                return BadRequest(error);
+            }
+
+            return new JsonResult(new { direct = false });
+        }
+
+        if (!IsValidUploadFileName(name))
+        {
+            return BadRequest($"{name}: invalid filename.");
+        }
+
+        if (await _context.Items.AnyAsync(
+                item => item.ParentPath == target.Path && item.OriginalName == name,
+                HttpContext.RequestAborted))
+        {
+            return BadRequest($"{name}: a file with that name already exists in this gallery.");
+        }
+
+        if (await _fileStore.FileExistsAsync(
+                FileStoreArea.Gallery,
+                JoinStorageKey(target.Directory, name),
+                HttpContext.RequestAborted))
+        {
+            return new JsonResult(new { direct = false, recover = true });
+        }
+
+        var upload = await directStore.CreateDirectUploadAsync(
+            FileStoreArea.Gallery,
+            JoinStorageKey(target.Directory, name),
+            DirectUploadLifetime,
+            HttpContext.RequestAborted);
+        return new JsonResult(new { direct = true, url = upload.Url, contentType = upload.ContentType });
+    }
+
+    // Step 2 of a direct upload: the browser has stored the file; thumbnail it (from storage) and record it.
+    public async Task<IActionResult> OnPostCompleteUploadAsync(
+        [FromForm] string? path,
+        [FromForm] string? fileName)
+    {
+        var (target, failure) = await ResolveUploadTargetAsync(path);
+        if (target is null)
+        {
+            return failure!;
+        }
+
+        var name = fileName ?? string.Empty;
+        if (!IsValidUploadFileName(name))
+        {
+            return BadRequest($"{name}: invalid filename.");
+        }
+
+        if (await _context.Items.AnyAsync(
+                item => item.ParentPath == target.Path && item.OriginalName == name,
+                HttpContext.RequestAborted))
+        {
+            return BadRequest($"{name}: a file with that name already exists in this gallery.");
+        }
+
+        if (!await _fileStore.FileExistsAsync(
+                FileStoreArea.Gallery,
+                JoinStorageKey(target.Directory, name),
+                HttpContext.RequestAborted))
+        {
+            return BadRequest($"{name}: the uploaded file was not found in storage.");
+        }
+
+        var error = await FinalizeUploadAsync(target, name);
+        return error is null ? new JsonResult(new { uploaded = name }) : BadRequest(error);
+    }
+
+    private sealed record UploadTarget(string Path, string Directory);
+
+    private async Task<(UploadTarget? Target, IActionResult? Failure)> ResolveUploadTargetAsync(string? path)
+    {
+        if (!AdminEnabled)
+        {
+            return (null, NotFound());
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return (null, BadRequest("Invalid anti-forgery token."));
+        }
+
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal) ||
+            string.IsNullOrEmpty(sanitizedPath))
+        {
+            return (null, BadRequest("Invalid gallery path."));
+        }
+
+        if (!await _context.Paths.AnyAsync(entry => entry.Path == sanitizedPath, HttpContext.RequestAborted))
+        {
+            return (null, NotFound("Gallery path not found."));
         }
 
         var imageDirectory = GalleryDirectoryKey(sanitizedPath);
@@ -958,131 +1084,113 @@ public class GalleryModel : PageModel
             throw new DirectoryNotFoundException($"Gallery directory does not exist: {sanitizedPath}");
         }
 
-        var uploaded = new List<string>();
-        var errors = new List<string>();
-        foreach (var file in files)
+        return (new UploadTarget(sanitizedPath, imageDirectory), null);
+    }
+
+    // Returns an error message, or null when a new file can be stored under this name.
+    private async Task<string?> CheckUploadNameAsync(UploadTarget target, string fileName)
+    {
+        if (!IsValidUploadFileName(fileName))
         {
-            HttpContext.RequestAborted.ThrowIfCancellationRequested();
-            var fileName = System.IO.Path.GetFileName((file.FileName ?? string.Empty).Replace('\\', '/'));
-            if (!IsValidUploadFileName(fileName))
-            {
-                errors.Add($"{file.FileName}: invalid filename.");
-                continue;
-            }
-
-            var extension = System.IO.Path.GetExtension(fileName);
-            var isImage = ThumbnailImageExtensions.Contains(extension);
-            if (await _context.Items.AnyAsync(
-                item => item.ParentPath == sanitizedPath && item.OriginalName == fileName,
-                HttpContext.RequestAborted))
-            {
-                errors.Add($"{fileName}: a file with that name already exists in this gallery.");
-                continue;
-            }
-
-            var sourceKey = JoinStorageKey(imageDirectory, fileName);
-            if (await _fileStore.FileExistsAsync(
-                    FileStoreArea.Gallery,
-                    sourceKey,
-                    HttpContext.RequestAborted))
-            {
-                errors.Add($"{fileName}: a file with that name already exists in storage.");
-                continue;
-            }
-
-            var thumbnailKey = CreateThumbnailKey(sanitizedPath, fileName);
-            var thumbnailStorageKey = $"{thumbnailKey}.png";
-            var sourceCreated = false;
-            var thumbnailCreated = false;
-            var uploadSucceeded = false;
-            try
-            {
-                await using var uploadStream = file.OpenReadStream();
-                await _fileStore.WriteAsync(
-                    FileStoreArea.Gallery,
-                    sourceKey,
-                    uploadStream,
-                    overwrite: false,
-                    HttpContext.RequestAborted);
-                sourceCreated = true;
-                if (isImage)
-                {
-                    await GenerateThumbnailAsync(
-                        sourceKey,
-                        thumbnailKey,
-                        HttpContext.RequestAborted);
-                    thumbnailCreated = true;
-                }
-
-                var now = DateTime.Now;
-                var item = new Item
-                {
-                    OriginalName = fileName,
-                    ParentPath = sanitizedPath,
-                    ThumbnailKey = thumbnailKey,
-                    Uploaded = now,
-                    Created = GetCreatedDate(fileName, sanitizedPath, now),
-                    Type = isImage ? "image" : "file",
-                    Metadata = "{}"
-                };
-                _context.Items.Add(item);
-
-                var dateTags = DatePathTags.ForPath(sanitizedPath);
-                if (dateTags.Count > 0)
-                {
-                    var tagEntities = await _context.Tags
-                        .Where(tag => dateTags.Contains(tag.Name))
-                        .ToListAsync(HttpContext.RequestAborted);
-                    var existingNames = tagEntities.Select(tag => tag.Name).ToHashSet(StringComparer.Ordinal);
-                    foreach (var tagName in dateTags.Where(tagName => !existingNames.Contains(tagName)))
-                    {
-                        var tag = new Tag { Name = tagName };
-                        tagEntities.Add(tag);
-                        _context.Tags.Add(tag);
-                    }
-
-                    foreach (var tag in tagEntities)
-                    {
-                        item.TagLinks.Add(new ItemTag { Item = item, Tag = tag });
-                    }
-                }
-
-                await _context.SaveChangesAsync(HttpContext.RequestAborted);
-                uploadSucceeded = true;
-                uploaded.Add(fileName);
-            }
-            catch (InvalidImageUploadException error)
-            {
-                errors.Add($"{fileName}: {error.Message}");
-            }
-            catch (HttpRequestException error)
-            {
-                errors.Add($"{fileName}: thumbnail service failed: {error.Message}");
-            }
-            finally
-            {
-                if (!uploadSucceeded)
-                {
-                    if (sourceCreated)
-                    {
-                        await _fileStore.DeleteFileAsync(
-                            FileStoreArea.Gallery,
-                            sourceKey,
-                            CancellationToken.None);
-                    }
-                    if (thumbnailCreated)
-                    {
-                        await _fileStore.DeleteFileAsync(
-                            FileStoreArea.Thumbnails,
-                            thumbnailStorageKey,
-                            CancellationToken.None);
-                    }
-                    _context.ChangeTracker.Clear();
-                }
-            }
+            return $"{fileName}: invalid filename.";
         }
 
-        return new JsonResult(new { uploaded, errors });
+        if (await _context.Items.AnyAsync(
+                item => item.ParentPath == target.Path && item.OriginalName == fileName,
+                HttpContext.RequestAborted))
+        {
+            return $"{fileName}: a file with that name already exists in this gallery.";
+        }
+
+        if (await _fileStore.FileExistsAsync(
+                FileStoreArea.Gallery,
+                JoinStorageKey(target.Directory, fileName),
+                HttpContext.RequestAborted))
+        {
+            return $"{fileName}: a file with that name already exists in storage.";
+        }
+
+        return null;
+    }
+
+    // Thumbnails (images only) and records a file already in storage. On failure the stored file and any
+    // thumbnail are deleted and an error message is returned.
+    private async Task<string?> FinalizeUploadAsync(UploadTarget target, string fileName)
+    {
+        var sourceKey = JoinStorageKey(target.Directory, fileName);
+        var isImage = ThumbnailImageExtensions.Contains(System.IO.Path.GetExtension(fileName));
+        var thumbnailKey = CreateThumbnailKey(target.Path, fileName);
+        var thumbnailStorageKey = $"{thumbnailKey}.png";
+        var thumbnailCreated = false;
+        var uploadSucceeded = false;
+        try
+        {
+            if (isImage)
+            {
+                await GenerateThumbnailAsync(sourceKey, thumbnailKey, HttpContext.RequestAborted);
+                thumbnailCreated = true;
+            }
+
+            var now = DateTime.Now;
+            var item = new Item
+            {
+                OriginalName = fileName,
+                ParentPath = target.Path,
+                ThumbnailKey = thumbnailKey,
+                Uploaded = now,
+                Created = GetCreatedDate(fileName, target.Path, now),
+                Type = isImage ? "image" : "file",
+                Metadata = "{}"
+            };
+            _context.Items.Add(item);
+
+            var dateTags = DatePathTags.ForPath(target.Path);
+            if (dateTags.Count > 0)
+            {
+                var tagEntities = await _context.Tags
+                    .Where(tag => dateTags.Contains(tag.Name))
+                    .ToListAsync(HttpContext.RequestAborted);
+                var existingNames = tagEntities.Select(tag => tag.Name).ToHashSet(StringComparer.Ordinal);
+                foreach (var tagName in dateTags.Where(tagName => !existingNames.Contains(tagName)))
+                {
+                    var tag = new Tag { Name = tagName };
+                    tagEntities.Add(tag);
+                    _context.Tags.Add(tag);
+                }
+
+                foreach (var tag in tagEntities)
+                {
+                    item.TagLinks.Add(new ItemTag { Item = item, Tag = tag });
+                }
+            }
+
+            await _context.SaveChangesAsync(HttpContext.RequestAborted);
+            uploadSucceeded = true;
+            return null;
+        }
+        catch (InvalidImageUploadException error)
+        {
+            return $"{fileName}: {error.Message}";
+        }
+        catch (HttpRequestException error)
+        {
+            return $"{fileName}: thumbnail service failed: {error.Message}";
+        }
+        finally
+        {
+            if (!uploadSucceeded)
+            {
+                await _fileStore.DeleteFileAsync(FileStoreArea.Gallery, sourceKey, CancellationToken.None);
+                if (thumbnailCreated)
+                {
+                    await _fileStore.DeleteFileAsync(
+                        FileStoreArea.Thumbnails,
+                        thumbnailStorageKey,
+                        CancellationToken.None);
+                }
+                _context.ChangeTracker.Clear();
+            }
+        }
     }
 
     private static bool IsValidUploadFileName(string fileName) =>
@@ -1111,6 +1219,11 @@ public class GalleryModel : PageModel
             FileStoreArea.Gallery,
             sourceKey,
             cancellationToken);
+        if (source.Length > MaximumThumbnailSourceBytes)
+        {
+            throw new InvalidImageUploadException("Images cannot exceed 50 MB.");
+        }
+
         using var content = new StreamContent(source);
         content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
         content.Headers.ContentLength = source.Length;
