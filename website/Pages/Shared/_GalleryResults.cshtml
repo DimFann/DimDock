@@ -169,7 +169,7 @@
     </dialog>
 }
 
-<hr class="gallery-separator" />
+<hr class="gallery-separator" hidden="@(Model.Items.Count == 0 && !string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase))" />
 
 <!-- Image grid -->
 @if (Model.Items.Any())

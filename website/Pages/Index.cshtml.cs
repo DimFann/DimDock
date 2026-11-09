@@ -1,4 +1,3 @@
-using Markdig;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.RazorPages;
@@ -16,9 +15,6 @@ public class IndexModel(
     FilesystemPersistenceService filesystemPersistence,
     IAntiforgery antiforgery) : PageModel
 {
-    private static readonly MarkdownPipeline MarkdownPipeline =
-        new MarkdownPipelineBuilder().DisableHtml().Build();
-
     public string AboutMarkdown { get; private set; } = string.Empty;
     public bool AdminEnabled => AdminAccess.IsAdmin(
         configuration,
@@ -35,7 +31,7 @@ public class IndexModel(
     }
 
     public string RenderMarkdown(string? markdown) =>
-        Markdig.Markdown.ToHtml(markdown ?? string.Empty, MarkdownPipeline);
+        BlogMarkdownRenderer.Render(markdown);
 
     public async Task<IActionResult> OnPostPreviewAsync([FromForm] string? markdown)
     {
@@ -52,7 +48,9 @@ public class IndexModel(
         return Content(RenderMarkdown(markdown), "text/html");
     }
 
-    public async Task<IActionResult> OnPostSaveAsync([FromForm] string? markdown)
+    public async Task<IActionResult> OnPostSaveAsync(
+        [FromForm] string? markdown,
+        [FromForm] string[]? uploadedImageUrls)
     {
         if (!AdminEnabled)
         {
@@ -73,11 +71,46 @@ public class IndexModel(
             context.About.Add(about);
         }
 
+        var previousMarkdown = about.Description;
         about.Description = markdown ?? string.Empty;
         await context.SaveChangesAsync(HttpContext.RequestAborted);
         await filesystemPersistence.PersistAboutAsync(HttpContext.RequestAborted);
+        filesystemPersistence.DeleteUnreferencedAboutAssets(
+            previousMarkdown, about.Description, uploadedImageUrls ?? []);
 
         return new JsonResult(new { html = RenderMarkdown(about.Description) });
+    }
+
+    public async Task<IActionResult> OnPostUploadImageAsync([FromForm] IFormFile? image)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        if (image is null)
+        {
+            return BadRequest("Choose an image to upload.");
+        }
+
+        try
+        {
+            var imageUrl = await filesystemPersistence.SaveAboutAssetAsync(image, HttpContext.RequestAborted);
+            return new JsonResult(new
+            {
+                url = imageUrl,
+                fileName = Path.GetFileName(image.FileName.Replace('\\', '/'))
+            });
+        }
+        catch (InvalidDataException exception)
+        {
+            return BadRequest(exception.Message);
+        }
     }
 
     private async Task<bool> IsAntiForgeryTokenValidAsync()

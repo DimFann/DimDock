@@ -108,6 +108,21 @@
   color: #fff;
 }
 
+.path-admin-button.delete-path-button {
+  background: #d00000;
+  border-color: #9c0000;
+  color: #fff;
+}
+
+.path-admin-button.delete-path-button:hover {
+  background: #a90000;
+}
+
+.path-admin-button.delete-path-button:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 2px;
+}
+
 .path-upload-status {
   align-items: center;
   display: flex;
@@ -187,6 +202,13 @@
   margin-top: 1rem;
 }
 
+@media (max-width: 767.98px) {
+  .admin-options-toolbar-header .path-type-form {
+    flex-basis: 100%;
+    order: 1;
+  }
+}
+
 @media (max-width: 480px) {
   .admin-options-toolbar-header,
   .admin-options-toolbar-actions {
@@ -221,6 +243,21 @@
 
   .bulk-selection-actions .path-admin-button {
     flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 360px) {
+  .admin-options-toolbar-header {
+    column-gap: 0.35rem;
+  }
+
+  .admin-options-toolbar-header .admin-options-toolbar-title {
+    font-size: 0.85rem;
+  }
+
+  .admin-toolbar-danger .path-admin-button {
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
   }
 }
 
@@ -358,4 +395,3 @@
   color: #a00;
   margin: 0;
 }
-

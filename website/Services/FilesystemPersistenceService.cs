@@ -1,6 +1,9 @@
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Markdig;
+using Markdig.Syntax;
+using Markdig.Syntax.Inlines;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Website.Data;
@@ -15,8 +18,9 @@ public sealed class FilesystemPersistenceService(
     private const string ImageRoot = "/img_src";
     private const string BlogRoot = "/blogs";
     private const string BlogAssetsRoot = "/blogs/assets";
-    private const long MaximumBlogAssetBytes = 20L * 1024 * 1024;
-    private static readonly HashSet<string> BlogAssetExtensions =
+    private const string AboutAssetsRoot = "/about/assets";
+    private const long MaximumImageAssetBytes = 20L * 1024 * 1024;
+    private static readonly HashSet<string> ImageAssetExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".gif", ".jpeg", ".jpg", ".png", ".webp" };
     private const string AboutFile = "/about/about.md";
     private static readonly Regex ImportableBlogFilename =
@@ -234,17 +238,6 @@ public sealed class FilesystemPersistenceService(
             throw new InvalidDataException("The blog post is not ready to receive images.");
         }
 
-        if (file.Length == 0 || file.Length > MaximumBlogAssetBytes)
-        {
-            throw new InvalidDataException("Images must be between 1 byte and 20 MB.");
-        }
-
-        var extension = Path.GetExtension(file.FileName);
-        if (!BlogAssetExtensions.Contains(extension))
-        {
-            throw new InvalidDataException("Upload a PNG, JPEG, GIF, or WebP image.");
-        }
-
         Directory.CreateDirectory(BlogAssetsRoot);
         EnsureNotLinkedDirectory(BlogAssetsRoot);
 
@@ -252,8 +245,109 @@ public sealed class FilesystemPersistenceService(
         Directory.CreateDirectory(postDirectory);
         EnsureNotLinkedDirectory(postDirectory);
 
+        var fileName = await SaveImageAssetAsync(postDirectory, file, cancellationToken);
+        return $"/blogs/assets/{postId}/{fileName}";
+    }
+
+    public async Task<string> SaveAboutAssetAsync(
+        IFormFile file,
+        CancellationToken cancellationToken = default)
+    {
+        Directory.CreateDirectory(AboutAssetsRoot);
+        EnsureNotLinkedDirectory(AboutAssetsRoot);
+        var fileName = await SaveImageAssetAsync(AboutAssetsRoot, file, cancellationToken);
+        return $"/about/assets/{fileName}";
+    }
+
+    public void DeleteUnreferencedAboutAssets(
+        string? previousMarkdown,
+        string? currentMarkdown,
+        IEnumerable<string> uploadedUrls)
+    {
+        if (!Directory.Exists(AboutAssetsRoot))
+        {
+            return;
+        }
+
+        EnsureNotLinkedDirectory(AboutAssetsRoot);
+        var candidates = GetAboutAssetNames(previousMarkdown);
+        foreach (var url in uploadedUrls)
+        {
+            var name = GetAboutAssetName(url);
+            if (name is not null)
+            {
+                candidates.Add(name);
+            }
+        }
+
+        candidates.ExceptWith(GetAboutAssetNames(currentMarkdown));
+        foreach (var name in candidates)
+        {
+            var path = Path.Combine(AboutAssetsRoot, name);
+            if (File.Exists(path))
+            {
+                EnsureNotLinkedFile(path);
+                File.Delete(path);
+            }
+        }
+    }
+
+    private static HashSet<string> GetAboutAssetNames(string? markdown) =>
+        Markdown.Parse(markdown ?? string.Empty, BlogMarkdownRenderer.Pipeline)
+            .Descendants<LinkInline>()
+            .Select(link => GetAboutAssetName(link.Url))
+            .Where(name => name is not null)
+            .Select(name => name!)
+            .ToHashSet(StringComparer.Ordinal);
+
+    private static string? GetAboutAssetName(string? url)
+    {
+        if (string.IsNullOrEmpty(url))
+        {
+            return null;
+        }
+
+        var path = Uri.UnescapeDataString(url.Split('?', '#')[0]);
+        var prefix = path.StartsWith("/about/assets/", StringComparison.Ordinal)
+            ? "/about/assets/"
+            : path.StartsWith("about/assets/", StringComparison.Ordinal)
+                ? "about/assets/"
+                : path.StartsWith("assets/", StringComparison.Ordinal)
+                    ? "assets/"
+                    : null;
+        if (prefix is null)
+        {
+            return null;
+        }
+
+        var name = path[prefix.Length..];
+        var extension = Path.GetExtension(name);
+        return name == Path.GetFileName(name) &&
+               !name.Contains('\\') &&
+               ImageAssetExtensions.Contains(extension) &&
+               Guid.TryParseExact(Path.GetFileNameWithoutExtension(name), "N", out _)
+            ? name
+            : null;
+    }
+
+    private static async Task<string> SaveImageAssetAsync(
+        string directory,
+        IFormFile file,
+        CancellationToken cancellationToken)
+    {
+        if (file.Length == 0 || file.Length > MaximumImageAssetBytes)
+        {
+            throw new InvalidDataException("Images must be between 1 byte and 20 MB.");
+        }
+
+        var extension = Path.GetExtension(file.FileName);
+        if (!ImageAssetExtensions.Contains(extension))
+        {
+            throw new InvalidDataException("Upload a PNG, JPEG, GIF, or WebP image.");
+        }
+
         var fileName = $"{Guid.NewGuid():N}{extension.ToLowerInvariant()}";
-        var filePath = Path.Combine(postDirectory, fileName);
+        var filePath = Path.Combine(directory, fileName);
         await using var input = file.OpenReadStream();
         var signature = new byte[12];
         var signatureLength = 0;
@@ -295,7 +389,7 @@ public sealed class FilesystemPersistenceService(
             throw;
         }
 
-        return $"/blogs/assets/{postId}/{fileName}";
+        return fileName;
     }
 
     public void DeleteBlogAssets(ulong postId)

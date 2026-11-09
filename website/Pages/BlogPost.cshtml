@@ -221,66 +221,14 @@
         if (blogEditor) {
             const blogForm = blogEditor.querySelector("[data-blog-form]");
             const markdownEditor = blogEditor.querySelector("[data-blog-markdown]");
-            const imageInput = blogEditor.querySelector("[data-blog-image-input]");
-            const imageStatus = blogEditor.querySelector("[data-blog-image-status]");
-
-            async function uploadBlogImages(files) {
-                for (const file of files) {
-                    imageStatus.textContent = `Uploading ${file.name}...`;
-                    const formData = new FormData(blogForm);
-                    formData.append("image", file);
-                    const url = new URL(window.location.href);
-                    url.searchParams.set("handler", "UploadImage");
-
-                    try {
-                        const response = await fetch(url, {
-                            method: "POST",
-                            body: formData,
-                            headers: { "X-Requested-With": "XMLHttpRequest" }
-                        });
-                        if (!response.ok) {
-                            throw new Error(await response.text() || "Image upload failed.");
-                        }
-
-                        const result = await response.json();
-                        const altText = result.fileName
-                            .replaceAll("\\", "\\\\")
-                            .replaceAll("]", "\\]")
-                            .replace(/[\r\n]/g, " ");
-                        const scale = blogEditor.querySelector("[data-blog-image-scale]").value;
-                        const imageMarkdown = `![${altText}](${result.url} "scale=${scale}%")`;
-                        const start = markdownEditor.selectionStart;
-                        const end = markdownEditor.selectionEnd;
-                        const before = start > 0 && markdownEditor.value[start - 1] !== "\n" ? "\n" : "";
-                        const after = end < markdownEditor.value.length && markdownEditor.value[end] !== "\n" ? "\n" : "";
-                        markdownEditor.setRangeText(`${before}${imageMarkdown}${after}`, start, end, "end");
-                        markdownEditor.focus();
-                        imageStatus.textContent = `Uploaded ${file.name}.`;
-                    } catch (requestError) {
-                        imageStatus.textContent = requestError.message;
-                    }
-                }
-            }
-
-            blogEditor.querySelector("[data-upload-blog-image]").addEventListener("click", () => imageInput.click());
-            imageInput.addEventListener("change", () => {
-                void uploadBlogImages(Array.from(imageInput.files));
-                imageInput.value = "";
-            });
-            const imageDropzone = blogEditor.querySelector("[data-blog-image-dropzone]");
-            imageDropzone.addEventListener("dragover", (event) => {
-                event.preventDefault();
-                imageDropzone.classList.add("is-dragging");
-            });
-            imageDropzone.addEventListener("dragleave", (event) => {
-                if (!imageDropzone.contains(event.relatedTarget)) {
-                    imageDropzone.classList.remove("is-dragging");
-                }
-            });
-            imageDropzone.addEventListener("drop", (event) => {
-                event.preventDefault();
-                imageDropzone.classList.remove("is-dragging");
-                void uploadBlogImages(Array.from(event.dataTransfer.files));
+            initializeMarkdownImageUploads({
+                form: blogForm,
+                markdownEditor,
+                input: blogEditor.querySelector("[data-blog-image-input]"),
+                status: blogEditor.querySelector("[data-blog-image-status]"),
+                scale: blogEditor.querySelector("[data-blog-image-scale]"),
+                uploadButton: blogEditor.querySelector("[data-upload-blog-image]"),
+                dropzone: blogEditor.querySelector("[data-blog-image-dropzone]")
             });
 
             document.addEventListener("click", async (event) => {

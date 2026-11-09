@@ -225,3 +225,6 @@
   margin-left: auto;
 }
 
+.description-editor-actions-left {
+  flex-wrap: wrap;
+}

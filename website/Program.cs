@@ -151,6 +151,14 @@ app.UseStaticFiles(new StaticFileOptions
     OnPrepareResponse = context =>
         context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff"
 });
+Directory.CreateDirectory("/about/assets");
+app.UseStaticFiles(new StaticFileOptions
+{
+    FileProvider = new PhysicalFileProvider("/about/assets"),
+    RequestPath = "/about/assets",
+    OnPrepareResponse = context =>
+        context.Context.Response.Headers["X-Content-Type-Options"] = "nosniff"
+});
 
 app.UseRouting();
 

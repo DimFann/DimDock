@@ -70,3 +70,8 @@ editor are stored under `DATA_DIR/blogs/assets/<post-id>` and are removed when
 that post is deleted. PNG, JPEG, GIF, and WebP images up to 20 MB can be
 selected or dragged into the editor; the image scale selector inserts the
 chosen size using Markdown image syntax.
+
+Admins can also edit the Home/About Markdown and upload or drop images using
+the same editor controls. Images are stored under `DATA_DIR/about/assets`.
+Saving removes managed About images that were removed from the Markdown,
+including images uploaded and then removed during the same editing session.
