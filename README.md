@@ -41,6 +41,27 @@ The website waits for the path loader to finish successfully before starting.
 Gallery indexing retries its full database transaction up to three attempts
 on record-change conflicts, deadlocks, or lock timeouts; other errors, or
 exhausted retries, fail startup rather than silently skipping indexing.
+Timestamped path-loader logs show storage initialization, database connection,
+folder start/finish messages, commits, and total elapsed time.
+View them with `docker compose logs -f path-loader`.
+The final gallery timing breakdown separates storage listing, metadata reads,
+directory database work, file indexing/thumbnail existence checks, item tag
+database work, and thumbnail tasks. The final gallery timing summary aggregates
+these wall-clock durations and the initial index read. Per-folder timing details
+are not printed; thumbnail queue/progress messages are DEBUG-only. Database phases include
+Python tag processing; file checks include both filesystem and any index updates.
+Listing time includes advancing the storage walk between folders.
+Thumbnail names are listed once per scan and checked in memory rather than
+performing one filesystem/S3 existence check per image. The summary reports this
+up-front `thumbnail_listing` time separately. This snapshot uses memory proportional
+to thumbnail count; pause external thumbnail deletions during indexing, since
+changes after the listing are observed on the next run.
+The scan ends with mean/median milliseconds per folder for each operation,
+pooled time per unit, mean/median per-folder normalized time, and units/second.
+File work is normalized by indexed candidate files, tag work by items, and
+thumbnail work by queued tasks (not confirmed successful generations). Empty
+workloads report N/A rates. `sha256_keys` measures key generation inside file
+work, so it is a subset, not an additional duration to add to the total.
 
 The shared Razor layout loads the stylesheets in `website/wwwroot/css` in a
 fixed order. `site.css` contains site-wide styles; the other files group blog,
@@ -92,6 +113,13 @@ the same editor controls. Images are stored under `DATA_DIR/about/assets`.
 Saving removes managed About images that were removed from the Markdown,
 including images uploaded and then removed during the same editing session.
 If no image embeds remain, saving also removes all lingering About assets.
+
+## Markdown rendering
+
+Markdown views and previews support plain `<br>`, `<br/>`, and `<br />` line
+breaks. Other raw HTML (including attributes on break tags) remains disabled;
+tags inside code spans/blocks or escaped with a backslash remain literal.
+Run renderer checks with `dotnet run --project tests\MarkdownChecks\MarkdownChecks.csproj`.
 
 ## Export Google Drive shortcuts
 

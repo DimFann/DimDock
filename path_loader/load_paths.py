@@ -10,11 +10,12 @@ import unicodedata
 import logging
 import io
 import time
+import statistics
 
 from file_store import create_file_store
 
 # 🔧 Configuration
-logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s: %(message)s')
 MAX_THUMBNAIL_SIZE = (256, 256)
 MAX_WORKERS = 8
 
@@ -393,7 +394,53 @@ def process_image(file_key, thumbnail_key):
     except Exception as e:
         logging.error("Error processing image %s", file_key, exc_info=e)
 
+def log_scan_statistics(samples):
+    logging.info("Gallery statistics (wall-clock; rates use total units / total time):")
+    for operation, (unit, measurements) in samples.items():
+        if not measurements:
+            logging.info("  %s: no folders measured.", operation)
+            continue
+        seconds = [elapsed for elapsed, _ in measurements]
+        total_seconds = sum(seconds)
+        units = sum(count for _, count in measurements)
+        normalized = [
+            elapsed * 1000 / count for elapsed, count in measurements if count
+        ]
+        logging.info(
+            "  %s: folders=%s mean=%.3fms/folder median=%.3fms/folder total=%.3fs",
+            operation, len(seconds), statistics.mean(seconds) * 1000,
+            statistics.median(seconds) * 1000, total_seconds,
+        )
+        if normalized and total_seconds > 0:
+            logging.info(
+                "    %s=%s pooled=%.3fms/%s normalized_mean=%.3fms/%s "
+                "normalized_median=%.3fms/%s rate=%.1f %s/s",
+                unit, units, total_seconds * 1000 / units, unit,
+                statistics.mean(normalized), unit, statistics.median(normalized), unit,
+                units / total_seconds, unit,
+            )
+        else:
+            logging.info("    %s=%s normalized time/rate=N/A (no work or zero elapsed time).", unit, units)
+
+
 def traverse_and_insert(cursor):
+    scan_started = time.perf_counter()
+    totals = dict.fromkeys(('listing', 'metadata', 'path_db', 'files', 'tags_db', 'thumbnails'), 0.0)
+    folder_count = 0
+    samples = {
+        operation: (unit, []) for operation, unit in (
+            ('folder_total', 'folder'), ('listing', 'folder'), ('metadata', 'folder'),
+            ('path_db', 'folder'), ('files', 'file'), ('tags_db', 'item'),
+            ('thumbnails', 'task'), ('sha256_keys', 'key'),
+        )
+    }
+    logging.info("Listing existing thumbnails once for this scan.")
+    thumbnail_listing_started = time.perf_counter()
+    existing_thumbnails = set(STORE.list_files('thumbnails'))
+    thumbnail_listing_seconds = time.perf_counter() - thumbnail_listing_started
+    logging.info("Listed %s existing thumbnails in %.3fs.",
+                 len(existing_thumbnails), thumbnail_listing_seconds)
+    logging.info("Reading existing gallery index from database.")
     total_files = 0
     cursor.execute("SELECT path, id, type FROM Paths")
     path_rows = cursor.fetchall()
@@ -408,7 +455,21 @@ def traverse_and_insert(cursor):
     for (item_path, filename), item in existing_items.items():
         existing_items_by_path.setdefault(item_path, {})[filename] = item['id']
 
-    for current_key, dirs, files in STORE.walk('gallery'):
+    logging.info("Walking gallery storage: %s indexed directories, %s indexed items.",
+                 len(existing_paths), len(existing_items))
+    index_seconds = time.perf_counter() - scan_started - thumbnail_listing_seconds
+    walk = iter(STORE.walk('gallery'))
+    while True:
+        listing_started = time.perf_counter()
+        try:
+            current_key, dirs, files = next(walk)
+        except StopIteration:
+            totals['listing'] += time.perf_counter() - listing_started
+            break
+        timings = {'listing': time.perf_counter() - listing_started}
+        folder_started = time.perf_counter()
+        stage_started = folder_started
+        folder_count += 1
         logging.info("Processing folder: %s", current_key or "root")
         dirs[:] = sorted(directory for directory in dirs if not directory.startswith('.'))
         migrate_legacy_metadata(current_key)
@@ -430,6 +491,8 @@ def traverse_and_insert(cursor):
             except Exception as e:
                 logging.error("Error reading %s in %s: %s", DESCRIPTION_FILENAME, path, e)
 
+        timings['metadata'] = time.perf_counter() - stage_started
+        stage_started = time.perf_counter()
         if path not in existing_paths:
             existing_paths[path] = insert_path(cursor, path, parent, description)
             existing_path_types[path] = None
@@ -443,7 +506,11 @@ def traverse_and_insert(cursor):
         if get_entity_tags(cursor, 'PathTags', 'path_id', path_id) != path_tags:
             replace_entity_tags(cursor, 'PathTags', 'path_id', path_id, sorted(path_tags))
 
+        timings['path_db'] = time.perf_counter() - stage_started
+        stage_started = time.perf_counter()
         image_tasks = []
+        processed_files = 0
+        hash_seconds = 0.0
         for file in files:
             if file.startswith('.'):
                 continue
@@ -451,7 +518,10 @@ def traverse_and_insert(cursor):
                 continue
             ext = os.path.splitext(file)[1].lower()
             item_key = (path, file)
+            hash_started = time.perf_counter()
             thumbnail_key = create_thumbnail_key(path, file)
+            hash_seconds += time.perf_counter() - hash_started
+            processed_files += 1
             file_type = 'image' if ext in VALID_EXTENSIONS else 'file'
             if item_key not in existing_items:
                 item_id = insert_item(cursor, file, path, thumbnail_key, file_type)
@@ -479,9 +549,11 @@ def traverse_and_insert(cursor):
                     item['thumbnail_key'] = thumbnail_key
 
             thumb_key = f"{thumbnail_key}.png"
-            if file_type == 'image' and not STORE.exists('thumbnails', thumb_key):
+            if file_type == 'image' and thumb_key not in existing_thumbnails:
                 image_tasks.append((join_key(current_key, file), thumbnail_key))
 
+        timings['files'] = time.perf_counter() - stage_started
+        stage_started = time.perf_counter()
         directory_items = existing_items_by_path.get(path, {})
         cursor.execute("""
             SELECT ItemTags.item_id, Tags.name
@@ -515,38 +587,62 @@ def traverse_and_insert(cursor):
                     filename
                 )
 
-        for filename, item_id in directory_items.items():
-            explicit_tags = tag_manifest['items'].get(filename, {'tags': []})['tags']
-            auto_tags = date_path_tags(path)
-            for tag_name in explicit_tags:
-                cursor.execute("INSERT IGNORE INTO Tags (name) VALUES (%s)", (tag_name,))
-            for tag_name in auto_tags:
-                cursor.execute("INSERT IGNORE INTO Tags (name) VALUES (%s)", (tag_name,))
-
+        timings['tags_db'] = time.perf_counter() - stage_started
+        stage_started = time.perf_counter()
+        logging.debug("Folder %s: %s files, %s thumbnails queued (%s workers).",
+                     path, len(files), len(image_tasks), MAX_WORKERS)
         with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
             futures = [
                 executor.submit(process_image, file_path, thumbnail_key)
                 for file_path, thumbnail_key in image_tasks
             ]
-            for future in as_completed(futures):
+            for completed, future in enumerate(as_completed(futures), 1):
                 try:
                     future.result()
                 except Exception as e:
                     logging.error("Unhandled thumbnail worker error: %s", e, exc_info=e)
+                if completed % 10 == 0 or completed == len(futures):
+                    logging.debug("Folder %s: %s/%s thumbnail tasks completed.",
+                                 path, completed, len(futures))
 
+        timings['thumbnails'] = time.perf_counter() - stage_started
+        for stage, seconds in timings.items():
+            totals[stage] += seconds
+            count = {
+                'files': processed_files, 'tags_db': len(directory_items),
+                'thumbnails': len(image_tasks),
+            }.get(stage, 1)
+            samples[stage][1].append((seconds, count))
+        folder_seconds = time.perf_counter() - folder_started + timings['listing']
+        samples['folder_total'][1].append((folder_seconds, 1))
+        samples['sha256_keys'][1].append((hash_seconds, processed_files))
         logging.info("Finished processing folder: %s", path)
+        log_scan_statistics(samples)
 
+    logging.info(
+        "Gallery timing: %s folders | thumbnail_listing=%.3fs initial_index=%.3fs listing=%.3fs metadata=%.3fs "
+        "path_db=%.3fs files/thumbnail_checks=%.3fs tags_db=%.3fs "
+        "thumbnail_tasks=%.3fs total=%.3fs",
+        folder_count, thumbnail_listing_seconds, index_seconds, totals['listing'], totals['metadata'],
+        totals['path_db'], totals['files'], totals['tags_db'], totals['thumbnails'],
+        time.perf_counter() - scan_started,
+    )
     return total_files
 
 def main():
     conn = None
     cursor = None
+    started = time.monotonic()
     try:
+        logging.info("Starting path-loader with %s storage.", os.environ.get('FILE_STORAGE_PROVIDER', 'Local'))
         for area in ('gallery', 'thumbnails', 'blogs', 'about', 'admin', 'state'):
+            logging.info("Ensuring storage area: %s", area)
             STORE.create_directory(area)
 
+        logging.info("Loading admin-only tag configuration.")
         initialize_admin_only_tags()
 
+        logging.info("Connecting to gallery database.")
         conn = mysql.connector.connect(
             host=DB_HOST,
             user=DB_USER,
@@ -554,10 +650,14 @@ def main():
             database=DB_NAME
         )
         cursor = conn.cursor()
+        logging.info("Connected to gallery database.")
         for attempt in range(1, 4):
             try:
+                logging.info("Starting gallery scan (attempt %s/3).", attempt)
                 total_files = traverse_and_insert(cursor)
+                logging.info("Committing gallery scan: %s new files.", total_files)
                 conn.commit()
+                logging.info("Gallery scan committed.")
                 break
             except mysql.connector.Error as error:
                 if error.errno not in (1020, 1205, 1213) or attempt == 3:
@@ -569,14 +669,18 @@ def main():
                     attempt + 1
                 )
                 time.sleep(attempt)
+        logging.info("Checking blog imports.")
         inserted_blogs = process_blogs(cursor)
+        logging.info("Importing About content.")
         process_about(cursor)
         # process_shortcuts(cursor)
+        logging.info("Committing blog/About imports.")
         conn.commit()
         logging.info(
-            "Finished scanning: %s new files, %s new blogs.",
+            "Finished scanning: %s new files, %s new blogs in %.1f seconds.",
             total_files,
-            inserted_blogs
+            inserted_blogs,
+            time.monotonic() - started,
         )
     except Exception:
         if conn is not None:

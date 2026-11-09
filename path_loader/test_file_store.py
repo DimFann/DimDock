@@ -15,6 +15,33 @@ import storage_smoke
 import storage_clean
 
 
+class LocalProviderIsolationTests(unittest.TestCase):
+    def test_local_storage_never_creates_s3_client_or_uses_network(self):
+        with tempfile.TemporaryDirectory() as root:
+            with (
+                patch.dict('os.environ', {
+                    'FILE_STORAGE_PROVIDER': 'Local', 'DIMDOCK_DATA_ROOT': root,
+                    'LINODE_STORAGE_ENDPOINT': 'https://example.invalid',
+                    'LINODE_STORAGE_BUCKET': 'unused',
+                }),
+                patch('boto3.client', side_effect=AssertionError('Local must not create S3 clients')) as client,
+                patch('socket.socket.connect', side_effect=AssertionError('Local must not use network')) as connect,
+            ):
+                store = create_file_store()
+                self.assertIsInstance(store, LocalFileStore)
+                for area in ('gallery', 'thumbnails', 'blogs', 'about', 'admin', 'state'):
+                    store.create_directory(area)
+                    store.write(area, 'sample.txt', b'content')
+                    self.assertTrue(store.exists(area, 'sample.txt'))
+                    self.assertEqual(store.read_text(area, 'sample.txt'), 'content')
+                    self.assertEqual(store.list_files(area), ['sample.txt'])
+                    self.assertTrue(list(store.walk(area)))
+                    store.move_file(area, 'sample.txt', 'renamed.txt')
+                    store.delete_file(area, 'renamed.txt')
+                client.assert_not_called()
+                connect.assert_not_called()
+
+
 @mock_aws
 class FileStoreTests(unittest.TestCase):
     def setUp(self):

@@ -13,8 +13,6 @@ namespace Website.Pages;
 
 public class ImageModel : PageModel
 {
-    private static readonly MarkdownPipeline DescriptionMarkdownPipeline =
-        new MarkdownPipelineBuilder().DisableHtml().Build();
     private static readonly HashSet<string> TextFileExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".txt", ".md", ".markdown", ".mdown", ".mkd", ".rst", ".adoc", ".asciidoc", ".tex",
@@ -71,7 +69,7 @@ public class ImageModel : PageModel
     public string TagsInput { get; set; } = string.Empty;
     public string? TagError { get; private set; }
     public string RenderDescription(string? markdown) =>
-        Markdown.ToHtml(markdown ?? string.Empty, DescriptionMarkdownPipeline);
+        SafeMarkdownRenderer.Render(markdown);
     public bool IsTextDocument => TextFileExtensions.Contains(Path.GetExtension(Item.OriginalName));
     public bool IsMarkdownDocument => MarkdownFileExtensions.Contains(Path.GetExtension(Item.OriginalName));
 

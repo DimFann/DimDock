@@ -15,8 +15,6 @@ using Website.Services;
 
 public class GalleryModel : PageModel
 {
-    private static readonly MarkdownPipeline DescriptionMarkdownPipeline =
-        new MarkdownPipelineBuilder().DisableHtml().Build();
     private const int MaximumUploadFiles = 50;
     private static readonly HashSet<string> ThumbnailImageExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".gif" };
@@ -303,7 +301,7 @@ public class GalleryModel : PageModel
     }
 
     public string RenderMarkdown(string? markdown) =>
-        Markdig.Markdown.ToHtml(markdown ?? string.Empty, DescriptionMarkdownPipeline);
+        SafeMarkdownRenderer.Render(markdown);
 
     public async Task<IActionResult> OnPostPreviewDescriptionAsync([FromForm] string? description)
     {

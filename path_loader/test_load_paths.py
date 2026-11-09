@@ -96,6 +96,109 @@ class AboutInitializationTests(unittest.TestCase):
 
 
 class GalleryTransactionTests(unittest.TestCase):
+    def test_statistics_mean_median_and_normalized_rates(self):
+        with self.assertLogs(level='INFO') as logs:
+            load_paths.log_scan_statistics({
+                'files': ('file', [(0.010, 2), (0.030, 3), (0.020, 0)]),
+                'thumbnails': ('task', [(0.001, 0)]),
+                'empty': ('folder', []),
+            })
+        text = '\n'.join(logs.output)
+        self.assertIn('mean=20.000ms/folder median=20.000ms/folder', text)
+        self.assertIn('pooled=12.000ms/file', text)
+        self.assertIn('normalized_mean=7.500ms/file normalized_median=7.500ms/file', text)
+        self.assertIn('rate=83.3 file/s', text)
+        self.assertIn('normalized time/rate=N/A', text)
+        self.assertIn('no folders measured', text)
+
+    def test_unchanged_item_tags_do_not_issue_redundant_tag_inserts(self):
+        cursor = Mock()
+        path = '2020/2020-02'
+        name = 'image.png'
+        key = load_paths.create_thumbnail_key(path, name)
+        tags = load_paths.date_path_tags(path)
+        cursor.fetchall.side_effect = [
+            [(path, 1, None)], [(2, path, name, key, 'image')],
+            [(2, tag) for tag in tags],
+        ]
+        store = Mock()
+        store.walk.return_value = iter([(path, [], [name])])
+        store.list_files.return_value = [f'{key}.png']
+        store.exists.return_value = False
+        with (
+            patch.object(load_paths, 'STORE', store),
+            patch.object(load_paths, 'get_entity_tags', return_value=set()),
+            patch.object(load_paths, 'replace_entity_tags') as replace_tags,
+        ):
+            self.assertEqual(load_paths.traverse_and_insert(cursor), 0)
+        replace_tags.assert_not_called()
+        self.assertFalse(any('INSERT' in call.args[0] for call in cursor.execute.call_args_list))
+        store.list_files.assert_called_once_with('thumbnails')
+        self.assertFalse(any(call.args[0] == 'thumbnails' for call in store.exists.call_args_list))
+
+    def test_thumbnail_snapshot_still_generates_missing_images(self):
+        cursor = Mock()
+        path, name = '2020', 'missing.png'
+        key = load_paths.create_thumbnail_key(path, name)
+        cursor.fetchall.side_effect = [
+            [(path, 1, None)], [(2, path, name, key, 'image')],
+            [(2, tag) for tag in load_paths.date_path_tags(path)],
+        ]
+        store = Mock()
+        store.walk.return_value = iter([(path, [], [name])])
+        store.list_files.return_value = []
+        store.exists.return_value = False
+        with (
+            patch.object(load_paths, 'STORE', store),
+            patch.object(load_paths, 'get_entity_tags', return_value=set()),
+            patch.object(load_paths, 'process_image') as image,
+        ):
+            load_paths.traverse_and_insert(cursor)
+        image.assert_called_once_with(f'{path}/{name}', key)
+
+    def test_thumbnail_listing_failure_aborts_instead_of_rebuilding_all(self):
+        store, cursor = Mock(), Mock()
+        store.list_files.side_effect = PermissionError('denied')
+        with patch.object(load_paths, 'STORE', store), self.assertRaises(PermissionError):
+            load_paths.traverse_and_insert(cursor)
+        cursor.execute.assert_not_called()
+
+    def test_folder_timings_include_listing_and_no_thumbnail_scan(self):
+        cursor = Mock()
+        cursor.fetchall.side_effect = [[('root', 1, None)], [], []]
+        store = Mock()
+        store.walk.return_value = iter([('', [], [])])
+        store.list_files.return_value = []
+        store.exists.return_value = False
+        with (
+            patch.object(load_paths, 'STORE', store),
+            patch.object(load_paths, 'get_entity_tags', return_value=set()),
+            self.assertLogs(level='INFO') as logs,
+        ):
+            self.assertEqual(load_paths.traverse_and_insert(cursor), 0)
+        for stage in ('listing=', 'metadata=', 'path_db=', 'files/thumbnail_checks=',
+                      'tags_db=', 'thumbnail_tasks=', 'Gallery timing: 1 folders',
+                      'Gallery statistics', 'Processing folder: root', 'Finished processing folder: root'):
+            self.assertTrue(any(stage in line for line in logs.output), stage)
+        self.assertFalse(any('folder_total=' in line or 'thumbnails queued' in line for line in logs.output))
+
+    def test_startup_stages_are_logged(self):
+        connection = Mock()
+        with (
+            patch.object(load_paths, 'STORE'),
+            patch.object(load_paths.mysql.connector, 'connect', return_value=connection),
+            patch.object(load_paths, 'initialize_admin_only_tags'),
+            patch.object(load_paths, 'traverse_and_insert', return_value=2),
+            patch.object(load_paths, 'process_blogs', return_value=0),
+            patch.object(load_paths, 'process_about'),
+            self.assertLogs(level='INFO') as logs,
+        ):
+            load_paths.main()
+        for stage in ('Starting path-loader', 'Ensuring storage area', 'Connecting to gallery database',
+                      'Starting gallery scan', 'Gallery scan committed', 'Checking blog imports',
+                      'Importing About content', 'Finished scanning'):
+            self.assertTrue(any(stage in line for line in logs.output), stage)
+
     def run_loader(self, scan_results, commit_results=None):
         connection = Mock()
         connection.commit.side_effect = commit_results

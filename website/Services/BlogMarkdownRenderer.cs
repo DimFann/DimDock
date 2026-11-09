@@ -6,7 +6,7 @@ namespace Website.Services;
 public static class BlogMarkdownRenderer
 {
     internal static readonly MarkdownPipeline Pipeline =
-        new MarkdownPipelineBuilder().DisableHtml().Build();
+        SafeMarkdownRenderer.Pipeline;
     private static readonly Regex ScaledImagePattern = new(
         "(?<image><img\\b[^>]*?)\\s+title=\"scale=(?<scale>25|50|75|100)%\"(?<ending>\\s*/?>)",
         RegexOptions.Compiled | RegexOptions.CultureInvariant | RegexOptions.IgnoreCase);
