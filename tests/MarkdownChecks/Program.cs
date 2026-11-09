@@ -12,9 +12,12 @@ foreach (var render in new Func<string?, string>[] { SafeMarkdownRenderer.Render
     Check(!render("<img src=x onerror=alert(1)>").Contains("<img "), "raw image disabled");
     Check(render("**bold**").Contains("<strong>bold</strong>"), "Markdown preserved");
     Check(render(null) == "", "null preserved");
+    Check(render("line one\nline two").Contains("line one<br />"), "plain newline renders as break");
+    Check(!render("```\na\nb\n```").Contains("<br />"), "newlines in code blocks stay literal");
+    Check(render("# Big\n## Smaller").Contains("<h1>Big</h1>") && render("## Smaller").Contains("<h2>"), "headings preserved");
 }
 Check(BlogMarkdownRenderer.Render("![test](image.png \"scale=50%\")").Contains("width: 50%"), "scaled images preserved");
-Console.WriteLine("PASS Markdown breaks, code/escape handling, HTML restrictions and scaled images");
+Console.WriteLine("PASS Markdown breaks, newlines, code/escape handling, HTML restrictions and scaled images");
 
 static void Check(bool condition, string message)
 {

@@ -12,7 +12,7 @@
   background: var(--surface-raised-background);
   border: 1px solid #e0f0ff;
   box-sizing: border-box;
-  font-family: "Courier New", monospace;
+  font-family: var(--content-monospace-font);
   font-size: 12px;
   overflow-wrap: anywhere;
   padding: 0.5rem 2.5rem 0.5rem 0.5rem;
@@ -51,7 +51,7 @@
 }
 
 .image-viewer-heading h1 {
-  font-family: "Courier New", monospace;
+  font-family: var(--content-monospace-font);
   font-size: 1rem;
   font-weight: normal;
   margin: 0;
@@ -102,6 +102,7 @@
 
 .image-viewer-text-content.blog-post-content {
   min-height: 0;
+  white-space: normal;
 }
 
 .file-content-editor {
@@ -159,7 +160,7 @@
 
 .file-content-editor textarea {
   box-sizing: border-box;
-  font-family: "Courier New", monospace;
+  font-family: var(--content-monospace-font);
   min-height: 0;
   padding: 0.75rem;
   resize: none;

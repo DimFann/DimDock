@@ -15,7 +15,7 @@ public static class SafeMarkdownRenderer
 
     private static MarkdownPipeline CreatePipeline()
     {
-        var builder = new MarkdownPipelineBuilder().DisableHtml();
+        var builder = new MarkdownPipelineBuilder().DisableHtml().UseSoftlineBreakAsHardlineBreak();
         builder.InlineParsers.Insert(0, new BreakInlineParser());
         return builder.Build();
     }

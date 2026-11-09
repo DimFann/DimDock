@@ -13,7 +13,7 @@ WORKDIR /src
 
 # Copy project files and restore dependencies
 COPY . .
-COPY --from=frontend /src/wwwroot/lib/bootstrap ./wwwroot/lib/bootstrap
+COPY --from=frontend /src/wwwroot/lib ./wwwroot/lib
 RUN dotnet restore
 
 # Publish the app to a clean folder

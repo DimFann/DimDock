@@ -1,4 +1,4 @@
-import { copyFileSync, mkdirSync } from "node:fs";
+import { copyFileSync, cpSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -22,3 +22,11 @@ copyFileSync(
   resolve(bootstrapDirectory, "LICENSE"),
   licensePath
 );
+
+const fontDirectory = resolve(websiteDirectory, "node_modules/@fontsource-variable/jetbrains-mono");
+const fontOutputDirectory = resolve(websiteDirectory, "wwwroot/lib/jetbrains-mono");
+mkdirSync(fontOutputDirectory, { recursive: true });
+cpSync(resolve(fontDirectory, "files"), resolve(fontOutputDirectory, "files"), { recursive: true });
+for (const file of ["wght.css", "wght-italic.css", "LICENSE"]) {
+  copyFileSync(resolve(fontDirectory, file), resolve(fontOutputDirectory, file));
+}

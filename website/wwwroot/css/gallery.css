@@ -175,7 +175,7 @@
   background: var(--gallery-navigation-background);
   border: 1px solid var(--gallery-surface-border);
   border-collapse: collapse;
-  font-family: "Courier New", monospace;
+  font-family: var(--content-monospace-font);
   box-shadow: var(--soft-shadow);
   width: 100%;
 }

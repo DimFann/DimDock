@@ -15,6 +15,7 @@ html {
   --admin-blue: #0078d4;
   --admin-blue-dark: #005a9e;
   --soft-shadow: 0 1px 5px rgba(0, 0, 0, 0.12);
+  --content-monospace-font: "JetBrains Mono Variable", "JetBrains Mono", Consolas, "Liberation Mono", monospace;
 }
 
 .site-header {
@@ -150,4 +151,27 @@ body.content-background {
 
 .form-floating > .form-control-plaintext:focus::placeholder, .form-floating > .form-control:focus::placeholder {
   text-align: start;
+}
+
+/* Rendered Markdown (blog posts, About, descriptions, previews). Sizes are relative to each container's text size. */
+:is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) :is(h1, h2, h3, h4, h5, h6) {
+  font-family: inherit;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0.9em 0 0.4em;
+}
+
+:is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) :is(h1, h2, h3, h4, h5, h6) :is(strong, b) {
+  font-weight: 800;
+}
+
+:is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) h1 { font-size: 2em; }
+:is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) h2 { font-size: 1.6em; }
+:is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) h3 { font-size: 1.35em; }
+:is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) h4 { font-size: 1.15em; }
+:is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) h5 { font-size: 1em; }
+:is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) h6 { font-size: 0.9em; }
+
+:is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) > :is(h1, h2, h3, h4, h5, h6):first-child {
+  margin-top: 0;
 }

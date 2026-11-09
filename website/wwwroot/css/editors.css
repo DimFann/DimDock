@@ -78,7 +78,7 @@
   border: 1px solid var(--gallery-surface-border);
   box-shadow: var(--soft-shadow);
   font-size: 12px;
-  font-family: "Courier New", monospace;
+  font-family: var(--content-monospace-font);
   max-height: 400px;
   margin-top: 0.5rem;
   overflow: hidden;
@@ -129,7 +129,7 @@
 .path-description-dialog-content {
   background: var(--surface-raised-background);
   border: 1px solid #e0f0ff;
-  font-family: "Courier New", monospace;
+  font-family: var(--content-monospace-font);
   font-size: 12px;
   max-height: calc(85vh - 5rem);
   overflow: auto;

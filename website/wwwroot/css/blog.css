@@ -202,7 +202,7 @@ body.blog-layout main {
 .blog-create-content {
   flex: 1;
   min-height: 0;
-  font-family: "Courier New", monospace;
+  font-family: var(--content-monospace-font);
   resize: none;
   resize: vertical;
 }
@@ -259,7 +259,7 @@ body.blog-layout main {
 
 .blog-post-content {
   background: var(--surface-background);
-  font-family: "Courier New", monospace;
+  font-family: var(--content-monospace-font);
   min-height: 20rem;
   overflow-wrap: anywhere;
   padding: 0.75rem 1.25rem;

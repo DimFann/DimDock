@@ -121,8 +121,13 @@ If no image embeds remain, saving also removes all lingering About assets.
 ## Markdown rendering
 
 Markdown views and previews support plain `<br>`, `<br/>`, and `<br />` line
-breaks. Other raw HTML (including attributes on break tags) remains disabled;
+breaks, and a plain newline also starts a new line (no `<br>` or trailing
+spaces needed). Other raw HTML (including attributes on break tags) remains disabled;
 tags inside code spans/blocks or escaped with a backslash remain literal.
+Headings (`#` to `######`) are bold and scale down by level relative to the
+surrounding text. Rendered Markdown, descriptions and the Markdown editors use
+JetBrains Mono (SIL Open Font License), self-hosted from `wwwroot/lib/jetbrains-mono`
+by `npm run build` in `website/` alongside Bootstrap.
 Run renderer checks with `dotnet run --project tests\MarkdownChecks\MarkdownChecks.csproj`.
 
 ## Legacy URL redirects
