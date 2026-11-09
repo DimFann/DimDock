@@ -89,6 +89,9 @@ services:
       LinodeStorage__Prefix: ${LINODE_STORAGE_PREFIX:-}
       LinodeStorage__AccessKey: ${LINODE_STORAGE_ACCESS_KEY:-}
       LinodeStorage__SecretKey: ${LINODE_STORAGE_SECRET_KEY:-}
+      Uploads__Mode: ${UPLOAD_MODE:-Chunked}
+      Uploads__BypassHost: ${UPLOAD_BYPASS_HOST:-}
+      Uploads__ChunkSizeMB: ${UPLOAD_CHUNK_SIZE_MB:-50}
       Database__Host: db
       Database__Port: "3306"
       Database__Name: ${DB_NAME:?Set DB_NAME in .env}

@@ -11,7 +11,14 @@
         <div class="admin-options-toolbar-header">
             <strong class="admin-options-toolbar-title">Admin Options</strong>
             <div class="admin-toolbar-danger">
-                <button type="button" class="path-admin-button" data-open-upload-picker>Upload</button>
+                @if (Model.UploadRedirectUrl is { } uploadRedirectUrl)
+                {
+                    <a class="path-admin-button" href="@uploadRedirectUrl" title="Uploads are made from the upload host">Upload</a>
+                }
+                else
+                {
+                    <button type="button" class="path-admin-button" data-open-upload-picker>Upload</button>
+                }
                 @if (!string.Equals(Model.CurrentPath, "root", StringComparison.OrdinalIgnoreCase))
                 {
                     <button type="button" class="path-admin-button" data-open-rename-path>Rename Path</button>
@@ -793,7 +800,13 @@
         const errors = [];
         const skipped = [];
 
-        const handlerUrl = (handler) => new URL(`?handler=${handler}`, window.location.href);
+        const handlerUrl = (handler, query = {}) => {
+            const url = new URL(`?handler=${handler}`, window.location.href);
+            for (const [name, value] of Object.entries(query)) {
+                url.searchParams.set(name, value);
+            }
+            return url;
+        };
         const postForm = async (handler, fields) => {
             const body = new FormData();
             body.append("path", "@Model.CurrentPath");
@@ -811,29 +824,68 @@
             }
             return response.json();
         };
-        // XHR (not fetch) so upload progress can be reported.
-        const send = (method, url, body, headers, file, index) => new Promise((resolve, reject) => {
+        const showProgress = (file, index, sentBytes) => {
+            uploadProgress.value = Math.round(((finishedBytes + Math.min(sentBytes, file.size)) / totalBytes) * 100);
+            uploadMessage.textContent = `Uploading ${file.name} (${index + 1} of ${files.length}): ${uploadProgress.value}%`;
+        };
+        // XHR (not fetch) so upload progress can be reported. offset = bytes of this file already sent.
+        const send = (url, body, headers, file, index, offset) => new Promise((resolve, reject) => {
             const request = new XMLHttpRequest();
-            request.open(method, url);
+            request.open("POST", url);
             for (const [name, value] of Object.entries(headers)) {
                 request.setRequestHeader(name, value);
             }
             request.upload.addEventListener("progress", (event) => {
                 if (event.lengthComputable) {
-                    const loaded = Math.min(event.loaded, file.size);
-                    uploadProgress.value = Math.round(((finishedBytes + loaded) / totalBytes) * 100);
-                    uploadMessage.textContent = `Uploading ${file.name} (${index + 1} of ${files.length}): ${uploadProgress.value}%`;
+                    showProgress(file, index, offset + event.loaded);
                 }
             });
-            request.addEventListener("load", () => request.status >= 200 && request.status < 300
-                ? resolve(request.responseText)
-                : reject(new Error(request.responseText && method === "POST"
-                    ? request.responseText
-                    : `storage rejected the upload (HTTP ${request.status}).`)));
-            request.addEventListener("error", () => reject(new Error("the connection was interrupted.")));
+            request.addEventListener("load", () => {
+                if (request.status >= 200 && request.status < 300) {
+                    resolve(request.responseText);
+                    return;
+                }
+                const error = new Error(request.status === 413
+                    ? "the request was too large for the server or proxy."
+                    : request.responseText || `the server returned HTTP ${request.status}.`);
+                error.retryable = request.status >= 500;
+                reject(error);
+            });
+            request.addEventListener("error", () => reject(Object.assign(
+                new Error("the connection was interrupted."), { retryable: true })));
             request.addEventListener("abort", () => reject(new Error("upload canceled.")));
             request.send(body);
         });
+        const sendChunks = async (file, index, uploadId, chunkSize) => {
+            const partCount = Math.max(1, Math.ceil(file.size / chunkSize));
+            if (partCount > 10000) {
+                throw new Error("the file is too large to upload in chunks.");
+            }
+            for (let partNumber = 1; partNumber <= partCount; partNumber++) {
+                const offset = (partNumber - 1) * chunkSize;
+                const chunk = file.slice(offset, offset + chunkSize);
+                const url = handlerUrl("UploadChunk", {
+                    path: "@Model.CurrentPath", fileName: file.name, uploadId, partNumber
+                });
+                for (let attempt = 1; ; attempt++) {
+                    try {
+                        await send(url, chunk, {
+                            "Content-Type": "application/octet-stream",
+                            "RequestVerificationToken": token,
+                            "X-Requested-With": "XMLHttpRequest"
+                        }, file, index, offset);
+                        break;
+                    } catch (chunkError) {
+                        if (!chunkError.retryable || attempt >= 3) {
+                            throw chunkError;
+                        }
+                        uploadMessage.textContent = `Retrying ${file.name} chunk ${partNumber} of ${partCount}...`;
+                        await new Promise((resolve) => setTimeout(resolve, attempt * 2000));
+                    }
+                }
+            }
+            return partCount;
+        };
 
         uploadStatus.hidden = false;
         uploadProgress.value = 0;
@@ -844,7 +896,7 @@
             uploadMessage.textContent = `Uploading ${file.name} (${index + 1} of ${files.length})...`;
             try {
                 const begin = await postForm("BeginUpload", { fileName: file.name });
-                if (begin.recover) {
+                if (begin.mode === "recover") {
                     if (window.confirm(`${file.name} already exists in storage but is not registered in the gallery. Add the existing file to the gallery?`)) {
                         uploadMessage.textContent = `Recovering ${file.name}...`;
                         await postForm("CompleteUpload", { fileName: file.name });
@@ -852,18 +904,24 @@
                     } else {
                         skipped.push(file.name);
                     }
-                } else if (begin.direct) {
-                    await send("PUT", begin.url, file, { "Content-Type": begin.contentType }, file, index);
+                } else if (begin.mode === "chunked") {
+                    let partCount;
+                    try {
+                        partCount = await sendChunks(file, index, begin.uploadId, begin.chunkSize);
+                    } catch (chunkError) {
+                        await postForm("AbortUpload", { fileName: file.name, uploadId: begin.uploadId }).catch(() => {});
+                        throw chunkError;
+                    }
                     uploadMessage.textContent = `Saving ${file.name} to the gallery...`;
-                    await postForm("CompleteUpload", { fileName: file.name });
+                    await postForm("CompleteUpload", { fileName: file.name, uploadId: begin.uploadId, partCount });
                     uploaded.push(file.name);
                 } else {
                     const body = new FormData();
                     body.append("path", "@Model.CurrentPath");
                     body.append("__RequestVerificationToken", token);
                     body.append("files", file, file.name);
-                    const result = JSON.parse(await send("POST", handlerUrl("Upload"), body,
-                        { "X-Requested-With": "XMLHttpRequest" }, file, index));
+                    const result = JSON.parse(await send(handlerUrl("Upload"), body,
+                        { "X-Requested-With": "XMLHttpRequest" }, file, index, 0));
                     uploaded.push(...(result.uploaded ?? []));
                     errors.push(...(result.errors ?? []));
                 }

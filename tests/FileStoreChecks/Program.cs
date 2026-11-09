@@ -81,7 +81,7 @@ try
             await remote.WriteAsync(FileStoreArea.Gallery, "thumbnail-source.png", input);
         using var thumbnailClient = new HttpClient { BaseAddress = thumbnailUri };
         var page = new GalleryModel(null!, null!, null!, null!, null!, null!, null!, remote,
-            new TestClientFactory(thumbnailClient));
+            new TestClientFactory(thumbnailClient), new UploadOptions());
         var generate = typeof(GalleryModel).GetMethod("GenerateThumbnailAsync", BindingFlags.NonPublic | BindingFlags.Instance)
             ?? throw new Exception("Thumbnail generation method not found");
         var thumbnailKey = new string('a', 64);
@@ -122,30 +122,72 @@ try
     await ExpectAsync<AmazonS3Exception>(() => inaccessible.FileExistsAsync(FileStoreArea.Gallery, "source/a.txt"));
     Console.WriteLine("PASS cross-backend parity/8MB non-seekable stream/pagination/interrupted copy");
 
-    var direct = await remote.CreateDirectUploadAsync(FileStoreArea.Gallery, "direct/large café.bin", TimeSpan.FromMinutes(5));
-    Check(direct.ContentType == "application/octet-stream", "direct upload content type");
-    using (var browser = new HttpClient())
+    const int partSize = 5 * 1024 * 1024;
+    var chunkPayload = new byte[partSize * 2 + 12345];
+    Random.Shared.NextBytes(chunkPayload);
+    foreach (var chunked in new IChunkedUploadStore[] { (IChunkedUploadStore)local, remote })
     {
-        var payload = new byte[3 * 1024 * 1024];
-        Random.Shared.NextBytes(payload);
-        using var put = new ByteArrayContent(payload);
-        put.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(direct.ContentType);
-        using var response = await browser.PutAsync(direct.Url, put);
-        Check(response.IsSuccessStatusCode, $"signed PUT accepted ({(int)response.StatusCode})");
-        await using var stored = await remote.OpenReadAsync(FileStoreArea.Gallery, "direct/large café.bin");
-        using var copy = new MemoryStream();
-        await stored.CopyToAsync(copy);
-        Check(copy.ToArray().SequenceEqual(payload), "signed PUT bytes stored under the logical key");
-        Check(Uri.UnescapeDataString(new Uri(direct.Url).Query).Contains("X-Amz-SignedHeaders=content-type;host")
-            || Uri.UnescapeDataString(new Uri(direct.Url).Query).Contains("X-Amz-SignedHeaders=content-type"),
-            "signed PUT binds the content type");
+        var files = (IFileStore)chunked;
+        const string chunkKey = "chunked/large café.bin";
+        var uploadId = await chunked.BeginChunkedUploadAsync(FileStoreArea.Gallery, chunkKey);
+        async Task SendPart(string id, int part, string key = chunkKey)
+        {
+            var offset = (part - 1) * partSize;
+            await using var body = new NonSeekableStream(
+                new MemoryStream(chunkPayload, offset, Math.Min(partSize, chunkPayload.Length - offset)));
+            await chunked.UploadChunkAsync(FileStoreArea.Gallery, key, id, part, body);
+        }
+        await SendPart(uploadId, 2);
+        await SendPart(uploadId, 1);
+        await SendPart(uploadId, 1);
+        await ExpectAsync<InvalidDataException>(() =>
+            chunked.CompleteChunkedUploadAsync(FileStoreArea.Gallery, chunkKey, uploadId, 3));
+        Check(!await files.FileExistsAsync(FileStoreArea.Gallery, chunkKey), "incomplete chunked upload stays invisible");
+        await SendPart(uploadId, 3);
+        await chunked.CompleteChunkedUploadAsync(FileStoreArea.Gallery, chunkKey, uploadId, 3);
+        await using (var stored = await files.OpenReadAsync(FileStoreArea.Gallery, chunkKey))
+        {
+            using var copy = new MemoryStream();
+            await stored.CopyToAsync(copy);
+            Check(copy.ToArray().SequenceEqual(chunkPayload), "out-of-order/retried chunks assemble in part order");
+        }
+
+        var duplicate = await chunked.BeginChunkedUploadAsync(FileStoreArea.Gallery, chunkKey);
+        await SendPart(duplicate, 1);
+        await ExpectAsync<IOException>(() =>
+            chunked.CompleteChunkedUploadAsync(FileStoreArea.Gallery, chunkKey, duplicate, 1));
+        await chunked.AbortChunkedUploadAsync(FileStoreArea.Gallery, chunkKey, duplicate);
+        await chunked.AbortChunkedUploadAsync(FileStoreArea.Gallery, chunkKey, duplicate);
+        // Moto returns 500 instead of NoSuchUpload for aborted uploads; real S3 maps to FileNotFoundException.
+        if (chunked is LocalFileStore) await ExpectAsync<FileNotFoundException>(() => SendPart(duplicate, 1));
+        else await ExpectAsync<Exception>(() => SendPart(duplicate, 1));
+        await using (var stored = await files.OpenReadAsync(FileStoreArea.Gallery, chunkKey))
+            Check(stored.Length == chunkPayload.Length, "create-only completion keeps the existing file");
+
+        await ExpectAsync<IOException>(() => chunked.BeginChunkedUploadAsync(FileStoreArea.Gallery, "chunked"));
+        var other = await chunked.BeginChunkedUploadAsync(FileStoreArea.Gallery, "chunked/other.bin");
+        foreach (var invalidPart in new[] { 0, ChunkedUploadLimits.MaximumParts + 1 })
+        {
+            await ExpectAsync<InvalidDataException>(() => chunked.UploadChunkAsync(
+                FileStoreArea.Gallery, "chunked/other.bin", other, invalidPart, new MemoryStream(new byte[1])));
+        }
+        if (chunked is LocalFileStore) // Moto does not bind upload IDs to keys; S3 returns NoSuchUpload.
+            await ExpectAsync<Exception>(() => SendPart(other, 1, "chunked/not-this-upload.bin"));
+        await chunked.AbortChunkedUploadAsync(FileStoreArea.Gallery, "chunked/other.bin", other);
+
+        var empty = await chunked.BeginChunkedUploadAsync(FileStoreArea.Gallery, "chunked/empty.bin");
+        await using (var nothing = new NonSeekableStream(new MemoryStream()))
+            await chunked.UploadChunkAsync(FileStoreArea.Gallery, "chunked/empty.bin", empty, 1, nothing);
+        await chunked.CompleteChunkedUploadAsync(FileStoreArea.Gallery, "chunked/empty.bin", empty, 1);
+        await using (var stored = await files.OpenReadAsync(FileStoreArea.Gallery, "chunked/empty.bin"))
+            Check(stored.Length == 0, "single empty chunk");
+        Console.WriteLine($"PASS {chunked.GetType().Name} chunked upload assemble/retry/incomplete/create-only/abort/guards");
     }
-    await ExpectAsync<IOException>(() => remote.CreateDirectUploadAsync(FileStoreArea.Gallery, "direct", TimeSpan.FromMinutes(5)));
 
     await using (var oversized = new MemoryStream(new byte[50 * 1024 * 1024 + 1]))
         await remote.WriteAsync(FileStoreArea.Gallery, "oversized.png", oversized);
     var unreachable = new GalleryModel(null!, null!, null!, null!, null!, null!, null!, remote,
-        new TestClientFactory(new HttpClient { BaseAddress = new Uri("http://127.0.0.1:9/") }));
+        new TestClientFactory(new HttpClient { BaseAddress = new Uri("http://127.0.0.1:9/") }), new UploadOptions());
     var thumbnailMethod = typeof(GalleryModel).GetMethod("GenerateThumbnailAsync", BindingFlags.NonPublic | BindingFlags.Instance)
         ?? throw new Exception("Thumbnail generation method not found");
     try
@@ -157,7 +199,7 @@ try
     {
         Check(error.GetType().Name == "InvalidImageUploadException", $"oversized image rejected before thumbnailing ({error.GetType().Name})");
     }
-    Console.WriteLine("PASS signed direct upload/content-type binding/directory guard/oversized image rejection");
+    Console.WriteLine("PASS oversized image rejected before thumbnailing");
 }
 finally
 {

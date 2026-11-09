@@ -18,6 +18,11 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Configuration.AddJsonFile(LegacyRedirects.FileName, optional: true, reloadOnChange: true);
 const long maximumUploadRequestBytes = 512L * 1024 * 1024;
 const long maximumBlogImageRequestBytes = 21L * 1024 * 1024;
+var uploadOptions = builder.Configuration.GetSection("Uploads").Get<UploadOptions>() ?? new UploadOptions();
+uploadOptions.Validate();
+builder.Services.AddSingleton(uploadOptions);
+// Bypass mode posts whole files that skip the CDN, so the per-request cap is lifted for gallery uploads.
+long? galleryUploadRequestBytes = uploadOptions.Mode == UploadMode.Bypass ? null : maximumUploadRequestBytes;
 var fileStorageProvider = builder.Configuration["FileStorage:Provider"] ?? "Local";
 if (string.Equals(fileStorageProvider, "Local", StringComparison.OrdinalIgnoreCase))
 {
@@ -84,7 +89,7 @@ builder.Services.AddRateLimiter(options =>
 });
 builder.Services.Configure<FormOptions>(options =>
 {
-    options.MultipartBodyLengthLimit = maximumUploadRequestBytes;
+    options.MultipartBodyLengthLimit = galleryUploadRequestBytes ?? long.MaxValue;
     options.ValueCountLimit = 1024;
 });
 builder.Services.AddScoped<AdminOnlyTagsProvider>();
@@ -144,7 +149,11 @@ app.Use(async (context, next) =>
         }
         else if (string.Equals(context.Request.Query["handler"], "Upload", StringComparison.OrdinalIgnoreCase))
         {
-            requestSizeFeature.MaxRequestBodySize = maximumUploadRequestBytes;
+            requestSizeFeature.MaxRequestBodySize = galleryUploadRequestBytes;
+        }
+        else if (string.Equals(context.Request.Query["handler"], "UploadChunk", StringComparison.OrdinalIgnoreCase))
+        {
+            requestSizeFeature.MaxRequestBodySize = uploadOptions.ChunkSizeBytes;
         }
     }
 

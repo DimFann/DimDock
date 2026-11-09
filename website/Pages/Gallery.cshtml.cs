@@ -16,7 +16,6 @@ using Website.Services;
 public class GalleryModel : PageModel
 {
     private const long MaximumThumbnailSourceBytes = 50L * 1024 * 1024;
-    private static readonly TimeSpan DirectUploadLifetime = TimeSpan.FromHours(6);
     private static readonly HashSet<string> ThumbnailImageExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".gif" };
 
@@ -29,6 +28,7 @@ public class GalleryModel : PageModel
     private readonly FilesystemPersistenceService _filesystemPersistence;
     private readonly IFileStore _fileStore;
     private readonly HttpClient _thumbnailClient;
+    private readonly UploadOptions _uploadOptions;
 
     public GalleryModel(
         AppDbContext context,
@@ -39,7 +39,8 @@ public class GalleryModel : PageModel
         AdminOnlyTagsProvider adminOnlyTagsProvider,
         FilesystemPersistenceService filesystemPersistence,
         IFileStore fileStore,
-        IHttpClientFactory httpClientFactory)
+        IHttpClientFactory httpClientFactory,
+        UploadOptions uploadOptions)
     {
         _context = context;
         _logger = logger;
@@ -50,7 +51,14 @@ public class GalleryModel : PageModel
         _filesystemPersistence = filesystemPersistence;
         _fileStore = fileStore;
         _thumbnailClient = httpClientFactory.CreateClient("ThumbnailService");
+        _uploadOptions = uploadOptions;
     }
+
+    // In Bypass mode, set when this request is not on the upload host: the Upload button opens this URL instead.
+    public string? UploadRedirectUrl =>
+        _uploadOptions.Mode == UploadMode.Bypass && !_uploadOptions.IsBypassHost(Request)
+            ? $"https://{_uploadOptions.BypassHost}{Request.PathBase}{Request.Path}{Request.QueryString}"
+            : null;
 
     [BindProperty(SupportsGet = true)]
     public string? Path { get; set; }
@@ -961,8 +969,10 @@ public class GalleryModel : PageModel
         return new JsonResult(new { uploaded, errors });
     }
 
-    // Step 1 of a direct upload: validate the name and, if storage supports it, hand the browser a signed URL.
-    // Without direct-upload support the browser posts the file to OnPostUploadAsync instead.
+    // Step 1: validate the name and choose how the browser sends the file.
+    //   recover - the file is already in storage but not in the gallery (an interrupted upload); offer to register it.
+    //   chunked - send chunks to OnPostUploadChunkAsync, then call OnPostCompleteUploadAsync with the upload ID.
+    //   whole   - post the whole file to OnPostUploadAsync (Bypass mode, or a store without chunk support).
     public async Task<IActionResult> OnPostBeginUploadAsync(
         [FromForm] string? path,
         [FromForm] string? fileName)
@@ -974,15 +984,9 @@ public class GalleryModel : PageModel
         }
 
         var name = fileName ?? string.Empty;
-        if (_fileStore is not IDirectUploadStore directStore)
+        if (UploadRedirectUrl is not null)
         {
-            var error = await CheckUploadNameAsync(target, name);
-            if (error is not null)
-            {
-                return BadRequest(error);
-            }
-
-            return new JsonResult(new { direct = false });
+            return BadRequest($"{name}: uploads must be made from https://{_uploadOptions.BypassHost}.");
         }
 
         if (!IsValidUploadFileName(name))
@@ -997,26 +1001,109 @@ public class GalleryModel : PageModel
             return BadRequest($"{name}: a file with that name already exists in this gallery.");
         }
 
-        if (await _fileStore.FileExistsAsync(
-                FileStoreArea.Gallery,
-                JoinStorageKey(target.Directory, name),
-                HttpContext.RequestAborted))
+        var key = JoinStorageKey(target.Directory, name);
+        if (await _fileStore.FileExistsAsync(FileStoreArea.Gallery, key, HttpContext.RequestAborted))
         {
-            return new JsonResult(new { direct = false, recover = true });
+            return new JsonResult(new { mode = "recover" });
         }
 
-        var upload = await directStore.CreateDirectUploadAsync(
-            FileStoreArea.Gallery,
-            JoinStorageKey(target.Directory, name),
-            DirectUploadLifetime,
-            HttpContext.RequestAborted);
-        return new JsonResult(new { direct = true, url = upload.Url, contentType = upload.ContentType });
+        if (_uploadOptions.Mode == UploadMode.Bypass || _fileStore is not IChunkedUploadStore chunkedStore)
+        {
+            return new JsonResult(new { mode = "whole" });
+        }
+
+        var uploadId = await chunkedStore.BeginChunkedUploadAsync(FileStoreArea.Gallery, key, HttpContext.RequestAborted);
+        return new JsonResult(new { mode = "chunked", uploadId, chunkSize = _uploadOptions.ChunkSizeBytes });
     }
 
-    // Step 2 of a direct upload: the browser has stored the file; thumbnail it (from storage) and record it.
+    // Step 2 (chunked): the request body is one raw chunk; the anti-forgery token is sent as a header.
+    public async Task<IActionResult> OnPostUploadChunkAsync(
+        [FromQuery] string? path,
+        [FromQuery] string? fileName,
+        [FromQuery] string? uploadId,
+        [FromQuery] int partNumber)
+    {
+        var (target, failure) = await ResolveUploadTargetAsync(path);
+        if (target is null)
+        {
+            return failure!;
+        }
+
+        var name = fileName ?? string.Empty;
+        if (_fileStore is not IChunkedUploadStore chunkedStore || string.IsNullOrEmpty(uploadId) ||
+            !IsValidUploadFileName(name))
+        {
+            return BadRequest($"{name}: invalid chunk upload.");
+        }
+
+        if (partNumber is < 1 or > ChunkedUploadLimits.MaximumParts)
+        {
+            return BadRequest($"{name}: the file needs more than {ChunkedUploadLimits.MaximumParts} chunks.");
+        }
+
+        if (Request.ContentLength is null or 0 && partNumber > 1)
+        {
+            return BadRequest($"{name}: empty chunk.");
+        }
+
+        try
+        {
+            await chunkedStore.UploadChunkAsync(
+                FileStoreArea.Gallery,
+                JoinStorageKey(target.Directory, name),
+                uploadId,
+                partNumber,
+                Request.Body,
+                HttpContext.RequestAborted);
+        }
+        catch (Exception error) when (error is InvalidDataException or FileNotFoundException)
+        {
+            return BadRequest($"{name}: {error.Message}");
+        }
+
+        return new JsonResult(new { partNumber });
+    }
+
+    public async Task<IActionResult> OnPostAbortUploadAsync(
+        [FromForm] string? path,
+        [FromForm] string? fileName,
+        [FromForm] string? uploadId)
+    {
+        var (target, failure) = await ResolveUploadTargetAsync(path);
+        if (target is null)
+        {
+            return failure!;
+        }
+
+        var name = fileName ?? string.Empty;
+        if (_fileStore is not IChunkedUploadStore chunkedStore || string.IsNullOrEmpty(uploadId) ||
+            !IsValidUploadFileName(name))
+        {
+            return BadRequest($"{name}: invalid chunk upload.");
+        }
+
+        try
+        {
+            await chunkedStore.AbortChunkedUploadAsync(
+                FileStoreArea.Gallery,
+                JoinStorageKey(target.Directory, name),
+                uploadId,
+                HttpContext.RequestAborted);
+        }
+        catch (InvalidDataException error)
+        {
+            return BadRequest($"{name}: {error.Message}");
+        }
+
+        return new JsonResult(new { aborted = name });
+    }
+
+    // Final step: assemble the chunks (if uploadId is given) or register a recovered file, then thumbnail and record it.
     public async Task<IActionResult> OnPostCompleteUploadAsync(
         [FromForm] string? path,
-        [FromForm] string? fileName)
+        [FromForm] string? fileName,
+        [FromForm] string? uploadId,
+        [FromForm] int? partCount)
     {
         var (target, failure) = await ResolveUploadTargetAsync(path);
         if (target is null)
@@ -1030,23 +1117,49 @@ public class GalleryModel : PageModel
             return BadRequest($"{name}: invalid filename.");
         }
 
+        var key = JoinStorageKey(target.Directory, name);
+        var chunkedStore = _fileStore as IChunkedUploadStore;
+        if (!string.IsNullOrEmpty(uploadId) && (chunkedStore is null || partCount is null))
+        {
+            return BadRequest($"{name}: invalid chunk upload.");
+        }
+
         if (await _context.Items.AnyAsync(
                 item => item.ParentPath == target.Path && item.OriginalName == name,
                 HttpContext.RequestAborted))
         {
+            if (!string.IsNullOrEmpty(uploadId))
+            {
+                await chunkedStore!.AbortChunkedUploadAsync(FileStoreArea.Gallery, key, uploadId, CancellationToken.None);
+            }
+
             return BadRequest($"{name}: a file with that name already exists in this gallery.");
         }
 
-        if (!await _fileStore.FileExistsAsync(
-                FileStoreArea.Gallery,
-                JoinStorageKey(target.Directory, name),
-                HttpContext.RequestAborted))
+        if (!string.IsNullOrEmpty(uploadId))
+        {
+            try
+            {
+                await chunkedStore!.CompleteChunkedUploadAsync(
+                    FileStoreArea.Gallery,
+                    key,
+                    uploadId,
+                    partCount!.Value,
+                    HttpContext.RequestAborted);
+            }
+            catch (Exception error) when (error is IOException or InvalidDataException)
+            {
+                await chunkedStore!.AbortChunkedUploadAsync(FileStoreArea.Gallery, key, uploadId, CancellationToken.None);
+                return BadRequest($"{name}: {error.Message}");
+            }
+        }
+        else if (!await _fileStore.FileExistsAsync(FileStoreArea.Gallery, key, HttpContext.RequestAborted))
         {
             return BadRequest($"{name}: the uploaded file was not found in storage.");
         }
 
-        var error = await FinalizeUploadAsync(target, name);
-        return error is null ? new JsonResult(new { uploaded = name }) : BadRequest(error);
+        var finalizeError = await FinalizeUploadAsync(target, name);
+        return finalizeError is null ? new JsonResult(new { uploaded = name }) : BadRequest(finalizeError);
     }
 
     private sealed record UploadTarget(string Path, string Directory);

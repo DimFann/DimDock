@@ -6,7 +6,7 @@ using Microsoft.AspNetCore.StaticFiles;
 
 namespace Website.Services;
 
-public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions options) : IFileStore, IDirectUploadStore
+public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions options) : IFileStore, IChunkedUploadStore
 {
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
     private bool UseUnsignedPayload => client.Config.ServiceURL.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
@@ -163,7 +163,7 @@ public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions optio
         }
     }
 
-    public async Task<DirectUpload> CreateDirectUploadAsync(FileStoreArea area, string key, TimeSpan lifetime,
+    public async Task<string> BeginChunkedUploadAsync(FileStoreArea area, string key,
         CancellationToken cancellationToken = default)
     {
         var objectKey = ObjectKey(area, key);
@@ -171,19 +171,126 @@ public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions optio
         {
             throw new IOException($"File key resolves to a directory: {key}");
         }
-        var contentType = ContentTypes.TryGetContentType(key, out var type) ? type : "application/octet-stream";
-        var url = await client.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+        var response = await client.InitiateMultipartUploadAsync(new InitiateMultipartUploadRequest
         {
             BucketName = options.Bucket,
             Key = objectKey,
-            Verb = HttpVerb.PUT,
-            ContentType = contentType,
-            Expires = DateTime.UtcNow.Add(lifetime),
-            Protocol = client.Config.ServiceURL?.StartsWith("http://", StringComparison.OrdinalIgnoreCase) == true
-                ? Protocol.HTTP
-                : Protocol.HTTPS
-        });
-        return new DirectUpload(url, contentType);
+            ContentType = ContentTypes.TryGetContentType(key, out var type) ? type : "application/octet-stream"
+        }, cancellationToken);
+        return response.UploadId;
+    }
+
+    public async Task UploadChunkAsync(FileStoreArea area, string key, string uploadId, int partNumber, Stream content,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        ValidatePartNumber(partNumber);
+        var objectKey = ObjectKey(area, key);
+        await using var spool = content.CanSeek ? null : new FileStream(
+            Path.Combine(Path.GetTempPath(), $"dimdock-{Guid.NewGuid():N}.part"),
+            FileMode.CreateNew, FileAccess.ReadWrite, FileShare.None, 81920,
+            FileOptions.Asynchronous | FileOptions.DeleteOnClose);
+        if (spool is not null)
+        {
+            await content.CopyToAsync(spool, cancellationToken);
+            spool.Position = 0;
+        }
+        var input = spool ?? content;
+        try
+        {
+            await client.UploadPartAsync(new UploadPartRequest
+            {
+                BucketName = options.Bucket,
+                Key = objectKey,
+                UploadId = uploadId,
+                PartNumber = partNumber,
+                InputStream = input,
+                PartSize = input.Length - input.Position,
+                DisablePayloadSigning = UseUnsignedPayload,
+                UseChunkEncoding = false
+            }, cancellationToken);
+        }
+        catch (AmazonS3Exception error) when (error.StatusCode == HttpStatusCode.NotFound &&
+            error.ErrorCode != "NoSuchBucket")
+        {
+            throw new FileNotFoundException($"Upload not found: {key}", error);
+        }
+    }
+
+    public async Task CompleteChunkedUploadAsync(FileStoreArea area, string key, string uploadId, int partCount,
+        CancellationToken cancellationToken = default)
+    {
+        ValidatePartNumber(partCount);
+        var objectKey = ObjectKey(area, key);
+        var parts = new List<PartDetail>();
+        int? marker = null;
+        do
+        {
+            ListPartsResponse page;
+            try
+            {
+                page = await client.ListPartsAsync(new ListPartsRequest
+                {
+                    BucketName = options.Bucket,
+                    Key = objectKey,
+                    UploadId = uploadId,
+                    PartNumberMarker = marker?.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                }, cancellationToken);
+            }
+            catch (AmazonS3Exception error) when (error.StatusCode == HttpStatusCode.NotFound &&
+                error.ErrorCode != "NoSuchBucket")
+            {
+                throw new FileNotFoundException($"Upload not found: {key}", error);
+            }
+            parts.AddRange(page.Parts ?? []);
+            marker = page.IsTruncated == true ? page.NextPartNumberMarker : null;
+        } while (marker is not null);
+
+        var ordered = parts.OrderBy(part => part.PartNumber).ToList();
+        if (ordered.Count != partCount ||
+            ordered.Select((part, index) => part.PartNumber == index + 1).Any(matches => !matches))
+        {
+            throw new InvalidDataException(
+                $"Upload is incomplete: expected {partCount} parts, storage has {ordered.Count}.");
+        }
+        if (await FileExistsAsync(area, key, cancellationToken))
+        {
+            throw new IOException($"Destination file already exists: {key}");
+        }
+        await CreateDirectoryAsync(area, key.Contains('/') ? key[..key.LastIndexOf('/')] : "", cancellationToken);
+        await client.CompleteMultipartUploadAsync(new CompleteMultipartUploadRequest
+        {
+            BucketName = options.Bucket,
+            Key = objectKey,
+            UploadId = uploadId,
+            PartETags = ordered.Select(part => new PartETag(part.PartNumber ?? 0, part.ETag)).ToList()
+        }, cancellationToken);
+    }
+
+    public async Task AbortChunkedUploadAsync(FileStoreArea area, string key, string uploadId,
+        CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            await client.AbortMultipartUploadAsync(new AbortMultipartUploadRequest
+            {
+                BucketName = options.Bucket,
+                Key = ObjectKey(area, key),
+                UploadId = uploadId
+            }, cancellationToken);
+        }
+        catch (AmazonS3Exception error) when (error.StatusCode == HttpStatusCode.NotFound &&
+            error.ErrorCode != "NoSuchBucket")
+        {
+        }
+    }
+
+    private static void ValidatePartNumber(int partNumber)
+    {
+        if (partNumber is < 1 or > ChunkedUploadLimits.MaximumParts)
+        {
+            throw new InvalidDataException($"Part number must be between 1 and {ChunkedUploadLimits.MaximumParts}.");
+        }
     }
 
     public async Task<string> ReadAllTextAsync(FileStoreArea area, string key, CancellationToken cancellationToken = default)

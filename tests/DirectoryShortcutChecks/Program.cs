@@ -145,7 +145,7 @@ try
         var model = new GalleryModel(context, services.GetRequiredService<ILogger<GalleryModel>>(),
             builder.Configuration, services.GetRequiredService<IWebHostEnvironment>(),
             services.GetRequiredService<IAntiforgery>(), services.GetRequiredService<AdminOnlyTagsProvider>(),
-            persistence, store, services.GetRequiredService<IHttpClientFactory>())
+            persistence, store, services.GetRequiredService<IHttpClientFactory>(), new UploadOptions())
         {
             PageContext = new PageContext(action)
         };

@@ -2,9 +2,11 @@ using System.Text;
 
 namespace Website.Services;
 
-public sealed class LocalFileStore : IFileStore
+public sealed class LocalFileStore : IFileStore, IChunkedUploadStore
 {
     private static readonly UTF8Encoding Utf8WithoutBom = new(false);
+    private static readonly TimeSpan AbandonedChunkLifetime = TimeSpan.FromDays(1);
+    private static readonly string ChunkStagingRoot = Path.Combine(Path.GetTempPath(), "dimdock-chunks");
     private readonly Dictionary<FileStoreArea, string> _roots;
 
     public LocalFileStore(IConfiguration configuration, IWebHostEnvironment environment)
@@ -130,6 +132,198 @@ public sealed class LocalFileStore : IFileStore
             if (File.Exists(temporaryPath))
             {
                 File.Delete(temporaryPath);
+            }
+        }
+    }
+
+    public Task<string> BeginChunkedUploadAsync(
+        FileStoreArea area,
+        string key,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var path = ResolvePath(area, key, allowEmpty: false);
+        EnsureNoLinkedPath(area, key);
+        if (Directory.Exists(path))
+        {
+            throw new IOException($"File key resolves to a directory: {key}");
+        }
+
+        RemoveAbandonedChunkUploads();
+        var uploadId = Guid.NewGuid().ToString("N");
+        var staging = Directory.CreateDirectory(Path.Combine(ChunkStagingRoot, uploadId)).FullName;
+        File.WriteAllText(Path.Combine(staging, "target"), ChunkTarget(area, key), Utf8WithoutBom);
+        return Task.FromResult(uploadId);
+    }
+
+    public async Task UploadChunkAsync(
+        FileStoreArea area,
+        string key,
+        string uploadId,
+        int partNumber,
+        Stream content,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(content);
+        ValidatePartNumber(partNumber);
+        var staging = ChunkStaging(area, key, uploadId);
+        var temporaryPath = Path.Combine(staging, $"{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await using (var destination = new FileStream(
+                temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            {
+                await content.CopyToAsync(destination, cancellationToken);
+            }
+
+            // Overwrite so a retried chunk replaces a partially sent one.
+            File.Move(temporaryPath, Path.Combine(staging, PartFileName(partNumber)), overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
+    }
+
+    public async Task CompleteChunkedUploadAsync(
+        FileStoreArea area,
+        string key,
+        string uploadId,
+        int partCount,
+        CancellationToken cancellationToken = default)
+    {
+        ValidatePartNumber(partCount);
+        var staging = ChunkStaging(area, key, uploadId);
+        var parts = Enumerable.Range(1, partCount)
+            .Select(part => Path.Combine(staging, PartFileName(part)))
+            .ToList();
+        var stored = Directory.GetFiles(staging, "*.part").Length;
+        if (stored != partCount || parts.Any(part => !File.Exists(part)))
+        {
+            throw new InvalidDataException($"Upload is incomplete: expected {partCount} parts, storage has {stored}.");
+        }
+
+        var path = ResolvePath(area, key, allowEmpty: false);
+        var directory = Path.GetDirectoryName(path)
+            ?? throw new InvalidOperationException("File key has no parent directory.");
+        EnsureSafeDirectory(directory);
+        Directory.CreateDirectory(directory);
+        EnsureNoLinkedPath(area, key);
+        if (File.Exists(path) || Directory.Exists(path))
+        {
+            throw new IOException($"Destination file already exists: {key}");
+        }
+
+        var temporaryPath = Path.Combine(directory, $".{Guid.NewGuid():N}.tmp");
+        try
+        {
+            await using (var destination = new FileStream(
+                temporaryPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+            {
+                foreach (var part in parts)
+                {
+                    await using var source = new FileStream(
+                        part, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, useAsync: true);
+                    await source.CopyToAsync(destination, cancellationToken);
+                }
+
+                await destination.FlushAsync(cancellationToken);
+            }
+
+            File.Move(temporaryPath, path);
+        }
+        finally
+        {
+            if (File.Exists(temporaryPath))
+            {
+                File.Delete(temporaryPath);
+            }
+        }
+
+        Directory.Delete(staging, recursive: true);
+    }
+
+    public Task AbortChunkedUploadAsync(
+        FileStoreArea area,
+        string key,
+        string uploadId,
+        CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        string staging;
+        try
+        {
+            staging = ChunkStaging(area, key, uploadId);
+        }
+        catch (FileNotFoundException)
+        {
+            return Task.CompletedTask;
+        }
+
+        Directory.Delete(staging, recursive: true);
+        return Task.CompletedTask;
+    }
+
+    private string ChunkStaging(FileStoreArea area, string key, string uploadId)
+    {
+        ResolvePath(area, key, allowEmpty: false);
+        if (uploadId.Length != 32 || !uploadId.All(char.IsAsciiHexDigitLower))
+        {
+            throw new InvalidDataException("Invalid upload ID.");
+        }
+
+        var staging = Path.Combine(ChunkStagingRoot, uploadId);
+        var targetFile = Path.Combine(staging, "target");
+        if (!File.Exists(targetFile))
+        {
+            throw new FileNotFoundException($"Upload not found: {uploadId}");
+        }
+
+        if (File.ReadAllText(targetFile, Utf8WithoutBom) != ChunkTarget(area, key))
+        {
+            throw new InvalidDataException("Upload ID belongs to a different file.");
+        }
+
+        return staging;
+    }
+
+    private static string ChunkTarget(FileStoreArea area, string key) =>
+        $"{area}\n{FileStoreKeys.Normalize(key)}";
+
+    private static string PartFileName(int partNumber) => $"{partNumber:D5}.part";
+
+    private static void ValidatePartNumber(int partNumber)
+    {
+        if (partNumber is < 1 or > ChunkedUploadLimits.MaximumParts)
+        {
+            throw new InvalidDataException($"Part number must be between 1 and {ChunkedUploadLimits.MaximumParts}.");
+        }
+    }
+
+    private static void RemoveAbandonedChunkUploads()
+    {
+        if (!Directory.Exists(ChunkStagingRoot))
+        {
+            return;
+        }
+
+        foreach (var staging in Directory.EnumerateDirectories(ChunkStagingRoot))
+        {
+            try
+            {
+                if (DateTime.UtcNow - Directory.GetLastWriteTimeUtc(staging) > AbandonedChunkLifetime)
+                {
+                    Directory.Delete(staging, recursive: true);
+                }
+            }
+            catch (IOException)
+            {
+            }
+            catch (UnauthorizedAccessException)
+            {
             }
         }
     }

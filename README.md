@@ -105,14 +105,10 @@ through the configured file store. Its internal port can be changed with
 `THUMBNAIL_SERVICE_PORT` in `.env` (default `8080`); the service is not
 published directly to the host.
 
-With Linode storage, the browser uploads each file straight to the bucket using
-a short-lived (6-hour) presigned PUT URL. The website never relays the bytes, so
-proxy/Cloudflare body limits do not apply; the single-PUT S3 limit is 5 GB per
-file. Once the PUT finishes, the website streams the object back from the bucket
-to generate its thumbnail and registers it in the database. This requires a
-one-time bucket CORS rule (see [Direct browser uploads](#direct-browser-uploads)).
-With Local storage, each file is posted through the website instead (512 MB per
-file, and subject to any reverse-proxy body limit).
+How files travel from the browser is chosen with `UPLOAD_MODE` in `.env`, and
+works the same with Local and Linode storage (see [Gallery upload modes](#gallery-upload-modes)).
+Once a file is fully stored, the website streams it back from storage to
+generate its thumbnail and registers it in the database.
 
 Admins can create blog posts from the Blog page. Posts created in the website
 are stored in the database; posts imported from Markdown files in `/blogs`
@@ -130,6 +126,45 @@ the same editor controls. Images are stored under `DATA_DIR/about/assets`.
 Saving removes managed About images that were removed from the Markdown,
 including images uploaded and then removed during the same editing session.
 If no image embeds remain, saving also removes all lingering About assets.
+
+## Gallery upload modes
+
+Linode's S3 endpoint does not support bucket CORS, so browsers cannot upload to
+the bucket directly; uploads go through the website. Cloudflare (and many
+proxies) cap request bodies at 100 MB, so two modes are available in `.env`:
+
+| Setting | Meaning |
+| --- | --- |
+| `UPLOAD_MODE` | `Chunked` (default) or `Bypass`. |
+| `UPLOAD_CHUNK_SIZE_MB` | Chunked mode piece size, 5–95 (default `50`). |
+| `UPLOAD_BYPASS_HOST` | Required for `Bypass`: host name (optional `:port`) of a DNS-only upload host. |
+
+**Chunked** (default) works on the normal site. The browser slices each file
+into pieces and sends them one request at a time, retrying a failed piece up to
+3 times. With Linode storage each piece becomes an S3 multipart part (assembled
+by the bucket; up to 10,000 parts, so ~950 GB at 95 MB); with Local storage
+pieces are staged under the system temp directory and joined when complete.
+Nothing appears in the gallery until every piece has arrived. The reverse proxy
+must accept bodies of at least the chunk size on the main host (e.g. nginx
+`client_max_body_size 100m;`).
+
+**Bypass** posts each whole file (no size limit) to `https://UPLOAD_BYPASS_HOST`,
+which must be a separate DNS-only (grey cloud) record pointing at the server with
+its own valid TLS certificate. DNS and certificate setup are not managed here.
+When admins open the Gallery on the main host, the Upload button links to the
+same page on the bypass host; sign in there (login cookies are per host). The
+reverse proxy must forward the original `Host` header and allow unlimited bodies
+for that host (nginx `client_max_body_size 0;`). A DNS-only record exposes the
+server's real IP address, bypassing Cloudflare's protection for that origin;
+consider restricting the upload host (firewall/allow-list) to your own IPs.
+
+Either mode is create-only: an existing file name is never overwritten. If an
+upload is interrupted after the file is stored but before it is registered, the
+next upload with that name offers to register the existing file instead.
+Abandoned chunked uploads are aborted by the page when it can; Local staging
+older than a day is removed automatically. For Linode, add a bucket lifecycle
+rule that aborts incomplete multipart uploads after a day or so, since
+abandoned parts are billed but invisible.
 
 ## Markdown rendering
 
@@ -396,6 +431,8 @@ docker compose run --rm --no-deps -e FILE_STORAGE_PROVIDER=Linode --entrypoint p
 
 The test creates uniquely named hidden scratch directories in each content area,
 checks create/read/list/copy/verify/delete, then removes only its own objects.
+It also runs a small S3 multipart upload (create/part/list/complete/abort), which
+chunked gallery uploads depend on.
 It never changes public access or touches existing gallery files. It exercises
 conditional writes as well; unsupported endpoint behavior fails visibly.
 
@@ -424,27 +461,6 @@ MariaDB, and Data Protection keys still live on the VPS under `DATA_DIR`.
 Existing import markers retain their previous meaning: switching providers does
 not force reimport of blogs or regenerate database IDs. A full database rebuild
 and stable-ID migration remain separate rollout tasks in `TODO_S3.md`.
-
-### Direct browser uploads
-
-Gallery uploads PUT files from the admin's browser directly to the bucket, so
-the bucket must allow cross-origin PUTs from the website's origin. Set this
-once (it replaces the bucket's existing CORS configuration; pass every origin
-the site is served from, e.g. with and without `www`):
-
-```sh
-docker compose build path-loader
-docker compose run --rm --no-deps -e FILE_STORAGE_PROVIDER=Linode --entrypoint python path-loader /app/storage_cors.py https://your.site
-```
-
-The rule allows only `PUT` with a `Content-Type` header; it grants no read or
-list access, and the bucket stays private. Each upload URL is signed by the
-website for one admin-chosen key and content type and expires after 6 hours.
-If the browser closes between the PUT and the website's completion step, the
-object stays in the bucket unregistered. On a later upload with that name, the
-site offers to finish registering the existing object instead of uploading it
-again. Recovery validates images and generates their thumbnails as usual; an
-image that cannot be thumbnailed is rejected and deleted.
 
 ### Hotlinks and access policy
 
