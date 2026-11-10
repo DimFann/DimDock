@@ -15,6 +15,7 @@ html {
   --admin-blue: #0078d4;
   --admin-blue-dark: #005a9e;
   --soft-shadow: 0 1px 5px rgba(0, 0, 0, 0.12);
+  --blog-title-font-size: 1.5rem;
   --content-monospace-font: "JetBrains Mono Variable", "JetBrains Mono", Consolas, "Liberation Mono", monospace;
 }
 
@@ -171,6 +172,14 @@ body.content-background {
 :is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) h4 { font-size: 1.15em; }
 :is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) h5 { font-size: 1em; }
 :is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) h6 { font-size: 0.9em; }
+
+/* Blog posts, excerpts, About and their previews: "#" matches the blog post title size. */
+:is(.blog-post-content, .blog-post-excerpt) h1 { font-size: var(--blog-title-font-size); }
+:is(.blog-post-content, .blog-post-excerpt) h2 { font-size: 1.3rem; }
+:is(.blog-post-content, .blog-post-excerpt) h3 { font-size: 1.15rem; }
+:is(.blog-post-content, .blog-post-excerpt) h4 { font-size: 1.05rem; }
+:is(.blog-post-content, .blog-post-excerpt) h5 { font-size: 1rem; }
+:is(.blog-post-content, .blog-post-excerpt) h6 { font-size: 0.9rem; }
 
 :is(.blog-post-content, .blog-post-excerpt, .path-description-content, .path-description-dialog-content, .image-item-description) > :is(h1, h2, h3, h4, h5, h6):first-child {
   margin-top: 0;

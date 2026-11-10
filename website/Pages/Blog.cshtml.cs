@@ -36,6 +36,7 @@ public class BlogModel : PageModel
     }
 
     public IReadOnlyList<Blog> Posts { get; private set; } = [];
+    public string DraftId { get; } = FilesystemPersistenceService.CreateBlogDraftId();
     [BindProperty(SupportsGet = true, Name = "pageNumber")]
     public int PageNumber { get; set; } = 1;
     public int PageCount { get; private set; } = 1;
@@ -106,12 +107,66 @@ public class BlogModel : PageModel
     private static string NormalizeNewPostTitle(string? title) =>
         string.IsNullOrWhiteSpace(title) ? "Untitled" : title.Trim();
 
+    public async Task<IActionResult> OnPostUploadImageAsync(
+        [FromForm] string? draftId,
+        [FromForm] IFormFile? image)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        if (image is null)
+        {
+            return BadRequest("Choose an image to upload.");
+        }
+
+        try
+        {
+            var imageUrl = await _filesystemPersistence.SaveBlogDraftAssetAsync(
+                draftId ?? string.Empty,
+                image,
+                HttpContext.RequestAborted);
+            return new JsonResult(new
+            {
+                url = imageUrl,
+                fileName = System.IO.Path.GetFileName(image.FileName.Replace('\\', '/'))
+            });
+        }
+        catch (InvalidDataException exception)
+        {
+            return BadRequest(exception.Message);
+        }
+    }
+
+    public async Task<IActionResult> OnPostDiscardDraftAsync([FromForm] string? draftId)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        await _filesystemPersistence.DeleteBlogDraftAssetsAsync(draftId, HttpContext.RequestAborted);
+        return new NoContentResult();
+    }
+
     private static string ComposeNewPostMarkdown(string normalizedTitle, string? content) =>
         $"# {normalizedTitle}{Environment.NewLine}{Environment.NewLine}{content?.Trim() ?? string.Empty}";
 
     public async Task<IActionResult> OnPostCreateAsync(
         [FromForm] string? title,
-        [FromForm] string? content)
+        [FromForm] string? content,
+        [FromForm] string? draftId)
     {
         if (!AdminEnabled)
         {
@@ -156,6 +211,16 @@ public class BlogModel : PageModel
         };
         _context.Blogs.Add(post);
         await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        var publishedMarkdown = await _filesystemPersistence.PublishBlogDraftAssetsAsync(
+            post.Id,
+            draftId,
+            post.Text,
+            HttpContext.RequestAborted);
+        if (!string.Equals(publishedMarkdown, post.Text, StringComparison.Ordinal))
+        {
+            post.Text = publishedMarkdown;
+            await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        }
         await _filesystemPersistence.PersistBlogAsync(post, HttpContext.RequestAborted);
 
         return Redirect($"/blog/{Uri.EscapeDataString(post.Alias)}");

@@ -302,6 +302,129 @@ public sealed class FilesystemPersistenceService(
         return $"/blogs/assets/{postId}/{fileName}";
     }
 
+    // New-post images are staged under assets/drafts/<draft-id> until the post is published.
+    // Draft IDs start with their UTC creation time so abandoned drafts can be swept.
+    private const string BlogDraftAssetsDirectory = "assets/drafts";
+    private static readonly TimeSpan BlogDraftLifetime = TimeSpan.FromDays(1);
+
+    public static string CreateBlogDraftId() => $"{DateTime.UtcNow:yyyyMMddHHmmss}{Guid.NewGuid():N}";
+
+    public static bool IsValidBlogDraftId(string? draftId) =>
+        TryGetBlogDraftCreated(draftId, out _);
+
+    private static bool TryGetBlogDraftCreated(string? draftId, out DateTime created)
+    {
+        created = default;
+        return draftId is { Length: 46 } &&
+               draftId.All(c => char.IsAsciiDigit(c) || c is >= 'a' and <= 'f') &&
+               DateTime.TryParseExact(draftId[..14], "yyyyMMddHHmmss",
+                   System.Globalization.CultureInfo.InvariantCulture,
+                   System.Globalization.DateTimeStyles.AdjustToUniversal | System.Globalization.DateTimeStyles.AssumeUniversal,
+                   out created);
+    }
+
+    public async Task<string> SaveBlogDraftAssetAsync(
+        string draftId,
+        IFormFile file,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsValidBlogDraftId(draftId))
+        {
+            throw new InvalidDataException("The draft is not ready to receive images.");
+        }
+
+        await DeleteStaleBlogDraftAssetsAsync(cancellationToken);
+        var draftDirectory = $"{BlogDraftAssetsDirectory}/{draftId}";
+        await fileStore.CreateDirectoryAsync(FileStoreArea.Blogs, draftDirectory, cancellationToken);
+        var fileName = await SaveImageAssetAsync(
+            FileStoreArea.Blogs,
+            draftDirectory,
+            file,
+            cancellationToken);
+        return $"/blogs/{draftDirectory}/{fileName}";
+    }
+
+    // Moves draft images referenced by the post into its asset directory, rewrites their URLs
+    // and deletes the draft. Returns the rewritten Markdown.
+    public async Task<string> PublishBlogDraftAssetsAsync(
+        ulong postId,
+        string? draftId,
+        string markdown,
+        CancellationToken cancellationToken = default)
+    {
+        if (postId == 0 || !IsValidBlogDraftId(draftId))
+        {
+            return markdown;
+        }
+
+        var draftDirectory = $"{BlogDraftAssetsDirectory}/{draftId}";
+        if (!await fileStore.DirectoryExistsAsync(FileStoreArea.Blogs, draftDirectory, cancellationToken))
+        {
+            return markdown;
+        }
+
+        var draftUrlPrefix = $"/blogs/{draftDirectory}/";
+        if (markdown.Contains(draftUrlPrefix, StringComparison.Ordinal))
+        {
+            var postDirectory = $"assets/{postId}";
+            await fileStore.CreateDirectoryAsync(FileStoreArea.Blogs, postDirectory, cancellationToken);
+            foreach (var key in await fileStore.ListFilesAsync(FileStoreArea.Blogs, draftDirectory, cancellationToken: cancellationToken))
+            {
+                var name = key[(key.LastIndexOf('/') + 1)..];
+                if (markdown.Contains(draftUrlPrefix + name, StringComparison.Ordinal))
+                {
+                    await fileStore.MoveFileAsync(
+                        FileStoreArea.Blogs,
+                        JoinKey(draftDirectory, name),
+                        JoinKey(postDirectory, name),
+                        cancellationToken);
+                }
+            }
+
+            markdown = markdown.Replace(draftUrlPrefix, $"/blogs/{postDirectory}/", StringComparison.Ordinal);
+        }
+
+        await DeleteBlogDraftAssetsAsync(draftId, cancellationToken);
+        return markdown;
+    }
+
+    public async Task DeleteBlogDraftAssetsAsync(
+        string? draftId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!IsValidBlogDraftId(draftId))
+        {
+            return;
+        }
+
+        var draftDirectory = $"{BlogDraftAssetsDirectory}/{draftId}";
+        if (await fileStore.DirectoryExistsAsync(FileStoreArea.Blogs, draftDirectory, cancellationToken))
+        {
+            await fileStore.DeleteDirectoryAsync(FileStoreArea.Blogs, draftDirectory, recursive: true, cancellationToken);
+        }
+    }
+
+    private async Task DeleteStaleBlogDraftAssetsAsync(CancellationToken cancellationToken)
+    {
+        if (!await fileStore.DirectoryExistsAsync(FileStoreArea.Blogs, BlogDraftAssetsDirectory, cancellationToken))
+        {
+            return;
+        }
+
+        foreach (var key in await fileStore.ListDirectoriesAsync(FileStoreArea.Blogs, BlogDraftAssetsDirectory, cancellationToken))
+        {
+            var draftId = key.TrimEnd('/')[(key.TrimEnd('/').LastIndexOf('/') + 1)..];
+            if (!TryGetBlogDraftCreated(draftId, out var created) || DateTime.UtcNow - created > BlogDraftLifetime)
+            {
+                await fileStore.DeleteDirectoryAsync(
+                    FileStoreArea.Blogs,
+                    $"{BlogDraftAssetsDirectory}/{draftId}",
+                    recursive: true,
+                    cancellationToken);
+            }
+        }
+    }
+
     public async Task<string> SaveAboutAssetAsync(
         IFormFile file,
         CancellationToken cancellationToken = default)

@@ -12,7 +12,6 @@
   background: var(--surface-raised-background);
   border: 1px solid #e0f0ff;
   box-sizing: border-box;
-  font-family: var(--content-monospace-font);
   font-size: 12px;
   overflow-wrap: anywhere;
   padding: 0.5rem 2.5rem 0.5rem 0.5rem;

@@ -181,6 +181,33 @@ try
     Check(visitorHtml.Contains("photo new.png") && !visitorHtml.Contains("data-open-rename-item"), "visitors get no rename controls");
     Console.WriteLine("PASS item rename: file, thumbnail, database, shortcuts, manifest, case-only and validation");
 
+    var draftId = FilesystemPersistenceService.CreateBlogDraftId();
+    async Task<string> UploadDraftImageAsync(string id)
+    {
+        var bytes = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==");
+        var file = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "image", "pic.png");
+        return await persistence.SaveBlogDraftAssetAsync(id, file);
+    }
+    var keptUrl = await UploadDraftImageAsync(draftId);
+    var droppedUrl = await UploadDraftImageAsync(draftId);
+    Check(keptUrl.StartsWith($"/blogs/assets/drafts/{draftId}/", StringComparison.Ordinal), "draft images staged per draft");
+    var published = await persistence.PublishBlogDraftAssetsAsync(4242, draftId, $"# T\n\n![pic]({keptUrl} \"scale=50%\")");
+    var keptName = keptUrl[(keptUrl.LastIndexOf('/') + 1)..];
+    Check(published.Contains($"(/blogs/assets/4242/{keptName} ") && !published.Contains("/drafts/"), "published Markdown points at the post's assets");
+    Check(await store.FileExistsAsync(FileStoreArea.Blogs, $"assets/4242/{keptName}"), "referenced draft image moved to the post");
+    Check(!await store.FileExistsAsync(FileStoreArea.Blogs, $"assets/4242/{droppedUrl[(droppedUrl.LastIndexOf('/') + 1)..]}") &&
+        !await store.DirectoryExistsAsync(FileStoreArea.Blogs, $"assets/drafts/{draftId}"), "unreferenced draft images deleted with the draft");
+    var discarded = FilesystemPersistenceService.CreateBlogDraftId();
+    await UploadDraftImageAsync(discarded);
+    await persistence.DeleteBlogDraftAssetsAsync(discarded);
+    Check(!await store.DirectoryExistsAsync(FileStoreArea.Blogs, $"assets/drafts/{discarded}"), "discarded draft deleted");
+    var stale = $"{DateTime.UtcNow.AddDays(-2):yyyyMMddHHmmss}{Guid.NewGuid():N}";
+    await UploadDraftImageAsync(stale);
+    await UploadDraftImageAsync(FilesystemPersistenceService.CreateBlogDraftId());
+    Check(!await store.DirectoryExistsAsync(FileStoreArea.Blogs, $"assets/drafts/{stale}"), "stale drafts swept on upload");
+    Check(!FilesystemPersistenceService.IsValidBlogDraftId("../x") && !FilesystemPersistenceService.IsValidBlogDraftId(draftId.ToUpperInvariant()), "draft IDs validated");
+    Console.WriteLine("PASS new-post draft images: staging, publish move/rewrite, discard and stale sweep");
+
     DirectoryShortcut Link(PathEntry parent, PathEntry target, string name) =>
         new() { ParentPathId = parent.Id, TargetPathId = target.Id, Name = name };
 

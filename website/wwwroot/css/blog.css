@@ -101,8 +101,8 @@ body.blog-layout main {
 }
 
 .blog-post-title {
-  font-size: 1.5rem;
-  font-weight: normal;
+  font-size: var(--blog-title-font-size);
+  font-weight: 700;
   margin: 0;
   padding: 0.35rem 0.75rem;
 }
@@ -155,41 +155,14 @@ body.blog-layout main {
   pointer-events: auto;
 }
 
-.blog-create-dialog {
-  height: min(85vh, 48rem);
-}
-
-.blog-create-dialog form {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  height: 100%;
-}
-
-.blog-create-dialog h2 {
-  font-size: 1.25rem;
-  margin: 0;
-}
-
-.blog-create-pane {
-  display: flex;
-  flex: 1;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-height: 0;
-}
-
-.blog-create-title,
-.blog-create-content {
-  box-sizing: border-box;
-  width: 100%;
-}
-
 .blog-create-title {
-  border: 0;
-  font-size: 2rem;
-  font-weight: normal;
-  padding: 0.5rem 1rem;
+  border: 1px solid #9aa;
+  border-radius: 3px;
+  box-sizing: border-box;
+  font-size: var(--blog-title-font-size);
+  font-weight: 700;
+  padding: 0.35rem 0.75rem;
+  width: 100%;
 }
 
 .blog-create-title:focus {
@@ -198,46 +171,13 @@ body.blog-layout main {
 
 .blog-create-title::placeholder {
   color: #777;
+  font-weight: normal;
   opacity: 1;
-}
-
-.blog-create-divider {
-  border: 0;
-  border-top: 1px solid #607878;
-  margin: 0;
-}
-
-.blog-create-content {
-  flex: 1;
-  min-height: 0;
-  font-family: var(--content-monospace-font);
-  resize: none;
-  resize: vertical;
 }
 
 .blog-create-help {
   color: #555;
   margin: 0;
-}
-
-.blog-create-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-}
-
-.blog-create-publish-button {
-  appearance: auto;
-  background: #e9e9ed;
-  border: 1px solid #8f8f9d;
-  border-radius: 2px;
-  color: #111;
-  cursor: pointer;
-  padding: 0.25rem 0.65rem;
-}
-
-.blog-create-publish-button:hover {
-  background: #dcdce0;
 }
 
 .blog-post-date {
@@ -267,7 +207,6 @@ body.blog-layout main {
 
 .blog-post-content {
   background: var(--surface-background);
-  font-family: var(--content-monospace-font);
   min-height: 20rem;
   overflow-wrap: anywhere;
   padding: 0.75rem 1.25rem;

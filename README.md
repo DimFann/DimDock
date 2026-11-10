@@ -184,8 +184,14 @@ refreshed.
 ## Editors
 
 Closing any editor dialog without saving discards the unsaved text; reopening
-it shows the current saved content. The blog **New post** dialog has a
-Markdown preview, and the page behind an open editor dialog does not scroll.
+it shows the current saved content. The blog **New post** dialog uses the same
+layout, Preview/Cancel/Save buttons and image upload/drop controls as the post
+editor, plus a title field. Its images are staged under
+`DATA_DIR/blogs/assets/drafts/<draft-id>` and, on publishing, the ones still
+referenced move to the post's asset folder (their Markdown URLs are rewritten);
+the rest are deleted. Closing the dialog or leaving the page without publishing
+deletes the draft's images, and drafts older than a day are swept on the next
+draft upload. The page behind an open editor dialog does not scroll.
 
 ## Markdown rendering
 
@@ -194,8 +200,10 @@ breaks, and a plain newline also starts a new line (no `<br>` or trailing
 spaces needed). Other raw HTML (including attributes on break tags) remains disabled;
 tags inside code spans/blocks or escaped with a backslash remain literal.
 Headings (`#` to `######`) are bold and scale down by level relative to the
-surrounding text. Rendered Markdown, descriptions and the Markdown editors use
-JetBrains Mono (SIL Open Font License), self-hosted from `wwwroot/lib/jetbrains-mono`
+surrounding text; in blog posts, excerpts and About (and their previews) a `#`
+heading is the same size as the bold blog post title, with lower levels smaller. Rendered Markdown (posts, descriptions and previews) uses the
+site's default font, as in the header. The Markdown editors and the gallery
+directory table use JetBrains Mono (SIL Open Font License), self-hosted from `wwwroot/lib/jetbrains-mono`
 by `npm run build` in `website/` alongside Bootstrap.
 Run renderer checks with `dotnet run --project tests\MarkdownChecks\MarkdownChecks.csproj`.
 

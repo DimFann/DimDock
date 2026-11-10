@@ -13,29 +13,70 @@
             <button type="button" class="path-admin-button" data-open-create-post>Post</button>
         </div>
 
-        <dialog class="description-editor blog-create-dialog" data-create-post-dialog aria-labelledby="createPostTitle">
+        <dialog class="description-editor" data-create-post-dialog aria-labelledby="createPostTitle">
             <form method="post" asp-page-handler="Create" data-create-post-form>
                 @Html.AntiForgeryToken()
-                <section class="blog-create-pane" data-create-post-edit-pane>
-                    <h2 id="createPostTitle">Draft Blog Post</h2>
+                <input type="hidden" name="draftId" value="@Model.DraftId" />
+                <section class="description-editor-pane" data-create-post-edit-pane>
+                    <h2 id="createPostTitle">New blog post</h2>
+                    <div class="description-editor-actions">
+                        <div class="description-editor-actions-left">
+                            <button type="button" class="icon-action-button" data-preview-create-post aria-label="Preview blog post" title="Preview">
+                                <img src="/img/preview.png" alt="" />
+                            </button>
+                            <label class="blog-image-scale">
+                                Image scale
+                                <select data-create-post-image-scale aria-label="Image scale">
+                                    <option value="25">25%</option>
+                                    <option value="50" selected>50%</option>
+                                    <option value="75">75%</option>
+                                    <option value="100">100%</option>
+                                </select>
+                            </label>
+                            <button type="button" class="description-editor-button" data-upload-create-post-image>
+                                Upload image
+                            </button>
+                            <input type="file" accept=".gif,.jpeg,.jpg,.png,.webp,image/gif,image/jpeg,image/png,image/webp"
+                                   data-create-post-image-input hidden multiple />
+                        </div>
+                        <div class="description-editor-actions-right">
+                            <button type="button" class="icon-action-button" data-cancel-create-post aria-label="Cancel" title="Cancel">
+                                <img src="/img/cancel.png" alt="" />
+                            </button>
+                            <button type="submit" class="icon-action-button" aria-label="Publish blog post" title="Publish">
+                                <img src="/img/save.png" alt="" />
+                            </button>
+                        </div>
+                    </div>
                     <input class="blog-create-title" name="title" maxlength="1024"
-                           placeholder="Untitled" aria-label="Post title" />
-                    <hr class="blog-create-divider" />
-                    <textarea class="blog-create-content" name="content" maxlength="60000"
+                           placeholder="Title (Untitled if empty)" aria-label="Post title" />
+                    <div class="blog-image-dropzone" data-create-post-image-dropzone>
+                        Drop images here, or use Upload image. Images are inserted as Markdown.
+                    </div>
+                    <p class="description-editor-error blog-image-upload-status" data-create-post-image-status role="status"></p>
+                    <textarea name="content" maxlength="60000" data-create-post-content
                               aria-label="Blog post content in Markdown"></textarea>
-                    <p class="blog-create-help">Content supports Markdown. The title will be added as the post heading.</p>
+                    <p class="blog-create-help">Content supports Markdown. The title is added as the post heading.</p>
                 </section>
-                <section class="blog-create-pane" data-create-post-preview-pane hidden>
-                    <h2>Preview</h2>
+                <section class="description-editor-pane description-editor-preview-pane" data-create-post-preview-pane hidden>
+                    <div class="description-editor-actions">
+                        <div class="description-editor-actions-left">
+                            <button type="button" class="icon-action-button" data-edit-create-post aria-label="Edit blog post" title="Edit">
+                                <img src="/img/edit.png" alt="" />
+                            </button>
+                        </div>
+                        <div class="description-editor-actions-right">
+                            <button type="button" class="icon-action-button" data-cancel-create-post aria-label="Cancel" title="Cancel">
+                                <img src="/img/cancel.png" alt="" />
+                            </button>
+                            <button type="submit" class="icon-action-button" aria-label="Publish blog post" title="Publish">
+                                <img src="/img/save.png" alt="" />
+                            </button>
+                        </div>
+                    </div>
                     <div class="description-editor-preview blog-post-content" data-create-post-preview aria-live="polite"></div>
                 </section>
                 <p class="description-editor-error" data-create-post-error role="alert"></p>
-                <div class="blog-create-actions">
-                    <button type="button" data-cancel-create-post>Cancel</button>
-                    <button type="button" data-preview-create-post>Preview</button>
-                    <button type="button" data-edit-create-post hidden>Edit</button>
-                    <button type="submit" class="blog-create-publish-button">Publish</button>
-                </div>
             </form>
         </dialog>
     }
@@ -74,8 +115,6 @@
         const showCreatePostPane = (preview) => {
             createPostForm.querySelector("[data-create-post-edit-pane]").hidden = preview;
             createPostForm.querySelector("[data-create-post-preview-pane]").hidden = !preview;
-            createPostForm.querySelector("[data-preview-create-post]").hidden = preview;
-            createPostForm.querySelector("[data-edit-create-post]").hidden = !preview;
         };
         document.querySelector("[data-open-create-post]")?.addEventListener("click", () => {
             showCreatePostPane(false);
@@ -83,9 +122,55 @@
             createPostDialog.showModal();
             createPostDialog.querySelector("input[name='title']").focus();
         });
-        createPostDialog?.querySelector("[data-cancel-create-post]")?.addEventListener("click", () => {
-            createPostDialog.close();
+        createPostDialog?.querySelectorAll("[data-cancel-create-post]").forEach((button) => {
+            button.addEventListener("click", () => createPostDialog.close());
         });
+        if (createPostForm) {
+            initializeMarkdownImageUploads({
+                form: createPostForm,
+                markdownEditor: createPostForm.querySelector("[data-create-post-content]"),
+                input: createPostForm.querySelector("[data-create-post-image-input]"),
+                status: createPostForm.querySelector("[data-create-post-image-status]"),
+                scale: createPostForm.querySelector("[data-create-post-image-scale]"),
+                uploadButton: createPostForm.querySelector("[data-upload-create-post-image]"),
+                dropzone: createPostForm.querySelector("[data-create-post-image-dropzone]"),
+                trackUploads: true
+            });
+
+            // Images uploaded to an unpublished draft are deleted when it is closed or the page is left.
+            let publishingPost = false;
+            const draftUploads = () => createPostForm.querySelectorAll("input[name='uploadedImageUrls']");
+            const discardDraftData = () => {
+                const data = new FormData();
+                data.append("draftId", createPostForm.querySelector("input[name='draftId']").value);
+                data.append("__RequestVerificationToken",
+                    createPostForm.querySelector("input[name='__RequestVerificationToken']").value);
+                draftUploads().forEach((input) => input.remove());
+                return data;
+            };
+            const discardDraftUrl = () => {
+                const url = new URL(window.location.href);
+                url.search = "";
+                url.searchParams.set("handler", "DiscardDraft");
+                return url;
+            };
+            createPostForm.addEventListener("submit", (event) => {
+                if (!event.defaultPrevented) {
+                    publishingPost = true;
+                }
+            });
+            createPostDialog.addEventListener("close", () => {
+                createPostForm.querySelector("[data-create-post-image-status]").textContent = "";
+                if (!publishingPost && draftUploads().length > 0) {
+                    void fetch(discardDraftUrl(), { method: "POST", body: discardDraftData(), keepalive: true });
+                }
+            });
+            window.addEventListener("pagehide", () => {
+                if (!publishingPost && draftUploads().length > 0) {
+                    navigator.sendBeacon(discardDraftUrl(), discardDraftData());
+                }
+            });
+        }
         createPostDialog?.querySelector("[data-edit-create-post]")?.addEventListener("click", () => {
             showCreatePostPane(false);
             createPostForm.querySelector("textarea[name='content']").focus();
