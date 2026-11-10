@@ -97,6 +97,14 @@
   right: 0;
 }
 
+.gallery-path-description .path-description-wrapper:not(.has-description) .path-description-content {
+  min-height: 44px;
+}
+
+.gallery-path-description .path-description-wrapper:not(.has-description) .path-description-content::after {
+  display: none;
+}
+
 .path-description-dialog {
   background: var(--surface-background);
   border: 1px solid #899;

@@ -505,14 +505,9 @@
             const wrapper = document.querySelector("[data-path-description-wrapper]");
             const button = wrapper.querySelector("[data-open-description-editor]");
             content.innerHTML = result.html;
-            content.hidden = !result.hasDescription;
             syncDescriptionHeight();
             document.querySelector("[data-full-description]").innerHTML = result.html;
             wrapper.classList.toggle("has-description", result.hasDescription);
-            button.classList.toggle("description-add-icon", !result.hasDescription);
-            button.classList.toggle("description-edit-icon", result.hasDescription);
-            button.classList.toggle("icon-action-button", !result.hasDescription);
-            button.classList.toggle("description-editor-button", result.hasDescription);
             button.setAttribute("aria-label", result.hasDescription ? "Edit description" : "Add description");
             button.title = result.hasDescription ? "Edit description" : "Add description";
             button.replaceChildren();

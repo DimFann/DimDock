@@ -58,6 +58,10 @@ body.blog-layout main {
   min-height: 0;
 }
 
+.about-page .blog-post-content-wrapper:has(> .description-edit-icon) {
+  min-height: 44px;
+}
+
 .blog-post {
   background: var(--surface-background);
   border: 1px solid #607878;
@@ -259,4 +263,3 @@ body.blog-layout main {
   padding: 0.75rem 1rem;
   text-align: right;
 }
-

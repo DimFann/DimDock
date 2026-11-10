@@ -43,7 +43,7 @@
                     @if (Model.AdminEnabled)
                     {
                         <button type="button"
-                                class="@(hasDescription ? "description-editor-button description-edit-icon" : "icon-action-button description-add-icon")"
+                                class="description-editor-button description-edit-icon"
                                 data-open-description-editor
                                 aria-label="@(hasDescription ? "Edit description" : "Add description")"
                                 title="@(hasDescription ? "Edit description" : "Add description")">
@@ -63,8 +63,7 @@
                          role="button"
                          tabindex="0"
                          aria-haspopup="dialog"
-                         aria-label="View full description"
-                         hidden="@(!hasDescription)">
+                         aria-label="View full description">
                         @Html.Raw(Model.RenderMarkdown(Model.PathEntry?.Description))
                     </div>
                 </div>

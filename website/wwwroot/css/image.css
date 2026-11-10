@@ -205,6 +205,10 @@
   width: 100%;
 }
 
+.image-viewer-image-toggle:disabled {
+  cursor: default;
+}
+
 .image-viewer-content img {
   height: auto;
   max-width: 100%;
@@ -237,4 +241,3 @@
   border: 1px solid #9aa;
   padding: 0.2rem 0.5rem;
 }
-

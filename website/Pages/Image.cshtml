@@ -372,7 +372,24 @@
         const imageViewer = document.querySelector(".image-viewer");
         const mainContent = document.querySelector("main[role='main']");
         const viewerImage = imageToggle.querySelector("img");
+        const narrowViewport = window.matchMedia("(max-width: 767.98px)");
+        function setImageExpanded(expanded) {
+            imageToggle.classList.toggle("expanded", expanded);
+            imageToggle.disabled = narrowViewport.matches;
+            imageToggle.setAttribute("aria-pressed", String(expanded));
+            imageToggle.setAttribute("aria-label", narrowViewport.matches
+                ? "Full-width image"
+                : expanded ? "Restore image size" : "Expand image");
+            if (expanded) {
+                viewerImage.style.height = "";
+                viewerImage.style.width = "";
+            }
+        }
+
         function syncViewerImageSize() {
+            if (narrowViewport.matches) {
+                setImageExpanded(true);
+            }
             if (imageToggle.classList.contains("expanded") ||
                 !viewerImage.naturalWidth ||
                 !viewerImage.naturalHeight) {
@@ -400,18 +417,18 @@
         window.addEventListener("resize", syncViewerImageSize);
         window.visualViewport?.addEventListener("resize", syncViewerImageSize);
         window.addEventListener("load", syncViewerImageSize, { once: true });
+        narrowViewport.addEventListener("change", () => {
+            setImageExpanded(imageToggle.classList.contains("expanded") || narrowViewport.matches);
+            syncViewerImageSize();
+        });
         syncViewerImageSize();
 
         imageToggle.addEventListener("click", () => {
-            const expanded = imageToggle.classList.toggle("expanded");
-            if (expanded) {
-                viewerImage.style.height = "";
-                viewerImage.style.width = "";
-            } else {
-                syncViewerImageSize();
+            if (narrowViewport.matches) {
+                return;
             }
-            imageToggle.setAttribute("aria-pressed", String(expanded));
-            imageToggle.setAttribute("aria-label", expanded ? "Restore image size" : "Expand image");
+            setImageExpanded(!imageToggle.classList.contains("expanded"));
+            syncViewerImageSize();
         });
     }
 
