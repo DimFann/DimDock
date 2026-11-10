@@ -28,7 +28,14 @@
 
 <main class="image-viewer soft-shadow @(Model.Item.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name)) ? "admin-only-tagged" : "")">
     <div class="image-viewer-heading">
-        <h1>@Model.Item.OriginalName</h1>
+        <h1 data-item-name-heading>@Model.Item.OriginalName</h1>
+        @if (Model.AdminEnabled)
+        {
+            <button type="button" class="icon-action-button image-viewer-rename-button"
+                    data-open-rename-item aria-label="Rename item" title="Rename">
+                <img src="/img/edit.png" alt="" />
+            </button>
+        }
     </div>
     <div class="image-viewer-controls">
         <div class="image-viewer-navigation">
@@ -333,6 +340,28 @@
                 </div>
             </form>
         </dialog>
+
+        <dialog class="path-description-dialog path-admin-dialog" data-rename-item-dialog aria-labelledby="renameItemTitle">
+            <form method="post" data-rename-item-form>
+                @Html.AntiForgeryToken()
+                <div class="path-description-dialog-header">
+                    <h2 id="renameItemTitle">Rename Item</h2>
+                    <button type="button" class="icon-action-button" data-close-rename-item aria-label="Close" title="Close">
+                        <img src="/img/cancel.png" alt="" />
+                    </button>
+                </div>
+                <label class="path-admin-field">
+                    File name
+                    <input name="newName" value="@Model.Item.OriginalName" maxlength="255" required />
+                </label>
+                <p>The file extension must stay the same.</p>
+                <p class="description-editor-error" data-rename-item-error role="alert"></p>
+                <div class="path-admin-dialog-actions">
+                    <button type="button" data-close-rename-item>Cancel</button>
+                    <button type="submit">Rename</button>
+                </div>
+            </form>
+        </dialog>
     }
 </main>
 
@@ -395,6 +424,10 @@
     const fileContentTextarea = fileContentForm?.querySelector("textarea[name='content']");
     const imageViewer = document.querySelector(".image-viewer");
     openFileContentEditor?.addEventListener("click", () => {
+        if (fileContentPreviewPane) {
+            fileContentPreviewPane.hidden = true;
+        }
+        fileContentEditPane.hidden = false;
         openFileContentEditor.hidden = true;
         fileContentDisplay.hidden = true;
         fileContentForm.hidden = false;
@@ -403,6 +436,7 @@
     });
     document.querySelectorAll("[data-cancel-file-content-edit]").forEach((button) => {
         button.addEventListener("click", () => {
+            discardEditorValues(fileContentForm);
             fileContentForm.hidden = true;
             fileContentDisplay.hidden = false;
             openFileContentEditor.hidden = false;
@@ -528,6 +562,7 @@
             icon.src = result.hasDescription ? "/img/edit.png" : "/img/add.png";
             icon.alt = "";
             editButton.replaceChildren(icon);
+            commitEditorValues(itemDescriptionDialog);
             itemDescriptionDialog.close();
         } catch (error) {
             itemDescriptionError.textContent = error.message;
@@ -613,6 +648,40 @@
     });
 
     let searchTimeout;
+    const renameItemDialog = document.querySelector("[data-rename-item-dialog]");
+    document.querySelector("[data-open-rename-item]")?.addEventListener("click", () => {
+        const input = renameItemDialog.querySelector("input[name='newName']");
+        renameItemDialog.querySelector("[data-rename-item-error]").textContent = "";
+        renameItemDialog.showModal();
+        input.focus();
+        const extensionStart = input.value.lastIndexOf(".");
+        input.setSelectionRange(0, extensionStart > 0 ? extensionStart : input.value.length);
+    });
+    renameItemDialog?.querySelectorAll("[data-close-rename-item]").forEach((button) => {
+        button.addEventListener("click", () => renameItemDialog.close());
+    });
+    renameItemDialog?.querySelector("[data-rename-item-form]").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const error = form.querySelector("[data-rename-item-error]");
+        error.textContent = "Renaming...";
+        try {
+            const response = await fetch(handlerUrl("RenameItem"), {
+                method: "POST",
+                body: new FormData(form),
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Renaming the item failed.");
+            }
+            commitEditorValues(renameItemDialog);
+            // Source, download, and thumbnail URLs depend on the name, so reload to pick them all up.
+            window.location.reload();
+        } catch (requestError) {
+            error.textContent = requestError.message;
+        }
+    });
+
     shortcutPathSearch?.addEventListener("input", () => {
         window.clearTimeout(searchTimeout);
         shortcutTargetPath.value = "";

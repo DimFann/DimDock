@@ -9,6 +9,9 @@ namespace Website.Services;
 public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions options) : IFileStore, IChunkedUploadStore
 {
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
+    private static readonly TimeSpan AbandonedChunkLifetime = TimeSpan.FromDays(1);
+    private static readonly TimeSpan AbandonedChunkSweepInterval = TimeSpan.FromHours(1);
+    private static long _nextAbandonedChunkSweepTicks;
     private bool UseUnsignedPayload => client.Config.ServiceURL.StartsWith("https://", StringComparison.OrdinalIgnoreCase);
 
     private string ObjectKey(FileStoreArea area, string key, bool allowEmpty = false)
@@ -171,6 +174,7 @@ public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions optio
         {
             throw new IOException($"File key resolves to a directory: {key}");
         }
+        await RemoveAbandonedChunkUploadsAsync(area, cancellationToken);
         var response = await client.InitiateMultipartUploadAsync(new InitiateMultipartUploadRequest
         {
             BucketName = options.Bucket,
@@ -281,6 +285,55 @@ public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions optio
         }
         catch (AmazonS3Exception error) when (error.StatusCode == HttpStatusCode.NotFound &&
             error.ErrorCode != "NoSuchBucket")
+        {
+        }
+    }
+
+    // Best-effort cleanup of multipart uploads left behind by closed browsers or crashes (at most hourly per process).
+    private async Task RemoveAbandonedChunkUploadsAsync(FileStoreArea area, CancellationToken cancellationToken)
+    {
+        var now = DateTime.UtcNow;
+        var next = Interlocked.Read(ref _nextAbandonedChunkSweepTicks);
+        if (now.Ticks < next ||
+            Interlocked.CompareExchange(ref _nextAbandonedChunkSweepTicks, (now + AbandonedChunkSweepInterval).Ticks, next) != next)
+        {
+            return;
+        }
+
+        try
+        {
+            string? keyMarker = null;
+            string? uploadIdMarker = null;
+            while (true)
+            {
+                var page = await client.ListMultipartUploadsAsync(new ListMultipartUploadsRequest
+                {
+                    BucketName = options.Bucket,
+                    Prefix = ObjectKey(area, "", allowEmpty: true),
+                    KeyMarker = keyMarker,
+                    UploadIdMarker = uploadIdMarker
+                }, cancellationToken);
+                foreach (var upload in page.MultipartUploads ?? [])
+                {
+                    if (upload.Initiated is { } initiated && now - initiated.ToUniversalTime() > AbandonedChunkLifetime)
+                    {
+                        await client.AbortMultipartUploadAsync(new AbortMultipartUploadRequest
+                        {
+                            BucketName = options.Bucket,
+                            Key = upload.Key,
+                            UploadId = upload.UploadId
+                        }, cancellationToken);
+                    }
+                }
+                if (page.IsTruncated != true)
+                {
+                    break;
+                }
+                keyMarker = page.NextKeyMarker;
+                uploadIdMarker = page.NextUploadIdMarker;
+            }
+        }
+        catch (AmazonS3Exception)
         {
         }
     }

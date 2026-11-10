@@ -161,10 +161,31 @@ consider restricting the upload host (firewall/allow-list) to your own IPs.
 Either mode is create-only: an existing file name is never overwritten. If an
 upload is interrupted after the file is stored but before it is registered, the
 next upload with that name offers to register the existing file instead.
-Abandoned chunked uploads are aborted by the page when it can; Local staging
-older than a day is removed automatically. For Linode, add a bucket lifecycle
-rule that aborts incomplete multipart uploads after a day or so, since
-abandoned parts are billed but invisible.
+**Cancel upload** stops the file in flight and skips the remaining files; a
+file already in its "Saving to gallery" step finishes first. Cancelled or
+abandoned chunked uploads (including closing the tab mid-upload) are aborted
+by the page when it can. Local staging older than a day is removed
+automatically; with Linode, starting a chunked upload also aborts (at most
+hourly) incomplete multipart uploads older than a day, since abandoned parts
+are billed but invisible. A bucket lifecycle rule doing the same is a good
+backstop if your Linode bucket supports it.
+
+## Gallery item renaming
+
+In admin mode, items can be renamed from the image viewer (edit icon next to
+the name) or from the Gallery grid (tick **Show names**, then use the edit icon
+on a tile). The extension must stay the same and names cannot start with `.`
+or contain path separators; case-only renames are supported. Renaming moves the
+stored file and thumbnail and updates the database, item shortcuts and the
+directory's `.dimdock.json`. File entries in `.shortcuts.json` are not
+rewritten (as with moves). The grid keeps its current order until the page is
+refreshed.
+
+## Editors
+
+Closing any editor dialog without saving discards the unsaved text; reopening
+it shows the current saved content. The blog **New post** dialog has a
+Markdown preview, and the page behind an open editor dialog does not scroll.
 
 ## Markdown rendering
 

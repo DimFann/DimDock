@@ -46,6 +46,11 @@
                 {
                     <button type="button" class="path-admin-button" data-toggle-bulk-select aria-pressed="false"
                             hidden="@string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase)">Select items</button>
+                    <label class="gallery-show-names-toggle"
+                           hidden="@string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase)">
+                        <input type="checkbox" data-toggle-item-names />
+                        Show names
+                    </label>
                 }
             </div>
             @if (Model.Items.Count > 0)
@@ -71,6 +76,7 @@
         <div class="path-upload-status" data-upload-status hidden aria-live="polite">
             <progress max="100" value="0" data-upload-progress></progress>
             <span data-upload-message role="status"></span>
+            <button type="button" data-cancel-upload hidden>Cancel upload</button>
             <button type="button" data-refresh-gallery hidden>Refresh gallery</button>
         </div>
     </div>
@@ -79,6 +85,29 @@
 <div class="gallery-page-container gallery-view-container">
     @if (Model.AdminEnabled && Model.PathEntry is not null)
     {
+        <dialog class="path-description-dialog path-admin-dialog" data-rename-item-dialog aria-labelledby="renameItemTitle">
+            <form method="post" data-rename-item-form>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="itemId" />
+                <div class="path-description-dialog-header">
+                    <h2 id="renameItemTitle">Rename Item</h2>
+                    <button type="button" class="icon-action-button" data-close-path-dialog aria-label="Close" title="Close">
+                        <img src="/img/cancel.png" alt="" />
+                    </button>
+                </div>
+                <label class="path-admin-field">
+                    File name
+                    <input name="newName" maxlength="255" required />
+                </label>
+                <p>The file extension must stay the same. Ordering updates when the page is refreshed.</p>
+                <p class="description-editor-error" data-rename-item-error role="alert"></p>
+                <div class="path-admin-dialog-actions">
+                    <button type="button" data-close-path-dialog>Cancel</button>
+                    <button type="submit">Rename</button>
+                </div>
+            </form>
+        </dialog>
+
         <dialog class="path-description-dialog path-admin-dialog" data-add-path-dialog aria-labelledby="addPathTitle">
             <form method="post" data-add-path-form>
                 @Html.AntiForgeryToken()
@@ -251,6 +280,10 @@
         }
         if (bulkSelectButton) {
             bulkSelectButton.hidden = isComic;
+            const showNamesToggle = document.querySelector("[data-toggle-item-names]")?.closest("label");
+            if (showNamesToggle) {
+                showNamesToggle.hidden = isComic;
+            }
             if (isComic) {
                 galleryGrid.classList.remove("bulk-select-mode");
                 document.querySelector("[data-bulk-selection-controls]").hidden = true;
@@ -487,6 +520,7 @@
             icon.src = result.hasDescription ? "/img/edit.png" : "/img/add.png";
             icon.alt = "";
             button.append(icon);
+            commitEditorValues(document.querySelector("[data-description-editor]"));
             document.querySelector("[data-description-editor]").close();
         } catch (requestError) {
             error.textContent = requestError.message;
@@ -705,6 +739,116 @@
     const uploadMessage = document.querySelector("[data-upload-message]");
     const uploadButton = document.querySelector("[data-open-upload-picker]");
     const refreshGalleryButton = document.querySelector("[data-refresh-gallery]");
+    const cancelUploadButton = document.querySelector("[data-cancel-upload]");
+    const uploadState = { running: false, cancelled: false, request: null, chunked: null, token: "" };
+
+    cancelUploadButton?.addEventListener("click", () => {
+        uploadState.cancelled = true;
+        cancelUploadButton.disabled = true;
+        uploadMessage.textContent = "Cancelling upload...";
+        uploadState.request?.abort();
+    });
+    window.addEventListener("beforeunload", (event) => {
+        if (uploadState.running) {
+            event.preventDefault();
+            event.returnValue = "";
+        }
+    });
+    // If the page is closed mid-upload, ask the server to discard the partially uploaded chunks.
+    window.addEventListener("pagehide", () => {
+        const chunked = uploadState.chunked;
+        if (!chunked) {
+            return;
+        }
+        const body = new FormData();
+        body.append("path", "@Model.CurrentPath");
+        body.append("fileName", chunked.fileName);
+        body.append("uploadId", chunked.uploadId);
+        body.append("__RequestVerificationToken", uploadState.token);
+        navigator.sendBeacon(new URL("?handler=AbortUpload", window.location.href), body);
+        uploadState.chunked = null;
+    });
+
+    const renameItemDialog = document.querySelector("[data-rename-item-dialog]");
+    const showNamesToggle = document.querySelector("[data-toggle-item-names]");
+    const galleryViewContainer = document.querySelector(".gallery-view-container");
+    if (showNamesToggle && galleryViewContainer) {
+        const showNamesKey = "dimdock.gallery.showItemNames";
+        try {
+            showNamesToggle.checked = window.localStorage.getItem(showNamesKey) === "1";
+        } catch {
+        }
+        galleryViewContainer.classList.toggle("show-item-names", showNamesToggle.checked);
+        showNamesToggle.addEventListener("change", () => {
+            galleryViewContainer.classList.toggle("show-item-names", showNamesToggle.checked);
+            try {
+                window.localStorage.setItem(showNamesKey, showNamesToggle.checked ? "1" : "0");
+            } catch {
+            }
+        });
+    }
+
+    document.addEventListener("click", (event) => {
+        const renameButton = event.target.closest("[data-open-rename-item]");
+        if (!renameButton || !renameItemDialog) {
+            return;
+        }
+        const name = renameButton.closest("[data-gallery-item-id]").querySelector("[data-gallery-item-name]").textContent;
+        const input = renameItemDialog.querySelector("input[name='newName']");
+        renameItemDialog.querySelector("input[name='itemId']").value = renameButton.dataset.itemId;
+        input.defaultValue = name;
+        input.value = name;
+        renameItemDialog.querySelector("[data-rename-item-error]").textContent = "";
+        renameItemDialog.showModal();
+        input.focus();
+        const extensionStart = name.lastIndexOf(".");
+        input.setSelectionRange(0, extensionStart > 0 ? extensionStart : name.length);
+    });
+
+    renameItemDialog?.querySelector("[data-rename-item-form]").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const error = form.querySelector("[data-rename-item-error]");
+        error.textContent = "Renaming...";
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set("handler", "RenameItem");
+            const response = await fetch(url, {
+                method: "POST",
+                body: new FormData(form),
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Renaming the item failed.");
+            }
+            const result = await response.json();
+            // Update every tile for this item (original and shortcuts) in place; ordering refreshes on reload.
+            document.querySelectorAll(`[data-gallery-item-id="${result.id}"]`).forEach((entry) => {
+                const label = entry.querySelector("[data-gallery-item-name]");
+                label.textContent = result.name;
+                label.title = result.name;
+                const button = entry.querySelector("[data-open-rename-item]");
+                button.setAttribute("aria-label", `Rename ${result.name}`);
+                const thumbnail = entry.querySelector("[data-gallery-item-thumbnail]");
+                if (thumbnail) {
+                    thumbnail.alt = result.name;
+                    thumbnail.src = `/img_db_thumbs/${result.thumbnailKey}.png`;
+                }
+                const fileName = entry.querySelector("[data-gallery-item-file-name]");
+                if (fileName) {
+                    fileName.textContent = result.name;
+                }
+                const selectLabel = entry.querySelector(".gallery-bulk-select .visually-hidden");
+                if (selectLabel) {
+                    selectLabel.textContent = `Select ${result.name}`;
+                }
+            });
+            commitEditorValues(renameItemDialog);
+            renameItemDialog.close();
+        } catch (requestError) {
+            error.textContent = requestError.message;
+        }
+    });
 
     document.addEventListener("click", (event) => {
         if (event.target.closest("[data-open-add-path]")) {
@@ -794,6 +938,7 @@
         }
 
         const token = document.querySelector("[data-add-path-form] input[name='__RequestVerificationToken']").value;
+        uploadState.token = token;
         const totalBytes = files.reduce((sum, file) => sum + file.size, 0) || 1;
         let finishedBytes = 0;
         const uploaded = [];
@@ -830,7 +975,12 @@
         };
         // XHR (not fetch) so upload progress can be reported. offset = bytes of this file already sent.
         const send = (url, body, headers, file, index, offset) => new Promise((resolve, reject) => {
+            if (uploadState.cancelled) {
+                reject(Object.assign(new Error("upload canceled."), { cancelled: true }));
+                return;
+            }
             const request = new XMLHttpRequest();
+            uploadState.request = request;
             request.open("POST", url);
             for (const [name, value] of Object.entries(headers)) {
                 request.setRequestHeader(name, value);
@@ -838,6 +988,11 @@
             request.upload.addEventListener("progress", (event) => {
                 if (event.lengthComputable) {
                     showProgress(file, index, offset + event.loaded);
+                }
+            });
+            request.addEventListener("loadend", () => {
+                if (uploadState.request === request) {
+                    uploadState.request = null;
                 }
             });
             request.addEventListener("load", () => {
@@ -853,7 +1008,8 @@
             });
             request.addEventListener("error", () => reject(Object.assign(
                 new Error("the connection was interrupted."), { retryable: true })));
-            request.addEventListener("abort", () => reject(new Error("upload canceled.")));
+            request.addEventListener("abort", () => reject(Object.assign(
+                new Error("upload canceled."), { cancelled: true })));
             request.send(body);
         });
         const sendChunks = async (file, index, uploadId, chunkSize) => {
@@ -876,7 +1032,7 @@
                         }, file, index, offset);
                         break;
                     } catch (chunkError) {
-                        if (!chunkError.retryable || attempt >= 3) {
+                        if (!chunkError.retryable || attempt >= 3 || uploadState.cancelled) {
                             throw chunkError;
                         }
                         uploadMessage.textContent = `Retrying ${file.name} chunk ${partNumber} of ${partCount}...`;
@@ -891,13 +1047,23 @@
         uploadProgress.value = 0;
         refreshGalleryButton.hidden = true;
         uploadButton.disabled = true;
+        uploadState.running = true;
+        uploadState.cancelled = false;
+        cancelUploadButton.hidden = false;
+        cancelUploadButton.disabled = false;
+        const cancelled = [];
 
         for (const [index, file] of files.entries()) {
+            if (uploadState.cancelled) {
+                cancelled.push(file.name);
+                continue;
+            }
             uploadMessage.textContent = `Uploading ${file.name} (${index + 1} of ${files.length})...`;
             try {
                 const begin = await postForm("BeginUpload", { fileName: file.name });
                 if (begin.mode === "recover") {
-                    if (window.confirm(`${file.name} already exists in storage but is not registered in the gallery. Add the existing file to the gallery?`)) {
+                    if (!uploadState.cancelled &&
+                        window.confirm(`${file.name} already exists in storage but is not registered in the gallery. Add the existing file to the gallery?`)) {
                         uploadMessage.textContent = `Recovering ${file.name}...`;
                         await postForm("CompleteUpload", { fileName: file.name });
                         uploaded.push(file.name);
@@ -906,12 +1072,15 @@
                     }
                 } else if (begin.mode === "chunked") {
                     let partCount;
+                    uploadState.chunked = { fileName: file.name, uploadId: begin.uploadId };
                     try {
                         partCount = await sendChunks(file, index, begin.uploadId, begin.chunkSize);
                     } catch (chunkError) {
+                        uploadState.chunked = null;
                         await postForm("AbortUpload", { fileName: file.name, uploadId: begin.uploadId }).catch(() => {});
                         throw chunkError;
                     }
+                    uploadState.chunked = null;
                     uploadMessage.textContent = `Saving ${file.name} to the gallery...`;
                     await postForm("CompleteUpload", { fileName: file.name, uploadId: begin.uploadId, partCount });
                     uploaded.push(file.name);
@@ -926,22 +1095,30 @@
                     errors.push(...(result.errors ?? []));
                 }
             } catch (uploadError) {
-                const message = uploadError.message;
-                errors.push(message.startsWith(file.name) ? message : `${file.name}: ${message}`);
+                if (uploadError.cancelled) {
+                    cancelled.push(file.name);
+                } else {
+                    const message = uploadError.message;
+                    errors.push(message.startsWith(file.name) ? message : `${file.name}: ${message}`);
+                }
             }
             finishedBytes += file.size;
             uploadProgress.value = Math.round((finishedBytes / totalBytes) * 100);
         }
 
+        uploadState.running = false;
+        uploadState.request = null;
+        cancelUploadButton.hidden = true;
         uploadButton.disabled = false;
         uploadProgress.value = 100;
         if (uploaded.length > 0) {
             refreshGalleryButton.hidden = false;
         }
         const summary = `${uploaded.length} file${uploaded.length === 1 ? "" : "s"} uploaded.`;
+        const cancelledSummary = cancelled.length > 0 ? `Cancelled: ${cancelled.join(", ")}.` : "";
         const skippedSummary = skipped.length > 0 ? `Skipped recovery for: ${skipped.join(", ")}.` : "";
-        uploadMessage.textContent = [summary, skippedSummary, ...errors].filter(Boolean).join(" ");
-        if (errors.length === 0 && skipped.length === 0 && uploaded.length > 0) {
+        uploadMessage.textContent = [summary, cancelledSummary, skippedSummary, ...errors].filter(Boolean).join(" ");
+        if (errors.length === 0 && skipped.length === 0 && cancelled.length === 0 && uploaded.length > 0) {
             window.location.reload();
         }
     });

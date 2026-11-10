@@ -212,6 +212,12 @@
                 document.querySelector(".blog-post-content").innerHTML = result.html;
                 const titleSeparator = document.title.indexOf(" - ");
                 document.title = `${result.title}${titleSeparator >= 0 ? document.title.substring(titleSeparator) : ""}`;
+                form.querySelector("input[name='title']").value = result.title;
+                commitEditorValues(titleEditor);
+                if (blogEditor) {
+                    blogEditor.querySelector("[data-blog-markdown]").value = result.markdown;
+                    commitEditorValues(blogEditor);
+                }
                 titleEditor.close();
             } catch (requestError) {
                 error.textContent = requestError.message;
@@ -290,6 +296,12 @@
                     const result = await response.json();
                     document.querySelector(".blog-post-title").textContent = result.title;
                     document.querySelector(".blog-post-content").innerHTML = result.html;
+                    commitEditorValues(blogEditor);
+                    const titleInput = titleEditor?.querySelector("input[name='title']");
+                    if (titleInput) {
+                        titleInput.value = result.title;
+                        commitEditorValues(titleEditor);
+                    }
                     blogEditor.close();
                 } catch (requestError) {
                     error.textContent = requestError.message;

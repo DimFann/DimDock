@@ -280,6 +280,56 @@
   padding: 0;
 }
 
+.gallery-item-name {
+  display: none;
+}
+
+.show-item-names .gallery-item-name {
+  align-items: center;
+  background: var(--surface-raised-background);
+  bottom: 0;
+  box-sizing: border-box;
+  display: flex;
+  gap: 0.25rem;
+  left: 0;
+  padding: 0.2rem 0.25rem 0.2rem 0.5rem;
+  position: absolute;
+  right: 0;
+  z-index: 1;
+}
+
+.gallery-item-name-text {
+  flex: 1;
+  font-family: var(--content-monospace-font);
+  font-size: 0.85rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gallery-item-rename-button {
+  flex: none;
+  height: 28px;
+  width: 28px;
+}
+
+.gallery-item-rename-button img {
+  max-height: 20px;
+  max-width: 20px;
+}
+
+.gallery-show-names-toggle {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.35rem;
+  white-space: nowrap;
+}
+
+.gallery-show-names-toggle[hidden] {
+  display: none;
+}
+
 .gallery-image-result.admin-only-tagged {
   border: 3px solid #a00;
 }

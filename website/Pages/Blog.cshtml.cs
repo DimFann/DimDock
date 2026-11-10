@@ -86,6 +86,29 @@ public class BlogModel : PageModel
         return RedirectToPage("/Blog", new { pageNumber = Math.Clamp(page, 1, lastPage) });
     }
 
+    public async Task<IActionResult> OnPostPreviewAsync(
+        [FromForm] string? title,
+        [FromForm] string? content)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        return Content(BlogMarkdownRenderer.Render(ComposeNewPostMarkdown(NormalizeNewPostTitle(title), content)), "text/html");
+    }
+
+    private static string NormalizeNewPostTitle(string? title) =>
+        string.IsNullOrWhiteSpace(title) ? "Untitled" : title.Trim();
+
+    private static string ComposeNewPostMarkdown(string normalizedTitle, string? content) =>
+        $"# {normalizedTitle}{Environment.NewLine}{Environment.NewLine}{content?.Trim() ?? string.Empty}";
+
     public async Task<IActionResult> OnPostCreateAsync(
         [FromForm] string? title,
         [FromForm] string? content)
@@ -100,13 +123,13 @@ public class BlogModel : PageModel
             return BadRequest("Invalid anti-forgery token.");
         }
 
-        var normalizedTitle = string.IsNullOrWhiteSpace(title) ? "Untitled" : title.Trim();
+        var normalizedTitle = NormalizeNewPostTitle(title);
         if (normalizedTitle.Length > 1024)
         {
             return BadRequest("Titles cannot exceed 1024 characters.");
         }
 
-        var markdown = $"# {normalizedTitle}{Environment.NewLine}{Environment.NewLine}{content?.Trim() ?? string.Empty}";
+        var markdown = ComposeNewPostMarkdown(normalizedTitle, content);
         if (System.Text.Encoding.UTF8.GetByteCount(markdown) > 65535)
         {
             return BadRequest("The post content is too large.");

@@ -422,6 +422,29 @@ public class ImageModel : PageModel
         return new JsonResult(new { saved = true });
     }
 
+    public async Task<IActionResult> OnPostRenameItemAsync(ulong id, [FromForm] string? newName)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        try
+        {
+            var item = await _filesystemPersistence.RenameItemAsync(id, newName, HttpContext.RequestAborted);
+            return new JsonResult(new { id = item.Id, name = item.OriginalName, thumbnailKey = item.ThumbnailKey });
+        }
+        catch (GalleryItemRenameException error)
+        {
+            return BadRequest(error.Message);
+        }
+    }
+
     public async Task<IActionResult> OnPostMoveToAsync(
         ulong id,
         [FromForm] ulong? shortcutId,

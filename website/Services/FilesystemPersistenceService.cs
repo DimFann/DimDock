@@ -523,6 +523,141 @@ public sealed class FilesystemPersistenceService(
             content,
             cancellationToken);
 
+    public async Task<Item> RenameItemAsync(
+        ulong itemId,
+        string? newName,
+        CancellationToken cancellationToken = default)
+    {
+        var item = await context.Items.AsNoTracking().FirstOrDefaultAsync(value => value.Id == itemId, cancellationToken)
+            ?? throw new GalleryItemRenameException("The item was not found.");
+        var name = newName?.Trim() ?? string.Empty;
+        if (!IsValidItemFileName(name))
+        {
+            throw new GalleryItemRenameException(
+                "Enter a file name up to 255 characters without / \\ : * ? \" < > | or a leading dot.");
+        }
+        var extension = Path.GetExtension(item.OriginalName);
+        if (!string.Equals(Path.GetExtension(name), extension, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new GalleryItemRenameException(
+                string.IsNullOrEmpty(extension)
+                    ? "The new name cannot add a file extension."
+                    : $"The new name must keep the {extension} extension.");
+        }
+        if (string.Equals(name, item.OriginalName, StringComparison.Ordinal))
+        {
+            return item;
+        }
+
+        var parentPath = item.ParentPath ?? "root";
+        var caseOnly = string.Equals(name, item.OriginalName, StringComparison.OrdinalIgnoreCase);
+        if (await context.Items.AnyAsync(
+                value => value.ParentPath == item.ParentPath && value.Id != item.Id && value.OriginalName == name,
+                cancellationToken))
+        {
+            throw new GalleryItemRenameException($"This directory already contains an item named '{name}'.");
+        }
+
+        var directoryKey = GalleryDirectoryKey(parentPath);
+        var source = ItemFileKey(parentPath, item.OriginalName);
+        var destination = ItemFileKey(parentPath, name);
+        if (!await fileStore.FileExistsAsync(FileStoreArea.Gallery, source, cancellationToken))
+        {
+            throw new GalleryItemRenameException($"The item file was not found: {parentPath}/{item.OriginalName}");
+        }
+        // A case-only rename "exists" on case-insensitive stores, so compare listed names exactly instead.
+        var destinationTaken = caseOnly
+            ? (await fileStore.ListFilesAsync(FileStoreArea.Gallery, directoryKey, cancellationToken: cancellationToken))
+                .Any(key => string.Equals(key[(key.LastIndexOf('/') + 1)..], name, StringComparison.Ordinal))
+            : await fileStore.FileExistsAsync(FileStoreArea.Gallery, destination, cancellationToken) ||
+              await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, destination, cancellationToken);
+        if (destinationTaken)
+        {
+            throw new GalleryItemRenameException($"Storage already contains a file named '{name}' in this directory.");
+        }
+
+        async Task MoveItemFileAsync(string from, string to)
+        {
+            if (caseOnly)
+            {
+                var temporary = JoinKey(directoryKey, $".rename-{Guid.NewGuid():N}{extension}");
+                await fileStore.MoveFileAsync(FileStoreArea.Gallery, from, temporary, cancellationToken);
+                await fileStore.MoveFileAsync(FileStoreArea.Gallery, temporary, to, cancellationToken);
+                return;
+            }
+            await fileStore.MoveFileAsync(FileStoreArea.Gallery, from, to, cancellationToken);
+        }
+
+        await MoveItemFileAsync(source, destination);
+
+        var thumbnailKey = CreateThumbnailKey(parentPath, name);
+        var oldThumbnail = $"{item.ThumbnailKey}.png";
+        var newThumbnail = $"{thumbnailKey}.png";
+        var thumbnailMoved = false;
+        try
+        {
+            if (!string.Equals(item.ThumbnailKey, thumbnailKey, StringComparison.Ordinal) &&
+                await fileStore.FileExistsAsync(FileStoreArea.Thumbnails, oldThumbnail, cancellationToken))
+            {
+                if (await fileStore.FileExistsAsync(FileStoreArea.Thumbnails, newThumbnail, cancellationToken))
+                {
+                    await fileStore.DeleteFileAsync(FileStoreArea.Thumbnails, newThumbnail, cancellationToken);
+                }
+                await fileStore.MoveFileAsync(FileStoreArea.Thumbnails, oldThumbnail, newThumbnail, cancellationToken);
+                thumbnailMoved = true;
+            }
+
+            var executionStrategy = context.Database.CreateExecutionStrategy();
+            await executionStrategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+                await context.Items
+                    .Where(value => value.Id == item.Id)
+                    .ExecuteUpdateAsync(
+                        update => update
+                            .SetProperty(value => value.OriginalName, name)
+                            .SetProperty(value => value.ThumbnailKey, thumbnailKey),
+                        cancellationToken);
+                await context.Shortcuts
+                    .Where(shortcut => shortcut.OriginalId == item.Id)
+                    .ExecuteUpdateAsync(
+                        update => update.SetProperty(shortcut => shortcut.OriginalName, name),
+                        cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            });
+        }
+        catch
+        {
+            if (thumbnailMoved)
+            {
+                await fileStore.MoveFileAsync(FileStoreArea.Thumbnails, newThumbnail, oldThumbnail, CancellationToken.None);
+            }
+            await MoveItemFileAsync(destination, source);
+            throw;
+        }
+
+        await PersistPathAsync(parentPath, cancellationToken);
+        item.OriginalName = name;
+        item.ThumbnailKey = thumbnailKey;
+        return item;
+    }
+
+    public static bool IsValidItemFileName(string fileName) =>
+        !string.IsNullOrWhiteSpace(fileName) &&
+        fileName.Length <= 255 &&
+        fileName == fileName.Trim() &&
+        !fileName.StartsWith('.') &&
+        !fileName.Any(character =>
+            char.IsControl(character) ||
+            character is '<' or '>' or ':' or '"' or '/' or '\\' or '|' or '?' or '*');
+
+    private static string CreateThumbnailKey(string parentPath, string originalName)
+    {
+        var normalizedPath = parentPath == "root" ? originalName : $"{parentPath}/{originalName}";
+        return Convert.ToHexStringLower(
+            System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalizedPath)));
+    }
+
     public async Task MoveEntriesAsync(
         IReadOnlyCollection<Item> items,
         IReadOnlyCollection<Shortcut> shortcuts,
@@ -1133,5 +1268,9 @@ public sealed class GalleryMoveException(string message) : Exception(message)
 }
 
 public sealed class GalleryPathRenameException(string message) : Exception(message)
+{
+}
+
+public sealed class GalleryItemRenameException(string message) : Exception(message)
 {
 }

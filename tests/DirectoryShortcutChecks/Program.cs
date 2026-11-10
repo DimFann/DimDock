@@ -133,6 +133,54 @@ try
     Check(updated.RootElement.GetProperty("shortcuts").GetProperty("root")[0].GetString() == "Album/file.png", "existing file shortcut data preserved");
     Console.WriteLine("PASS target/destination renames, deletion cascades, JSON persistence and file-shortcut preservation");
 
+    static string ThumbnailKey(string parent, string name) => Convert.ToHexStringLower(
+        System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(parent == "root" ? name : $"{parent}/{name}")));
+    var photo = new Item { OriginalName = "photo.png", ParentPath = "With space", ThumbnailKey = ThumbnailKey("With space", "photo.png"), Type = "image", Description = "kept" };
+    var other = new Item { OriginalName = "other.png", ParentPath = "With space", ThumbnailKey = ThumbnailKey("With space", "other.png"), Type = "image" };
+    context.Items.AddRange(photo, other);
+    await context.SaveChangesAsync();
+    context.Shortcuts.Add(new Shortcut { OriginalId = photo.Id, OriginalName = "photo.png", ParentPath = "With space", ShortcutPath = "root" });
+    await context.SaveChangesAsync();
+    await store.WriteAllTextAsync(FileStoreArea.Gallery, "With space/photo.png", "photo-bytes");
+    await store.WriteAllTextAsync(FileStoreArea.Gallery, "With space/other.png", "other-bytes");
+    await store.WriteAllTextAsync(FileStoreArea.Thumbnails, $"{photo.ThumbnailKey}.png", "thumb");
+    context.ChangeTracker.Clear();
+
+    var renamed = await persistence.RenameItemAsync(photo.Id, " Photo New.png ");
+    Check(renamed.OriginalName == "Photo New.png", "rename trims and returns the new name");
+    Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "With space/Photo New.png") == "photo-bytes" &&
+        !await store.FileExistsAsync(FileStoreArea.Gallery, "With space/photo.png"), "item file moved");
+    Check(renamed.ThumbnailKey == ThumbnailKey("With space", "Photo New.png") &&
+        await store.FileExistsAsync(FileStoreArea.Thumbnails, $"{renamed.ThumbnailKey}.png") &&
+        !await store.FileExistsAsync(FileStoreArea.Thumbnails, $"{photo.ThumbnailKey}.png"), "thumbnail moved to the new path key");
+    var stored = await context.Items.AsNoTracking().SingleAsync(item => item.Id == photo.Id);
+    Check(stored.OriginalName == "Photo New.png" && stored.ThumbnailKey == renamed.ThumbnailKey && stored.Description == "kept", "database item updated");
+    Check((await context.Shortcuts.AsNoTracking().SingleAsync(shortcut => shortcut.OriginalId == photo.Id)).OriginalName == "Photo New.png", "shortcut name updated");
+    using (var manifest = JsonDocument.Parse(await store.ReadAllTextAsync(FileStoreArea.Gallery, "With space/.dimdock.json")))
+        Check(manifest.RootElement.ToString().Contains("Photo New.png") && !manifest.RootElement.ToString().Contains("\"photo.png\""), "directory manifest rewritten");
+
+    await persistence.RenameItemAsync(photo.Id, "photo new.png");
+    Check((await store.ListFilesAsync(FileStoreArea.Gallery, "With space")).Any(key => key.EndsWith("/photo new.png", StringComparison.Ordinal)),
+        "case-only rename changes stored casing");
+    foreach (var (name, reason) in new[] { ("photo.jpg", "extension change"), (".hidden.png", "leading dot"), ("a/b.png", "separator"), ("other.png", "duplicate") })
+    {
+        try
+        {
+            await persistence.RenameItemAsync(photo.Id, name);
+            Check(false, $"rename rejects {reason}");
+        }
+        catch (GalleryItemRenameException)
+        {
+        }
+    }
+    Check(await store.FileExistsAsync(FileStoreArea.Gallery, "With space/photo new.png"), "rejected renames leave the file in place");
+    // Gallery URLs strip spaces, so render the root where the item's shortcut appears.
+    var adminHtml = await RenderAsync(await GetGalleryAsync("root", admin: true));
+    Check(adminHtml.Contains($"data-item-id=\"{photo.Id}\"") && adminHtml.Contains("photo new.png"), "admin gallery renders rename controls");
+    var visitorHtml = await RenderAsync(await GetGalleryAsync("root"));
+    Check(visitorHtml.Contains("photo new.png") && !visitorHtml.Contains("data-open-rename-item"), "visitors get no rename controls");
+    Console.WriteLine("PASS item rename: file, thumbnail, database, shortcuts, manifest, case-only and validation");
+
     DirectoryShortcut Link(PathEntry parent, PathEntry target, string name) =>
         new() { ParentPathId = parent.Id, TargetPathId = target.Id, Name = name };
 

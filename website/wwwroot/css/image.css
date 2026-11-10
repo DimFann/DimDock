@@ -46,8 +46,13 @@
   align-items: center;
   border-bottom: 1px solid #607878;
   display: flex;
-  justify-content: space-between;
+  gap: 0.5rem;
+  justify-content: flex-start;
   overflow-wrap: anywhere;
+}
+
+.image-viewer-rename-button {
+  flex: none;
 }
 
 .image-viewer-heading h1 {

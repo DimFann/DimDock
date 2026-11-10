@@ -14,17 +14,26 @@
         </div>
 
         <dialog class="description-editor blog-create-dialog" data-create-post-dialog aria-labelledby="createPostTitle">
-            <form method="post" asp-page-handler="Create">
+            <form method="post" asp-page-handler="Create" data-create-post-form>
                 @Html.AntiForgeryToken()
-                <h2 id="createPostTitle">Draft Blog Post</h2>
-                <input class="blog-create-title" name="title" maxlength="1024"
-                       placeholder="Untitled" aria-label="Post title" />
-                <hr class="blog-create-divider" />
-                <textarea class="blog-create-content" name="content" maxlength="60000"
-                          aria-label="Blog post content in Markdown"></textarea>
-                <p class="blog-create-help">Content supports Markdown. The title will be added as the post heading.</p>
+                <section class="blog-create-pane" data-create-post-edit-pane>
+                    <h2 id="createPostTitle">Draft Blog Post</h2>
+                    <input class="blog-create-title" name="title" maxlength="1024"
+                           placeholder="Untitled" aria-label="Post title" />
+                    <hr class="blog-create-divider" />
+                    <textarea class="blog-create-content" name="content" maxlength="60000"
+                              aria-label="Blog post content in Markdown"></textarea>
+                    <p class="blog-create-help">Content supports Markdown. The title will be added as the post heading.</p>
+                </section>
+                <section class="blog-create-pane" data-create-post-preview-pane hidden>
+                    <h2>Preview</h2>
+                    <div class="description-editor-preview blog-post-content" data-create-post-preview aria-live="polite"></div>
+                </section>
+                <p class="description-editor-error" data-create-post-error role="alert"></p>
                 <div class="blog-create-actions">
                     <button type="button" data-cancel-create-post>Cancel</button>
+                    <button type="button" data-preview-create-post>Preview</button>
+                    <button type="button" data-edit-create-post hidden>Edit</button>
                     <button type="submit" class="blog-create-publish-button">Publish</button>
                 </div>
             </form>
@@ -61,12 +70,46 @@
 @section Scripts {
     <script>
         const createPostDialog = document.querySelector("[data-create-post-dialog]");
+        const createPostForm = createPostDialog?.querySelector("[data-create-post-form]");
+        const showCreatePostPane = (preview) => {
+            createPostForm.querySelector("[data-create-post-edit-pane]").hidden = preview;
+            createPostForm.querySelector("[data-create-post-preview-pane]").hidden = !preview;
+            createPostForm.querySelector("[data-preview-create-post]").hidden = preview;
+            createPostForm.querySelector("[data-edit-create-post]").hidden = !preview;
+        };
         document.querySelector("[data-open-create-post]")?.addEventListener("click", () => {
+            showCreatePostPane(false);
+            createPostForm.querySelector("[data-create-post-error]").textContent = "";
             createPostDialog.showModal();
             createPostDialog.querySelector("input[name='title']").focus();
         });
         createPostDialog?.querySelector("[data-cancel-create-post]")?.addEventListener("click", () => {
             createPostDialog.close();
+        });
+        createPostDialog?.querySelector("[data-edit-create-post]")?.addEventListener("click", () => {
+            showCreatePostPane(false);
+            createPostForm.querySelector("textarea[name='content']").focus();
+        });
+        createPostDialog?.querySelector("[data-preview-create-post]")?.addEventListener("click", async () => {
+            const error = createPostForm.querySelector("[data-create-post-error]");
+            const url = new URL(window.location.href);
+            url.search = "";
+            url.searchParams.set("handler", "Preview");
+            error.textContent = "";
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    body: new FormData(createPostForm),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (!response.ok) {
+                    throw new Error(await response.text() || "Preview failed.");
+                }
+                createPostForm.querySelector("[data-create-post-preview]").innerHTML = await response.text();
+                showCreatePostPane(true);
+            } catch (requestError) {
+                error.textContent = requestError.message;
+            }
         });
 
         const blogResults = document.querySelector("[data-blog-results]");

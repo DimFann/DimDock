@@ -1,3 +1,26 @@
+// Editable fields inside dialogs revert to their last saved value (defaultValue) whenever the dialog closes.
+// Successful saves call commitEditorValues before closing so the saved text becomes the new baseline.
+const editorFieldSelector =
+    "textarea, input:not([type=hidden]):not([type=file]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])";
+
+function commitEditorValues(root) {
+    root?.querySelectorAll(editorFieldSelector).forEach((field) => {
+        field.defaultValue = field.value;
+    });
+}
+
+function discardEditorValues(root) {
+    root?.querySelectorAll(editorFieldSelector).forEach((field) => {
+        field.value = field.defaultValue;
+    });
+}
+
+document.addEventListener("close", (event) => {
+    if (event.target instanceof HTMLDialogElement) {
+        discardEditorValues(event.target);
+    }
+}, true);
+
 function initializeMarkdownImageUploads({ form, markdownEditor, input, status, scale, uploadButton, dropzone, trackUploads = false }) {
     let uploading = false;
 

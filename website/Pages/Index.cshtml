@@ -161,6 +161,7 @@
                     const result = await response.json();
                     document.querySelector("[data-about-content]").innerHTML = result.html;
                     aboutForm.querySelectorAll('input[name="uploadedImageUrls"]').forEach((input) => input.remove());
+                    commitEditorValues(aboutEditor);
                     aboutEditor.close();
                 } catch (requestError) {
                     error.textContent = requestError.message;

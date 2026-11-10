@@ -198,6 +198,17 @@
   min-height: 0;
 }
 
+/* While a modal dialog is open, only the dialog's own content scrolls. */
+html:has(dialog:modal) {
+  overflow: hidden;
+}
+
+dialog textarea,
+dialog .description-editor-preview,
+dialog {
+  overscroll-behavior: contain;
+}
+
 .description-editor-error {
   color: #a00;
   margin: 0;

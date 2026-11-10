@@ -639,6 +639,31 @@ public class GalleryModel : PageModel
         });
     }
 
+    public async Task<IActionResult> OnPostRenameItemAsync(
+        [FromForm] ulong itemId,
+        [FromForm] string? newName)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        try
+        {
+            var item = await _filesystemPersistence.RenameItemAsync(itemId, newName, HttpContext.RequestAborted);
+            return new JsonResult(new { id = item.Id, name = item.OriginalName, thumbnailKey = item.ThumbnailKey });
+        }
+        catch (GalleryItemRenameException error)
+        {
+            return BadRequest(error.Message);
+        }
+    }
+
     public async Task<IActionResult> OnPostRenamePathAsync(
         [FromForm] string? path,
         [FromForm] string? newName)

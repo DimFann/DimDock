@@ -178,7 +178,7 @@
         @foreach (var item in Model.Items)
         {
             var adminOnlyItem = item.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
-            <div class="gallery-image-result @(adminOnlyItem ? "admin-only-tagged" : "")">
+            <div class="gallery-image-result @(adminOnlyItem ? "admin-only-tagged" : "")" data-gallery-item-id="@item.Id">
                 @if (Model.AdminEnabled)
                 {
                     <label class="gallery-bulk-select">
@@ -194,13 +194,14 @@
                     {
                         <img src="@($"/img_db_thumbs/{item.ThumbnailKey}.png")"
                              alt="@item.OriginalName"
-                             class="gallery-image-thumbnail" />
+                             class="gallery-image-thumbnail"
+                             data-gallery-item-thumbnail />
                     }
                     else
                     {
                         <span class="gallery-file-thumbnail">
                             <img src="/img/file.png" alt="" />
-                            <span>@item.OriginalName</span>
+                            <span data-gallery-item-file-name>@item.OriginalName</span>
                         </span>
                     }
                     @if (item.ShortcutId.HasValue)
@@ -208,6 +209,20 @@
                         <img src="/img/link.png" alt="" class="gallery-shortcut-icon" title="Shortcut" />
                     }
                 </a>
+                @if (Model.AdminEnabled)
+                {
+                    <div class="gallery-item-name">
+                        <span class="gallery-item-name-text" data-gallery-item-name title="@item.OriginalName">@item.OriginalName</span>
+                        <button type="button"
+                                class="icon-action-button gallery-item-rename-button"
+                                data-open-rename-item
+                                data-item-id="@item.Id"
+                                aria-label="Rename @item.OriginalName"
+                                title="Rename">
+                            <img src="/img/edit.png" alt="" />
+                        </button>
+                    </div>
+                }
             </div>
         }
     </div>

@@ -185,6 +185,7 @@ public class BlogPostModel : PageModel
         return new JsonResult(new
         {
             title = normalizedTitle,
+            markdown = post.Text,
             html = RenderMarkdown(post.Text)
         });
     }
