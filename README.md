@@ -59,6 +59,13 @@ The `DB_*` values only apply when the database is first created; changing them
 later does not update existing MariaDB users. `GOOGLE_DRIVE_*` values are only
 used by the migration tools in [`gdrive_scripts`](gdrive_scripts/README.md).
 
+Header links are configured in **Admin** and saved to `admin/navigation.json`
+(local data directory or storage bucket). `Navigation` in
+`website/appsettings.json` supplies defaults until the first save.
+Home/About and Admin/Login cannot be hidden by these settings.
+Hidden pages require admin login; admins still see their header links in bold red.
+Hidden sections also protect their posts, image pages and uploaded assets.
+
 ## Data directory
 
 ```
@@ -67,13 +74,15 @@ DATA_DIR/
   img_db_thumbs/   generated thumbnails
   blogs/           blog posts (Markdown) and uploaded post images
   about/           Home/About Markdown and images
+  commissions/     commissions.md and uploaded images in assets/
   admin/           admin settings (e.g. admin-only tags)
   db_data/         MariaDB data
   app_state/       login/antiforgery keys and loader markers
 ```
 
-Back up the whole directory. With Linode storage, the first five live in the
+Back up the whole directory. With Linode storage, the content and admin folders live in the
 bucket instead; `db_data` and `app_state` always stay on the server.
+The website creates missing content/admin folders on startup without overwriting existing files.
 
 ## Server setup
 
@@ -110,7 +119,7 @@ gallery uploads use one of two modes:
    docker compose run --rm --no-deps -e FILE_STORAGE_PROVIDER=Linode --entrypoint python path-loader /app/storage_smoke.py
    ```
 
-3. Back up, then copy `img_src`, `img_db_thumbs`, `blogs`, `about` and `admin`
+3. Back up, then copy `img_src`, `img_db_thumbs`, `blogs`, `about`, `commissions` and `admin`
    unchanged (including hidden files) to `<prefix>/<name>/` in the bucket.
 4. Set `FILE_STORAGE_PROVIDER=Linode` and run `docker compose up --build`.
 

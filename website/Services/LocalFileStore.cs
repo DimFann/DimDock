@@ -34,7 +34,8 @@ public sealed class LocalFileStore : IFileStore, IChunkedUploadStore
             [FileStoreArea.Thumbnails] = Path.Combine(fullRoot, "img_db_thumbs"),
             [FileStoreArea.Blogs] = Path.Combine(fullRoot, "blogs"),
             [FileStoreArea.About] = Path.Combine(fullRoot, "about"),
-            [FileStoreArea.Admin] = Path.Combine(fullRoot, "admin")
+            [FileStoreArea.Admin] = Path.Combine(fullRoot, "admin"),
+            [FileStoreArea.Commissions] = Path.Combine(fullRoot, "commissions")
         };
     }
 

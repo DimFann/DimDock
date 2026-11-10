@@ -6,6 +6,22 @@
 }
 
 <div class="gallery-page-container admin-page">
+    <section aria-labelledby="navigationHeading">
+        <h2 id="navigationHeading">Header links</h2>
+        <p>Choose which pages are public. Hidden pages require admin login and stay visible
+            to admins as bold red header links. Home/About and Admin/Login stay visible.</p>
+        <form method="post" asp-page-handler="SaveNavigation">
+            <label><input asp-for="NavigationInput.Gallery" /> Gallery</label>
+            <label><input asp-for="NavigationInput.Search" /> Search</label>
+            <label><input asp-for="NavigationInput.Blog" /> Blog</label>
+            <label><input asp-for="NavigationInput.Commissions" /> Commissions</label>
+            <button type="submit">Save header links</button>
+        </form>
+        @if (Model.NavigationStatus is not null)
+        {
+            <p role="status">@Model.NavigationStatus</p>
+        }
+    </section>
     <section class="admin-tags-section" aria-labelledby="adminOnlyTagsHeading">
         <h2 id="adminOnlyTagsHeading">Admin-only tags</h2>
         <form method="post" asp-page-handler="SaveAdminOnlyTags" data-save-admin-only-tags>

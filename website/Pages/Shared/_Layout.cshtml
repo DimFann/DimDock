@@ -1,16 +1,13 @@
 ﻿<!DOCTYPE html>
 @inject IConfiguration Configuration
+@inject Website.Services.NavigationSettingsProvider NavigationSettingsProvider
 @{
     var siteTitle = Configuration["SiteTitle"] ?? "DimDock";
     var currentPage = ViewContext.RouteData.Values["page"]?.ToString();
     var isBlogPage = currentPage is "/Blog" or "/BlogPost";
     var isAdminEnabled = Configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
     var isAdminAuthenticated = User.IsInRole("Admin");
-    var showHomeLink = Configuration.GetValue<bool?>("Navigation:Home") ?? true;
-    var showGalleryLink = Configuration.GetValue<bool?>("Navigation:Gallery") ?? true;
-    var showSearchLink = Configuration.GetValue<bool?>("Navigation:Search") ?? true;
-    var showBlogLink = Configuration.GetValue<bool?>("Navigation:Blog") ?? true;
-    var showAdminLink = Configuration.GetValue<bool?>("Navigation:Admin") ?? true;
+    var navigation = await NavigationSettingsProvider.GetAsync(Context.RequestAborted);
 }
 <html lang="en">
 <head>
@@ -46,44 +43,48 @@
                 </button>
                 <div class="navbar-collapse collapse d-sm-inline-flex justify-content-between">
                     <ul class="navbar-nav flex-grow-1">
-                        @if (showHomeLink)
+                        <li class="nav-item">
+                            <a class="nav-link @(currentPage == "/Index" ? "active" : "")"
+                               aria-current="@(currentPage == "/Index" ? "page" : null)"
+                               asp-area="" asp-page="/Index">Home</a>
+                        </li>
+                        @if (navigation.Gallery || isAdminAuthenticated)
                         {
                             <li class="nav-item">
-                                <a class="nav-link @(currentPage == "/Index" ? "active" : "")"
-                                   aria-current="@(currentPage == "/Index" ? "page" : null)"
-                                   asp-area="" asp-page="/Index">Home</a>
-                            </li>
-                        }
-                        @if (showGalleryLink)
-                        {
-                            <li class="nav-item">
-                                <a class="nav-link @(currentPage == "/Gallery" ? "active" : "")"
+                                <a class="nav-link @(currentPage == "/Gallery" ? "active" : "") @(!navigation.Gallery ? "admin-only-tagged" : "")"
                                    aria-current="@(currentPage == "/Gallery" ? "page" : null)"
                                    href="~/gallery">Gallery</a>
                             </li>
                         }
-                        @if (showSearchLink)
+                        @if (navigation.Search || isAdminAuthenticated)
                         {
                             <li class="nav-item">
-                                <a class="nav-link @(currentPage == "/Search" ? "active" : "")"
+                                <a class="nav-link @(currentPage == "/Search" ? "active" : "") @(!navigation.Search ? "admin-only-tagged" : "")"
                                    aria-current="@(currentPage == "/Search" ? "page" : null)"
                                    asp-area="" asp-page="/Search">Search</a>
                             </li>
                         }
-                        @if (showBlogLink)
+                        @if (navigation.Blog || isAdminAuthenticated)
                         {
                             <li class="nav-item">
-                                <a class="nav-link @(isBlogPage ? "active" : "")"
+                                <a class="nav-link @(isBlogPage ? "active" : "") @(!navigation.Blog ? "admin-only-tagged" : "")"
                                    aria-current="@(isBlogPage ? "page" : null)"
                                    asp-area="" asp-page="/Blog">Blog</a>
                             </li>
                         }
-                        @if (isAdminEnabled && showAdminLink && isAdminAuthenticated &&
-                             (showHomeLink || showGalleryLink || showSearchLink || showBlogLink))
+                        @if (navigation.Commissions || isAdminAuthenticated)
+                        {
+                            <li class="nav-item">
+                                <a class="nav-link @(currentPage == "/Commissions" ? "active" : "") @(!navigation.Commissions ? "admin-only-tagged" : "")"
+                                   aria-current="@(currentPage == "/Commissions" ? "page" : null)"
+                                   asp-area="" asp-page="/Commissions">Commissions</a>
+                            </li>
+                        }
+                        @if (isAdminEnabled && isAdminAuthenticated)
                         {
                             <li class="nav-item site-header-separator" aria-hidden="true">|</li>
                         }
-                        @if (isAdminEnabled && showAdminLink && isAdminAuthenticated)
+                        @if (isAdminEnabled && isAdminAuthenticated)
                         {
                             <li class="nav-item">
                                 <a class="nav-link @(currentPage == "/Admin" ? "active" : "")"
@@ -93,7 +94,7 @@
                         }
                     </ul>
                     <ul class="navbar-nav ms-auto">
-                        @if (isAdminEnabled && showAdminLink && !isAdminAuthenticated)
+                        @if (isAdminEnabled && !isAdminAuthenticated)
                         {
                             <li class="nav-item">
                                 <a class="nav-link @(currentPage == "/Login" ? "active" : "")"

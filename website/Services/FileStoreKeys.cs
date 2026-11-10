@@ -20,6 +20,7 @@ public static class FileStoreKeys
         FileStoreArea.Blogs => "blogs",
         FileStoreArea.About => "about",
         FileStoreArea.Admin => "admin",
+        FileStoreArea.Commissions => "commissions",
         _ => throw new ArgumentOutOfRangeException(nameof(area), area, "Unknown file storage area.")
     };
 

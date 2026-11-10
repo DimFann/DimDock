@@ -425,26 +425,41 @@ public sealed class FilesystemPersistenceService(
         }
     }
 
-    public async Task<string> SaveAboutAssetAsync(
+    public Task<string> SaveAboutAssetAsync(
+        IFormFile file,
+        CancellationToken cancellationToken = default) =>
+        SavePageAssetAsync(FileStoreArea.About, file, cancellationToken);
+
+    public async Task<string> SavePageAssetAsync(
+        FileStoreArea area,
         IFormFile file,
         CancellationToken cancellationToken = default)
     {
-        await fileStore.CreateDirectoryAsync(FileStoreArea.About, "assets", cancellationToken);
+        await fileStore.CreateDirectoryAsync(area, "assets", cancellationToken);
         var fileName = await SaveImageAssetAsync(
-            FileStoreArea.About,
+            area,
             "assets",
             file,
             cancellationToken);
-        return $"/about/assets/{fileName}";
+        return $"/{FileStoreKeys.AreaName(area)}/assets/{fileName}";
     }
 
-    public async Task DeleteUnreferencedAboutAssetsAsync(
+    public Task DeleteUnreferencedAboutAssetsAsync(
+        string? previousMarkdown,
+        string? currentMarkdown,
+        IEnumerable<string> uploadedUrls,
+        CancellationToken cancellationToken = default) =>
+        DeleteUnreferencedPageAssetsAsync(
+            FileStoreArea.About, previousMarkdown, currentMarkdown, uploadedUrls, cancellationToken);
+
+    public async Task DeleteUnreferencedPageAssetsAsync(
+        FileStoreArea area,
         string? previousMarkdown,
         string? currentMarkdown,
         IEnumerable<string> uploadedUrls,
         CancellationToken cancellationToken = default)
     {
-        if (!await fileStore.DirectoryExistsAsync(FileStoreArea.About, "assets", cancellationToken))
+        if (!await fileStore.DirectoryExistsAsync(area, "assets", cancellationToken))
         {
             return;
         }
@@ -452,29 +467,29 @@ public sealed class FilesystemPersistenceService(
         if (!HasImageEmbeds(currentMarkdown))
         {
             await fileStore.DeleteDirectoryAsync(
-                FileStoreArea.About,
+                area,
                 "assets",
                 recursive: true,
                 cancellationToken);
             return;
         }
 
-        var candidates = GetAboutAssetNames(previousMarkdown);
+        var candidates = GetPageAssetNames(area, previousMarkdown);
         foreach (var url in uploadedUrls)
         {
-            var name = GetAboutAssetName(url);
+            var name = GetPageAssetName(area, url);
             if (name is not null)
             {
                 candidates.Add(name);
             }
         }
 
-        candidates.ExceptWith(GetAboutAssetNames(currentMarkdown));
+        candidates.ExceptWith(GetPageAssetNames(area, currentMarkdown));
         foreach (var name in candidates)
         {
-            if (await fileStore.FileExistsAsync(FileStoreArea.About, $"assets/{name}", cancellationToken))
+            if (await fileStore.FileExistsAsync(area, $"assets/{name}", cancellationToken))
             {
-                await fileStore.DeleteFileAsync(FileStoreArea.About, $"assets/{name}", cancellationToken);
+                await fileStore.DeleteFileAsync(area, $"assets/{name}", cancellationToken);
             }
         }
     }
@@ -484,15 +499,15 @@ public sealed class FilesystemPersistenceService(
             .Descendants<LinkInline>()
             .Any(link => link.IsImage);
 
-    private static HashSet<string> GetAboutAssetNames(string? markdown) =>
+    private static HashSet<string> GetPageAssetNames(FileStoreArea area, string? markdown) =>
         Markdown.Parse(markdown ?? string.Empty, BlogMarkdownRenderer.Pipeline)
             .Descendants<LinkInline>()
-            .Select(link => GetAboutAssetName(link.Url))
+            .Select(link => GetPageAssetName(area, link.Url))
             .Where(name => name is not null)
             .Select(name => name!)
             .ToHashSet(StringComparer.Ordinal);
 
-    private static string? GetAboutAssetName(string? url)
+    private static string? GetPageAssetName(FileStoreArea area, string? url)
     {
         if (string.IsNullOrEmpty(url))
         {
@@ -500,10 +515,11 @@ public sealed class FilesystemPersistenceService(
         }
 
         var path = Uri.UnescapeDataString(url.Split('?', '#')[0]);
-        var prefix = path.StartsWith("/about/assets/", StringComparison.Ordinal)
-            ? "/about/assets/"
-            : path.StartsWith("about/assets/", StringComparison.Ordinal)
-                ? "about/assets/"
+        var assetPath = $"{FileStoreKeys.AreaName(area)}/assets/";
+        var prefix = path.StartsWith("/" + assetPath, StringComparison.Ordinal)
+            ? "/" + assetPath
+            : path.StartsWith(assetPath, StringComparison.Ordinal)
+                ? assetPath
                 : path.StartsWith("assets/", StringComparison.Ordinal)
                     ? "assets/"
                     : null;

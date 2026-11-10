@@ -6,7 +6,8 @@ public enum FileStoreArea
     Thumbnails,
     Blogs,
     About,
-    Admin
+    Admin,
+    Commissions
 }
 
 // Stores that can assemble one file from sequentially numbered chunks (1-based, at most 10,000).

@@ -1,0 +1,8 @@
+@page "/commissions"
+@model Website.Pages.CommissionsModel
+@{
+    ViewData["Title"] = "Commissions";
+    ViewData["BodyClass"] = "content-background";
+}
+
+<partial name="_EditableMarkdown" model='new Website.Models.EditableMarkdownContent(Model.Markdown, "Commissions", Model.AdminEnabled)' />

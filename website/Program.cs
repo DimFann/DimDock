@@ -51,6 +51,8 @@ else
     throw new InvalidOperationException($"Unsupported FileStorage:Provider '{fileStorageProvider}'. Use Local or Linode.");
 }
 
+builder.Services.AddHostedService<FileStoreInitializationService>();
+
 var dataProtectionKeysPath = builder.Configuration["DataProtection:KeysPath"];
 if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
 {
@@ -93,6 +95,7 @@ builder.Services.Configure<FormOptions>(options =>
     options.ValueCountLimit = 1024;
 });
 builder.Services.AddScoped<AdminOnlyTagsProvider>();
+builder.Services.AddScoped<NavigationSettingsProvider>();
 builder.Services.AddScoped<FilesystemPersistenceService>();
 builder.Services.AddHttpClient("ThumbnailService", client =>
 {
@@ -181,6 +184,7 @@ app.MapMethods("/img_src/{**key}", ["GET", "HEAD"], ServeStoredFileAsync(FileSto
 app.MapMethods("/img_db_thumbs/{**key}", ["GET", "HEAD"], ServeStoredFileAsync(FileStoreArea.Thumbnails, addNosniff: false));
 app.MapMethods("/blogs/assets/{**key}", ["GET", "HEAD"], ServeStoredFileAsync(FileStoreArea.Blogs, addNosniff: true, keyPrefix: "assets/"));
 app.MapMethods("/about/assets/{**key}", ["GET", "HEAD"], ServeStoredFileAsync(FileStoreArea.About, addNosniff: true, keyPrefix: "assets/"));
+app.MapMethods("/commissions/assets/{**key}", ["GET", "HEAD"], ServeStoredFileAsync(FileStoreArea.Commissions, addNosniff: true, keyPrefix: "assets/"));
 
 RequestDelegate ServeStoredFileAsync(FileStoreArea area, bool addNosniff, string keyPrefix = "") =>
     async context =>
@@ -228,6 +232,7 @@ RequestDelegate ServeStoredFileAsync(FileStoreArea area, bool addNosniff, string
 app.UseRouting();
 
 app.UseAuthentication();
+app.UseMiddleware<NavigationAccessMiddleware>();
 app.UseRateLimiter();
 app.Use(async (context, next) =>
 {

@@ -2,9 +2,11 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.EntityFrameworkCore;
 using Website.Data;
+using Website.Models;
 using Website.Services;
 
 namespace Website.Pages;
@@ -18,6 +20,7 @@ public class AdminModel : PageModel
     private readonly AdminOnlyTagsProvider _adminOnlyTagsProvider;
     private readonly FilesystemPersistenceService _filesystemPersistence;
     private readonly IFileStore _fileStore;
+    private readonly NavigationSettingsProvider _navigationSettingsProvider;
 
     public AdminModel(
         IConfiguration configuration,
@@ -26,7 +29,8 @@ public class AdminModel : PageModel
         IAntiforgery antiforgery,
         AdminOnlyTagsProvider adminOnlyTagsProvider,
         FilesystemPersistenceService filesystemPersistence,
-        IFileStore fileStore)
+        IFileStore fileStore,
+        NavigationSettingsProvider navigationSettingsProvider)
     {
         _configuration = configuration;
         _environment = environment;
@@ -35,10 +39,17 @@ public class AdminModel : PageModel
         _adminOnlyTagsProvider = adminOnlyTagsProvider;
         _filesystemPersistence = filesystemPersistence;
         _fileStore = fileStore;
+        _navigationSettingsProvider = navigationSettingsProvider;
     }
 
     [BindProperty]
     public string AdminOnlyTagsInput { get; set; } = string.Empty;
+
+    [BindProperty]
+    public NavigationSettings NavigationInput { get; set; } = new();
+
+    [TempData]
+    public string? NavigationStatus { get; set; }
 
     public async Task<IActionResult> OnGetAsync()
     {
@@ -60,7 +71,30 @@ public class AdminModel : PageModel
 
         var tags = await _adminOnlyTagsProvider.GetTagsAsync(HttpContext.RequestAborted);
         AdminOnlyTagsInput = string.Join(", ", tags.OrderBy(tag => tag, StringComparer.OrdinalIgnoreCase));
+        NavigationInput = await _navigationSettingsProvider.GetAsync(HttpContext.RequestAborted);
         return Page();
+    }
+
+    public async Task<IActionResult> OnPostSaveNavigationAsync()
+    {
+        if (!IsAdminEnabled())
+        {
+            return NotFound();
+        }
+
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+
+        if (ModelState.GetFieldValidationState(nameof(NavigationInput)) == ModelValidationState.Invalid)
+        {
+            return BadRequest("Invalid header link settings.");
+        }
+
+        await _navigationSettingsProvider.SaveAsync(NavigationInput, HttpContext.RequestAborted);
+        NavigationStatus = "Header links saved.";
+        return RedirectToPage("/Admin");
     }
 
     public async Task<IActionResult> OnPostSaveAdminOnlyTagsAsync()
