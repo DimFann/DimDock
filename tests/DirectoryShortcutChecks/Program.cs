@@ -297,6 +297,79 @@ try
     Check(await context.Items.AnyAsync(item => item.Id == childItem.Id && item.ParentPath == "Album/Child"), "root move updates descendants");
     Console.WriteLine("PASS moving path subtree: destinations, collisions, child paths/items/files, shortcuts, date tags, thumbnails, manifests and root");
 
+    var deletionTarget = await context.Paths.SingleAsync(entry => entry.Path == "Album/Child");
+    var deletionParent = await context.Paths.SingleAsync(entry => entry.Path == "root");
+    var removableAlias = Link(deletionParent, deletionTarget, "Remove only this alias");
+    context.DirectoryShortcuts.Add(removableAlias);
+    await context.SaveChangesAsync();
+    await persistence.PersistDirectoryShortcutsAsync();
+    var aliasCount = await context.DirectoryShortcuts.CountAsync();
+    var targetItemCount = await context.Items.CountAsync(item => item.ParentPath == deletionTarget.Path);
+    Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id, admin: false, moveTo: "2021") is NotFoundResult, "shortcut move requires admin");
+    Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id, validToken: false, moveTo: "2021") is BadRequestObjectResult, "shortcut move requires antiforgery");
+    Check(await DeleteDirectoryShortcutAsync("../root", removableAlias.Id, moveTo: "2021") is BadRequestObjectResult, "shortcut move rejects unsafe source");
+    Check(await DeleteDirectoryShortcutAsync("Album", removableAlias.Id, moveTo: "2021") is NotFoundObjectResult, "shortcut move validates source gallery");
+    Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id, moveTo: "missing") is BadRequestObjectResult, "shortcut move requires existing destination");
+    Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id, moveTo: "root") is ConflictObjectResult, "shortcut move rejects unchanged destination");
+    var collision = Link(await context.Paths.SingleAsync(entry => entry.Path == "2021"), deletionTarget, removableAlias.Name);
+    context.DirectoryShortcuts.Add(collision);
+    await context.SaveChangesAsync();
+    Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id, moveTo: "2021") is ConflictObjectResult, "shortcut move rejects duplicate alias name");
+    context.DirectoryShortcuts.Remove(collision);
+    await context.SaveChangesAsync();
+    Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id, moveTo: "2021") is JsonResult, "shortcut move succeeds");
+    context.ChangeTracker.Clear();
+    Check(await context.DirectoryShortcuts.AnyAsync(link => link.Id == removableAlias.Id &&
+        link.ParentPath.Path == "2021" && link.TargetPathId == deletionTarget.Id && link.Name == removableAlias.Name), "shortcut move preserves identity, name and target");
+    Check(await context.DirectoryShortcuts.CountAsync() == aliasCount, "shortcut move does not add or remove other aliases");
+    using (var manifest = JsonDocument.Parse(await store.ReadAllTextAsync(FileStoreArea.Gallery, ".shortcuts.json")))
+    {
+        var aliases = manifest.RootElement.GetProperty("directory_shortcuts");
+        Check(aliases.GetProperty("2021").EnumerateArray().Any(entry => entry.GetProperty("name").GetString() == removableAlias.Name), "moved shortcut persisted at destination");
+        Check(!aliases.GetProperty("root").EnumerateArray().Any(entry => entry.GetProperty("name").GetString() == removableAlias.Name), "moved shortcut removed from persisted source");
+    }
+    Check(await DeleteDirectoryShortcutAsync("2021", removableAlias.Id, moveTo: "root") is JsonResult, "shortcut can move back to root");
+    context.ChangeTracker.Clear();
+    Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "Album/Child/child.png") == "child-bytes" &&
+        await context.Items.CountAsync(item => item.ParentPath == deletionTarget.Path) == targetItemCount, "shortcut move preserves linked folder contents");
+    Console.WriteLine("PASS directory shortcut move: authorization, antiforgery, scope, collisions, root, JSON persistence and unchanged target");
+    Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id, admin: false) is NotFoundResult, "shortcut delete requires admin");
+    Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id, validToken: false) is BadRequestObjectResult, "shortcut delete requires antiforgery");
+    Check(await DeleteDirectoryShortcutAsync("../root", removableAlias.Id) is BadRequestObjectResult, "shortcut delete rejects unsafe path");
+    Check(await DeleteDirectoryShortcutAsync("Album", removableAlias.Id) is NotFoundObjectResult, "shortcut delete validates parent gallery");
+    Check(await context.DirectoryShortcuts.CountAsync() == aliasCount, "rejected deletes preserve shortcuts");
+    Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id) is JsonResult, "shortcut delete succeeds");
+    Check(await context.DirectoryShortcuts.CountAsync() == aliasCount - 1 &&
+        !await context.DirectoryShortcuts.AnyAsync(link => link.Id == removableAlias.Id), "only selected alias deleted");
+    Check(await context.Paths.AnyAsync(entry => entry.Id == deletionTarget.Id) &&
+        await context.Items.CountAsync(item => item.ParentPath == deletionTarget.Path) == targetItemCount, "shortcut deletion preserves target folder and items");
+    Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "Album/Child/child.png") == "child-bytes", "shortcut deletion preserves target file");
+    using (var manifest = JsonDocument.Parse(await store.ReadAllTextAsync(FileStoreArea.Gallery, ".shortcuts.json")))
+    {
+        Check(!manifest.RootElement.ToString().Contains("Remove only this alias"), "shortcut deletion persisted to JSON");
+        Check(manifest.RootElement.ToString().Contains("Moved child"), "other aliases preserved in JSON");
+        Check(manifest.RootElement.GetProperty("custom").GetProperty("preserved").GetBoolean() &&
+            manifest.RootElement.GetProperty("shortcuts").GetProperty("root").GetArrayLength() > 0, "unrelated shortcut configuration preserved");
+    }
+    Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id) is NotFoundObjectResult, "already deleted alias returns not found");
+    Console.WriteLine("PASS directory shortcut delete: authorization, antiforgery, scope, persistence and target folder/item/file preservation");
+
+    async Task<IActionResult> DeleteDirectoryShortcutAsync(string path, ulong id, bool admin = true, bool validToken = true, string? moveTo = null)
+    {
+        var model = await GetGalleryAsync("root", admin);
+        model.Request.Method = "POST";
+        if (validToken)
+        {
+            var issuing = new DefaultHttpContext { RequestServices = services, User = model.User };
+            var tokens = services.GetRequiredService<IAntiforgery>().GetAndStoreTokens(issuing);
+            model.Request.Headers.Cookie = issuing.Response.Headers.SetCookie.ToString().Split(';')[0];
+            model.Request.Headers[tokens.HeaderName!] = tokens.RequestToken;
+        }
+        return moveTo is null
+            ? await model.OnPostDeleteDirectoryShortcutAsync(path, id)
+            : await model.OnPostMoveDirectoryShortcutAsync(path, id, moveTo);
+    }
+
     async Task<IActionResult> MovePathAsync(string path, string target, bool admin = true, bool validToken = true)
     {
         var model = await GetGalleryAsync("root", admin);

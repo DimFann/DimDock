@@ -159,7 +159,7 @@ public class GalleryModel : PageModel
                     !hiddenPaths.Any(hidden => IsSameOrChildPath(shortcut.TargetPath.Path, hidden)))
                 .Select(shortcut => new GalleryDirectoryLink(
                     shortcut.Name, shortcut.TargetPath.Path,
-                    hiddenPaths.Any(hidden => IsSameOrChildPath(shortcut.TargetPath.Path, hidden)), true)))
+                    hiddenPaths.Any(hidden => IsSameOrChildPath(shortcut.TargetPath.Path, hidden)), true, shortcut.Id)))
             .OrderBy(link => link.Name, StringComparer.OrdinalIgnoreCase)
             .ThenBy(link => link.Path, StringComparer.Ordinal)
             .ToList();
@@ -964,6 +964,95 @@ public class GalleryModel : PageModel
                 (movingPath && (IsSameOrChildPath(entry, sanitizedPath) ||
                     string.Equals(entry, sourceParent ?? "root", StringComparison.OrdinalIgnoreCase)))
         }));
+    }
+
+    public async Task<IActionResult> OnPostMoveDirectoryShortcutAsync(
+        [FromForm] string? path,
+        [FromForm] ulong shortcutId,
+        [FromForm] string? targetPath)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!ModelState.IsValid || string.IsNullOrEmpty(sanitizedPath) ||
+            !string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        if (string.IsNullOrWhiteSpace(targetPath) || targetPath.Length > 1024)
+        {
+            return BadRequest("Select an existing destination directory.");
+        }
+        var shortcut = await _context.DirectoryShortcuts
+            .FirstOrDefaultAsync(entry => entry.Id == shortcutId && entry.ParentPath.Path == sanitizedPath,
+                HttpContext.RequestAborted);
+        if (shortcut is null)
+        {
+            return NotFound("The directory shortcut is no longer in this gallery.");
+        }
+        var destination = await _context.Paths.FirstOrDefaultAsync(entry => entry.Path == targetPath,
+            HttpContext.RequestAborted);
+        if (destination is null)
+        {
+            return BadRequest("Select an existing destination directory.");
+        }
+        if (destination.Id == shortcut.ParentPathId)
+        {
+            return new ConflictObjectResult("The shortcut is already in that directory.");
+        }
+        if (await _context.DirectoryShortcuts.AnyAsync(entry =>
+            entry.ParentPathId == destination.Id && entry.Name == shortcut.Name, HttpContext.RequestAborted) ||
+            await _context.Paths.AnyAsync(entry => entry.ParentPath == destination.Path &&
+                entry.Path == (destination.Path == "root" ? shortcut.Name : destination.Path + "/" + shortcut.Name),
+                HttpContext.RequestAborted))
+        {
+            return new ConflictObjectResult("The destination already contains a directory or shortcut with that name.");
+        }
+        shortcut.ParentPathId = destination.Id;
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistDirectoryShortcutsAsync(HttpContext.RequestAborted);
+        return new JsonResult(new
+        {
+            redirectPath = destination.Path == "root" ? "/Gallery" :
+                "/Gallery/" + string.Join('/', destination.Path.Split('/').Select(Uri.EscapeDataString))
+        });
+    }
+
+    public async Task<IActionResult> OnPostDeleteDirectoryShortcutAsync(
+        [FromForm] string? path,
+        [FromForm] ulong shortcutId)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!ModelState.IsValid || string.IsNullOrEmpty(sanitizedPath) ||
+            !string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        var shortcut = await _context.DirectoryShortcuts
+            .FirstOrDefaultAsync(entry => entry.Id == shortcutId && entry.ParentPath.Path == sanitizedPath,
+                HttpContext.RequestAborted);
+        if (shortcut is null)
+        {
+            return NotFound("The directory shortcut is no longer in this gallery.");
+        }
+        _context.DirectoryShortcuts.Remove(shortcut);
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistDirectoryShortcutsAsync(HttpContext.RequestAborted);
+        return new JsonResult(new { deletedShortcutId = shortcutId });
     }
 
     public async Task<IActionResult> OnPostMovePathAsync(

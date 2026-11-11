@@ -26,15 +26,39 @@
                         string.Join("/", link.Path.Split('/').Select(Uri.EscapeDataString));
                     <tr class="@rowClass">
                         <td>
-                            <a class="@(link.IsAdminOnly ? "admin-only-tagged" : "")"
-                               title="@(link.IsShortcut ? $"Directory shortcut to {link.Path}" : null)"
-                               href="@($"/Gallery/{target}")">@link.Name</a>
+                            <div class="gallery-directory-entry">
+                                <a class="@(link.IsAdminOnly ? "admin-only-tagged" : "")"
+                                   title="@(link.IsShortcut ? $"Directory shortcut to {link.Path}" : null)"
+                                   href="@($"/Gallery/{target}")">@link.Name</a>
+                                @if (Model.AdminEnabled && link.IsShortcut && link.ShortcutId.HasValue)
+                                {
+                                    <form method="post" action="@Url.Content("~/Gallery")?handler=DeleteDirectoryShortcut"
+                                          class="directory-shortcut-delete-form" data-delete-directory-shortcut>
+                                        @Html.AntiForgeryToken()
+                                        <input type="hidden" name="path" value="@Model.CurrentPath" />
+                                        <input type="hidden" name="shortcutId" value="@link.ShortcutId" />
+                                        <button type="button" class="icon-action-button"
+                                                data-move-directory-shortcut="@link.ShortcutId"
+                                                aria-label="Move directory shortcut @link.Name" title="Move shortcut (not the folder)">
+                                            <img src="/img/next.png" alt="" />
+                                        </button>
+                                        <button type="submit" class="icon-action-button"
+                                                aria-label="Delete directory shortcut @link.Name" title="Delete shortcut (not the folder)">
+                                            <img src="/img/trash.png" alt="" />
+                                        </button>
+                                    </form>
+                                }
+                            </div>
                         </td>
                     </tr>
                     rowIndex++;
                 }
             }
         </table>
+        @if (Model.AdminEnabled)
+        {
+            <p class="description-editor-error" data-directory-shortcut-error role="alert"></p>
+        }
         @if (Model.AdminEnabled || !string.IsNullOrWhiteSpace(Model.PathEntry?.Description))
         {
             var hasDescription = !string.IsNullOrWhiteSpace(Model.PathEntry?.Description);

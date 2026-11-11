@@ -30,6 +30,11 @@ public sealed partial class NavigationSettingsTests
             PathEntry = new PathEntry { Path = path },
             CurrentPath = path,
             ParentPath = root ? null : "root",
+            DirectoryLinks =
+            [
+                new GalleryDirectoryLink("Folder", "Folder", false, false),
+                new GalleryDirectoryLink("Alias & name", "Target", false, true, 7)
+            ],
             Items = hasItems
                 ? [new Item { Id = 1, OriginalName = "image.png", ParentPath = path, ThumbnailKey = "image", Type = "image" }]
                 : []
@@ -38,8 +43,18 @@ public sealed partial class NavigationSettingsTests
         Assert.Equal(admin && !root, html.Contains("data-open-move-path>Move Path</button>"));
         Assert.Equal(admin, html.Contains("data-bulk-move-dialog"));
         Assert.Equal(admin, html.Contains("let movingGalleryPath = false;"));
+        Assert.Equal(admin, html.Contains("class=\"directory-shortcut-delete-form\""));
+        Assert.Equal(admin, html.Contains("data-move-directory-shortcut=\"7\""));
+        Assert.DoesNotContain("Delete directory shortcut Folder", html);
         if (admin)
         {
+            Assert.Contains("Delete directory shortcut Alias &amp; name", html);
+            Assert.Contains("name=\"shortcutId\" value=\"7\"", html);
+            Assert.Contains("handler=DeleteDirectoryShortcut", html);
+            Assert.Contains("Move directory shortcut Alias &amp; name", html);
+            Assert.True(html.IndexOf("data-move-directory-shortcut=\"7\"", StringComparison.Ordinal) <
+                html.IndexOf("aria-label=\"Delete directory shortcut", StringComparison.Ordinal));
+            Assert.Contains("src=\"/img/next.png\"", html);
             Assert.Contains("data-move-path-note", html);
             Assert.Contains("movePath ? \"Move Path\" : \"Move selected items\"", html);
             Assert.Contains("movingGalleryPath ? \"MovePath\" : \"BulkMove\"", html);

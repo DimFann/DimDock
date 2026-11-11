@@ -696,19 +696,23 @@
         const bulkMoveDialog = document.querySelector("[data-bulk-move-dialog]");
         const bulkMoveForm = document.querySelector("[data-bulk-move-form]");
         let movingGalleryPath = false;
+        let movingDirectoryShortcutId = null;
         let moveSearchVersion = 0;
-        function openGalleryMoveDialog(movePath) {
+        function openGalleryMoveDialog(movePath, directoryShortcutId = null) {
             window.clearTimeout(bulkMoveSearchTimeout);
             moveSearchVersion++;
             movingGalleryPath = movePath;
-            document.querySelector("#bulkMoveTitle").textContent = movePath ? "Move Path" : "Move selected items";
+            movingDirectoryShortcutId = directoryShortcutId;
+            document.querySelector("#bulkMoveTitle").textContent = directoryShortcutId ? "Move directory shortcut" :
+                movePath ? "Move Path" : "Move selected items";
             document.querySelector("[data-move-path-note]").hidden = !movePath;
             const search = document.querySelector("[data-bulk-move-path-search]");
             search.value = "";
             document.querySelector("[data-bulk-move-path-results]").replaceChildren();
             document.querySelector("[data-bulk-move-target-path]").value = "";
             document.querySelector("[data-bulk-move-submit]").disabled = true;
-            document.querySelector("[data-bulk-move-submit]").textContent = movePath ? "Move path" : "Move selected";
+            document.querySelector("[data-bulk-move-submit]").textContent = directoryShortcutId ? "Move shortcut" :
+                movePath ? "Move path" : "Move selected";
             document.querySelector("[data-bulk-move-search-status]").textContent =
                 "Enter at least two characters to search, or / for root.";
             document.querySelector("[data-bulk-move-error]").textContent = "";
@@ -716,6 +720,10 @@
             search.focus();
         }
         document.querySelector("[data-open-move-path]")?.addEventListener("click", () => openGalleryMoveDialog(true));
+        document.addEventListener("click", (event) => {
+            const button = event.target.closest("[data-move-directory-shortcut]");
+            if (button) openGalleryMoveDialog(false, button.dataset.moveDirectoryShortcut);
+        });
         bulkMoveDialog.querySelectorAll("[data-close-bulk-move]").forEach((button) => {
             button.addEventListener("click", () => bulkMoveDialog.close());
         });
@@ -778,18 +786,22 @@
             const submit = document.querySelector("[data-bulk-move-submit]");
             if (submit.disabled) return;
             const errorStatus = document.querySelector("[data-bulk-move-error]");
-            errorStatus.textContent = movingGalleryPath ? "Moving path..." : "Moving selected items...";
+            errorStatus.textContent = movingDirectoryShortcutId ? "Moving directory shortcut..." :
+                movingGalleryPath ? "Moving path..." : "Moving selected items...";
             const url = new URL(window.location.href);
-            url.searchParams.set("handler", movingGalleryPath ? "MovePath" : "BulkMove");
+            url.searchParams.set("handler", movingDirectoryShortcutId ? "MoveDirectoryShortcut" :
+                movingGalleryPath ? "MovePath" : "BulkMove");
+            const body = new FormData(bulkMoveForm);
+            if (movingDirectoryShortcutId) body.set("shortcutId", movingDirectoryShortcutId);
             submit.disabled = true;
             try {
                 const response = await fetch(url, {
                     method: "POST",
-                    body: new FormData(bulkMoveForm),
+                    body,
                     headers: { "X-Requested-With": "XMLHttpRequest" }
                 });
                 if (!response.ok) {
-                    throw new Error(await response.text() || "Moving selected items failed.");
+                    throw new Error(await response.text() || "Moving to the selected directory failed.");
                 }
                 const result = await response.json();
                 window.location.assign(result.redirectPath);
@@ -831,6 +843,31 @@
 }
 
 <script>
+    document.addEventListener("submit", async (event) => {
+        const form = event.target;
+        if (!form.matches("[data-delete-directory-shortcut]")) return;
+        event.preventDefault();
+        const button = form.querySelector("button");
+        if (button.disabled) return;
+        if (!window.confirm("Delete this directory shortcut? The linked folder and its contents will not be deleted.")) return;
+        const error = document.querySelector("[data-directory-shortcut-error]");
+        error.textContent = "";
+        button.disabled = true;
+        try {
+            const response = await fetch(form.action, {
+                method: "POST",
+                body: new FormData(form),
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            if (!response.ok) {
+                throw new Error(await response.text() || "Deleting the directory shortcut failed.");
+            }
+            window.location.reload();
+        } catch (requestError) {
+            error.textContent = requestError.message;
+            button.disabled = false;
+        }
+    });
     const addPathDialog = document.querySelector("[data-add-path-dialog]");
     const renamePathDialog = document.querySelector("[data-rename-path-dialog]");
     const deletePathDialog = document.querySelector("[data-delete-path-dialog]");
