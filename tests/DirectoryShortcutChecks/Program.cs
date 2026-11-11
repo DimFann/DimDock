@@ -182,6 +182,57 @@ try
     Check(visitorHtml.Contains("photo new.png") && !visitorHtml.Contains("data-open-rename-item"), "visitors get no rename controls");
     Console.WriteLine("PASS item rename: file, thumbnail, database, shortcuts, manifest, case-only and validation");
 
+    var bulkItem = new Item { OriginalName = "bulk.png", ParentPath = "root", Type = "image", ThumbnailKey = ThumbnailKey("root", "bulk.png") };
+    var keptTag = new Tag { Name = "keep-me" };
+    bulkItem.TagLinks.Add(new ItemTag { Tag = keptTag });
+    context.Items.Add(bulkItem);
+    await context.SaveChangesAsync();
+    var photoShortcut = await context.Shortcuts.AsNoTracking().SingleAsync(shortcut => shortcut.OriginalId == photo.Id);
+
+    Check(await AddTagsAsync("root", [bulkItem.Id], [photoShortcut.Id], " New-Tag, NSFW, new-tag ") is JsonResult,
+        "bulk add tags accepts originals and shortcuts");
+    Check(await AddTagsAsync("root", [bulkItem.Id], [photoShortcut.Id], "new-tag, nsfw") is JsonResult,
+        "repeated bulk additions are idempotent");
+    context.ChangeTracker.Clear();
+    var bulkTags = await context.ItemTags.Where(link => link.ItemId == bulkItem.Id).Select(link => link.Tag.Name).ToListAsync();
+    Check(bulkTags.Order().SequenceEqual(new[] { "keep-me", "new-tag", "nsfw" }), "bulk additions preserve existing tags and deduplicate");
+    var photoTags = await context.ItemTags.Where(link => link.ItemId == photo.Id).Select(link => link.Tag.Name).ToListAsync();
+    Check(photoTags.Order().SequenceEqual(new[] { "new-tag", "nsfw" }), "shortcut selection tags its original item");
+    using (var manifest = JsonDocument.Parse(await store.ReadAllTextAsync(FileStoreArea.Gallery, ".dimdock.json")))
+        Check(manifest.RootElement.ToString().Contains("keep-me") && manifest.RootElement.ToString().Contains("nsfw"), "bulk tags persisted in current directory manifest");
+    using (var manifest = JsonDocument.Parse(await store.ReadAllTextAsync(FileStoreArea.Gallery, "With space/.dimdock.json")))
+        Check(manifest.RootElement.ToString().Contains("new-tag") && manifest.RootElement.ToString().Contains("nsfw"), "shortcut tags persisted in original directory manifest");
+    Check(await AddTagsAsync("root", [bulkItem.Id, other.Id], [], "must-not-add") is BadRequestObjectResult,
+        "bulk tags reject original items outside current gallery");
+    Check(await AddTagsAsync("Empty", [], [photoShortcut.Id], "must-not-add") is BadRequestObjectResult,
+        "bulk tags reject shortcuts outside current gallery");
+    Check(await AddTagsAsync("root", [], [], "must-not-add") is BadRequestObjectResult, "bulk tags reject empty selection");
+    Check(await AddTagsAsync("root", [bulkItem.Id], [], ", ,") is BadRequestObjectResult, "bulk tags reject empty tags");
+    Check(await AddTagsAsync("root", [bulkItem.Id], [], new string('x', 101)) is BadRequestObjectResult, "bulk tags validate tag lengths");
+    Check(await AddTagsAsync("root", Enumerable.Range(1, 501).Select(value => (ulong)value).ToList(), [], "must-not-add") is BadRequestObjectResult,
+        "bulk tags enforce selection limit");
+    Check(await AddTagsAsync("root", [bulkItem.Id], [], "must-not-add", admin: false) is NotFoundResult,
+        "bulk tags require admin authorization");
+    Check(await AddTagsAsync("root", [bulkItem.Id], [], "must-not-add", validToken: false) is BadRequestObjectResult,
+        "bulk tags require antiforgery");
+    Check(!await context.Tags.AnyAsync(tag => tag.Name == "must-not-add"), "invalid requests do not create tags");
+    Console.WriteLine("PASS bulk add tags: preservation, idempotency, shortcuts, manifests, scope, limits, authorization and antiforgery");
+
+    async Task<IActionResult> AddTagsAsync(string path, List<ulong> ids, List<ulong> shortcutIds, string tags,
+        bool admin = true, bool validToken = true)
+    {
+        var model = await GetGalleryAsync("root", admin);
+        model.HttpContext.Request.Method = "POST";
+        if (validToken)
+        {
+            var issuing = new DefaultHttpContext { RequestServices = services, User = model.User };
+            var tokens = services.GetRequiredService<IAntiforgery>().GetAndStoreTokens(issuing);
+            model.HttpContext.Request.Headers.Cookie = issuing.Response.Headers.SetCookie.ToString().Split(';')[0];
+            model.HttpContext.Request.Headers[tokens.HeaderName!] = tokens.RequestToken;
+        }
+        return await model.OnPostBulkAddTagsAsync(path, ids, shortcutIds, tags);
+    }
+
     var draftId = FilesystemPersistenceService.CreateBlogDraftId();
     async Task<string> UploadDraftImageAsync(string id)
     {

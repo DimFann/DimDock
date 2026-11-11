@@ -63,6 +63,7 @@
                     <div class="bulk-selection-actions">
                         <button type="button" class="path-admin-button" data-select-all-items>Select all</button>
                         <button type="button" class="path-admin-button" data-open-bulk-move disabled>Move selected</button>
+                        <button type="button" class="path-admin-button" data-open-bulk-tags disabled>Add tags</button>
                         <button type="button" class="path-admin-button path-admin-delete" data-open-bulk-delete disabled>Delete selected</button>
                         <button type="button" class="path-admin-button" data-exit-bulk-select>Cancel selection</button>
                     </div>
@@ -209,6 +210,30 @@
             </form>
         </dialog>
 
+        <dialog class="path-description-dialog path-admin-dialog" data-bulk-tags-dialog aria-labelledby="bulkTagsTitle">
+            <form method="post" asp-page-handler="BulkAddTags" data-bulk-tags-form>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="path" value="@Model.CurrentPath" />
+                <div data-bulk-tags-entries></div>
+                <div class="path-description-dialog-header">
+                    <h2 id="bulkTagsTitle">Add tags to selected items</h2>
+                    <button type="button" class="icon-action-button" data-close-bulk-tags aria-label="Close" title="Close">
+                        <img src="/img/cancel.png" alt="" />
+                    </button>
+                </div>
+                <label class="path-admin-field">
+                    Tags to add (comma-separated)
+                    <input name="tags" maxlength="4000" required />
+                </label>
+                <p>Existing tags are kept. Selecting a shortcut adds tags to its original item.</p>
+                <p class="description-editor-error" data-bulk-tags-error role="alert"></p>
+                <div class="path-admin-dialog-actions">
+                    <button type="button" data-close-bulk-tags>Cancel</button>
+                    <button type="submit">Add tags</button>
+                </div>
+            </form>
+        </dialog>
+
         <dialog class="shortcut-dialog" data-bulk-move-dialog aria-labelledby="bulkMoveTitle">
             <form method="post" data-bulk-move-form>
                 @Html.AntiForgeryToken()
@@ -328,7 +353,7 @@
             const imagePane = comicViewer.querySelector(".comic-image-pane");
             imagePane.classList.toggle("nsfw-blurred", page.dataset.blur === "true");
             imagePane.classList.toggle("nsfw-admin-item", page.dataset.nsfwAdmin === "true");
-            imagePane.querySelector(".nsfw-blur-label").hidden = page.dataset.blur !== "true";
+            imagePane.querySelector(".nsfw-preview-icon").hidden = page.dataset.blur !== "true";
             image.src = page.dataset.source;
             image.alt = page.dataset.name;
             sourceLink.href = page.dataset.source;
@@ -536,6 +561,8 @@
         const bulkDeleteForm = document.querySelector("[data-bulk-delete-form]");
         const bulkMoveDialog = document.querySelector("[data-bulk-move-dialog]");
         const bulkMoveForm = document.querySelector("[data-bulk-move-form]");
+        const bulkTagsDialog = document.querySelector("[data-bulk-tags-dialog]");
+        const bulkTagsForm = document.querySelector("[data-bulk-tags-form]");
         const galleryItemGrid = document.querySelector("[data-gallery-grid]");
         const bulkSelectionInputs = () => Array.from(galleryItemGrid.querySelectorAll("[data-bulk-select-item]"));
         const selectedBulkItems = () => bulkSelectionInputs().filter((input) => input.checked);
@@ -546,6 +573,7 @@
                 `${selectedCount} selected`;
             document.querySelector("[data-open-bulk-delete]").disabled = selectedCount === 0;
             document.querySelector("[data-open-bulk-move]").disabled = selectedCount === 0;
+            document.querySelector("[data-open-bulk-tags]").disabled = selectedCount === 0;
         }
 
         function setBulkSelectMode(enabled) {
@@ -583,6 +611,45 @@
         document.querySelector("[data-select-all-items]").addEventListener("click", () => {
             bulkSelectionInputs().forEach((input) => { input.checked = true; });
             updateBulkSelection();
+        });
+        document.querySelector("[data-open-bulk-tags]").addEventListener("click", () => {
+            const entries = bulkTagsForm.querySelector("[data-bulk-tags-entries]");
+            entries.replaceChildren();
+            for (const input of selectedBulkItems()) {
+                const hiddenInput = document.createElement("input");
+                hiddenInput.type = "hidden";
+                hiddenInput.name = input.dataset.shortcutId ? "shortcutIds" : "itemIds";
+                hiddenInput.value = input.dataset.shortcutId || input.value;
+                entries.append(hiddenInput);
+            }
+            bulkTagsForm.querySelector("[data-bulk-tags-error]").textContent = "";
+            bulkTagsDialog.showModal();
+            bulkTagsForm.elements.tags.focus();
+        });
+        bulkTagsDialog.querySelectorAll("[data-close-bulk-tags]").forEach((button) => {
+            button.addEventListener("click", () => bulkTagsDialog.close());
+        });
+        bulkTagsForm.addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const status = bulkTagsForm.querySelector("[data-bulk-tags-error]");
+            const submit = bulkTagsForm.querySelector('button[type="submit"]');
+            submit.disabled = true;
+            status.textContent = "Adding tags...";
+            try {
+                const response = await fetch(bulkTagsForm.action, {
+                    method: "POST",
+                    body: new FormData(bulkTagsForm),
+                    headers: { "X-Requested-With": "XMLHttpRequest" }
+                });
+                if (!response.ok) {
+                    throw new Error(await response.text() || "Adding tags failed.");
+                }
+                window.location.reload();
+            } catch (error) {
+                status.textContent = error.message;
+            } finally {
+                submit.disabled = false;
+            }
         });
         document.querySelector("[data-open-bulk-delete]").addEventListener("click", () => {
             const entries = document.querySelector("[data-bulk-delete-entries]");

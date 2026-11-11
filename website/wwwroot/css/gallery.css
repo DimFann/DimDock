@@ -345,21 +345,33 @@
 }
 
 .nsfw-blurred .gallery-image-link,
-.comic-image-pane.nsfw-blurred > img {
+.comic-image-pane.nsfw-blurred > [data-comic-image] {
   filter: blur(24px);
-  pointer-events: none;
   user-select: none;
 }
 
-.nsfw-blur-label {
-  background: #102a43;
-  border-radius: 3px;
-  color: #fff;
+.nsfw-preview-icon,
+.comic-image-pane > .nsfw-preview-icon {
+  height: 48px;
   left: 50%;
-  padding: 0.25rem 0.5rem;
+  margin: 0;
+  opacity: 0.45;
+  pointer-events: none;
   position: absolute;
   top: 50%;
   transform: translate(-50%, -50%);
+  transition: opacity 120ms ease-in-out;
+  width: 48px;
+  z-index: 1;
+}
+
+.nsfw-preview-icon[hidden] {
+  display: none;
+}
+
+.nsfw-blurred:hover > .nsfw-preview-icon,
+.nsfw-blurred:focus-within > .nsfw-preview-icon {
+  opacity: 0.9;
 }
 
 .image-viewer.admin-only-tagged {

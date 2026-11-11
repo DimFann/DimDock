@@ -710,6 +710,99 @@ public class GalleryModel : PageModel
         }
     }
 
+    public async Task<IActionResult> OnPostBulkAddTagsAsync(
+        [FromForm] string? path,
+        [FromForm] List<ulong>? itemIds,
+        [FromForm] List<ulong>? shortcutIds,
+        [FromForm] string? tags)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        if (!ModelState.IsValid)
+        {
+            return BadRequest("Invalid item selection or tags.");
+        }
+        if (!TagNameNormalizer.TryNormalize(tags, out var normalizedTags, out var error))
+        {
+            return BadRequest(error ?? "Invalid tags.");
+        }
+        if (normalizedTags.Count == 0)
+        {
+            return BadRequest("Enter at least one tag to add.");
+        }
+
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        if (string.IsNullOrEmpty(sanitizedPath))
+        {
+            sanitizedPath = "root";
+        }
+
+        var selectedItemIds = itemIds?.Distinct().ToList() ?? [];
+        var selectedShortcutIds = shortcutIds?.Distinct().ToList() ?? [];
+        if (selectedItemIds.Count + selectedShortcutIds.Count == 0)
+        {
+            return BadRequest("Select at least one item to tag.");
+        }
+        if (selectedItemIds.Count + selectedShortcutIds.Count > 500)
+        {
+            return BadRequest("Select no more than 500 items at a time.");
+        }
+        var cancellationToken = HttpContext.RequestAborted;
+        var items = await _context.Items
+            .Where(item => item.ParentPath == sanitizedPath && selectedItemIds.Contains(item.Id))
+            .ToListAsync(cancellationToken);
+        if (items.Count != selectedItemIds.Count)
+        {
+            return BadRequest("One or more selected items are not in this gallery.");
+        }
+        var shortcuts = await _context.Shortcuts
+            .Include(shortcut => shortcut.OriginalItem)
+            .Where(shortcut => shortcut.ShortcutPath == sanitizedPath && selectedShortcutIds.Contains(shortcut.Id))
+            .ToListAsync(cancellationToken);
+        if (shortcuts.Count != selectedShortcutIds.Count || shortcuts.Any(shortcut => shortcut.OriginalItem is null))
+        {
+            return BadRequest("One or more selected shortcuts are not in this gallery or have no original item.");
+        }
+        var targets = items.Concat(shortcuts.Select(shortcut => shortcut.OriginalItem!))
+            .DistinctBy(item => item.Id).ToList();
+        var targetIds = targets.Select(item => item.Id).ToList();
+        var tagEntities = await _context.Tags.Where(tag => normalizedTags.Contains(tag.Name)).ToListAsync(cancellationToken);
+        var existingNames = tagEntities.Select(tag => tag.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in normalizedTags.Where(name => !existingNames.Contains(name)))
+        {
+            var tag = new Tag { Name = name };
+            _context.Tags.Add(tag);
+            tagEntities.Add(tag);
+        }
+        var existingLinks = await _context.ItemTags.Where(link => targetIds.Contains(link.ItemId))
+            .ToListAsync(cancellationToken);
+        foreach (var item in targets)
+        {
+            var linkedTagIds = existingLinks.Where(link => link.ItemId == item.Id)
+                .Select(link => link.TagId).ToHashSet();
+            foreach (var tag in tagEntities.Where(tag => tag.Id == 0 || !linkedTagIds.Contains(tag.Id)))
+            {
+                _context.ItemTags.Add(new ItemTag { ItemId = item.Id, Tag = tag });
+            }
+        }
+        await _context.SaveChangesAsync(cancellationToken);
+        foreach (var parentPath in targets.Select(item => item.ParentPath ?? "root").Distinct(StringComparer.Ordinal))
+        {
+            await _filesystemPersistence.PersistPathAsync(parentPath, cancellationToken);
+        }
+        return new JsonResult(new { taggedItems = targets.Count, tags = normalizedTags });
+    }
+
     public async Task<IActionResult> OnPostBulkDeleteAsync(
         [FromForm] string? path,
         [FromForm] List<ulong>? itemIds,

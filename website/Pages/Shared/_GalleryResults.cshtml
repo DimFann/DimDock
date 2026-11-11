@@ -210,7 +210,7 @@
                 </a>
                 @if (Model.ShouldBlur(item))
                 {
-                    <span class="nsfw-blur-label">NSFW</span>
+                    <img src="/img/preview.png" class="nsfw-preview-icon" alt="NSFW preview" />
                 }
                 @if (Model.AdminEnabled)
                 {
@@ -246,7 +246,8 @@
              data-comic-count="@comicItems.Count"
              hidden="@(!string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase))">
         <div class="comic-image-pane @(firstItem is not null && Model.ShouldBlur(firstItem) ? "nsfw-blurred" : "") @(firstItem is not null && Model.AdminEnabled && Model.IsNsfw(firstItem) ? "nsfw-admin-item" : "")">
-            <span class="nsfw-blur-label" hidden="@(firstItem is null || !Model.ShouldBlur(firstItem))">NSFW</span>
+            <img src="/img/preview.png" class="nsfw-preview-icon" alt="NSFW preview"
+                 hidden="@(firstItem is null || !Model.ShouldBlur(firstItem))" />
             @if (firstItem is not null)
             {
                 <img data-comic-image alt="@firstItem.OriginalName" />

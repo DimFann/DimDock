@@ -106,6 +106,12 @@ public sealed partial class NavigationSettingsTests
         Assert.Equal(!admin, Regex.IsMatch(html, "class=\"gallery-image-result [^\"]*nsfw-blurred[^\"]*\" data-gallery-item-id=\"1\""));
         Assert.DoesNotMatch("class=\"gallery-image-result [^\"]*nsfw-blurred[^\"]*\" data-gallery-item-id=\"2\"", html);
         Assert.Equal(admin, Regex.IsMatch(html, "class=\"gallery-image-result [^\"]*nsfw-admin-item[^\"]*\" data-gallery-item-id=\"1\""));
+        Assert.DoesNotContain("nsfw-blur-label", html);
+        if (!admin)
+        {
+            Assert.Contains("src=\"/img/preview.png\" class=\"nsfw-preview-icon\"", html);
+            Assert.Contains("href=\"/image/1\"", html);
+        }
         if (comic || admin)
         {
             Assert.Contains($"data-blur=\"{(!admin).ToString().ToLowerInvariant()}\"", html);
