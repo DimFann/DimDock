@@ -43,6 +43,7 @@
         <div class="admin-options-toolbar-actions">
             <div class="admin-toolbar-action-group" aria-label="Gallery actions">
                 <button type="button" class="path-admin-button" data-open-add-path>Add Path</button>
+                <button type="button" class="path-admin-button" data-open-directory-shortcut>Shortcut To</button>
                 @if (Model.Items.Count > 0)
                 {
                     <button type="button" class="path-admin-button" data-toggle-bulk-select aria-pressed="false"
@@ -697,13 +698,15 @@
         const bulkMoveForm = document.querySelector("[data-bulk-move-form]");
         let movingGalleryPath = false;
         let movingDirectoryShortcutId = null;
+        let creatingDirectoryShortcut = false;
         let moveSearchVersion = 0;
-        function openGalleryMoveDialog(movePath, directoryShortcutId = null) {
+        function openGalleryMoveDialog(movePath, directoryShortcutId = null, createShortcut = false) {
             window.clearTimeout(bulkMoveSearchTimeout);
             moveSearchVersion++;
             movingGalleryPath = movePath;
             movingDirectoryShortcutId = directoryShortcutId;
-            document.querySelector("#bulkMoveTitle").textContent = directoryShortcutId ? "Move directory shortcut" :
+            creatingDirectoryShortcut = createShortcut;
+            document.querySelector("#bulkMoveTitle").textContent = createShortcut ? "Shortcut To" : directoryShortcutId ? "Move directory shortcut" :
                 movePath ? "Move Path" : "Move selected items";
             document.querySelector("[data-move-path-note]").hidden = !movePath;
             const search = document.querySelector("[data-bulk-move-path-search]");
@@ -711,7 +714,7 @@
             document.querySelector("[data-bulk-move-path-results]").replaceChildren();
             document.querySelector("[data-bulk-move-target-path]").value = "";
             document.querySelector("[data-bulk-move-submit]").disabled = true;
-            document.querySelector("[data-bulk-move-submit]").textContent = directoryShortcutId ? "Move shortcut" :
+            document.querySelector("[data-bulk-move-submit]").textContent = createShortcut ? "Create shortcut" : directoryShortcutId ? "Move shortcut" :
                 movePath ? "Move path" : "Move selected";
             document.querySelector("[data-bulk-move-search-status]").textContent =
                 "Enter at least two characters to search, or / for root.";
@@ -720,6 +723,7 @@
             search.focus();
         }
         document.querySelector("[data-open-move-path]")?.addEventListener("click", () => openGalleryMoveDialog(true));
+        document.querySelector("[data-open-directory-shortcut]")?.addEventListener("click", () => openGalleryMoveDialog(false, null, true));
         document.addEventListener("click", (event) => {
             const button = event.target.closest("[data-move-directory-shortcut]");
             if (button) openGalleryMoveDialog(false, button.dataset.moveDirectoryShortcut);
@@ -754,6 +758,7 @@
             url.searchParams.set("path", "@Model.CurrentPath");
             url.searchParams.set("query", query);
             url.searchParams.set("movingPath", String(movingGalleryPath));
+            url.searchParams.set("creatingShortcut", String(creatingDirectoryShortcut));
             try {
                 const response = await fetch(url);
                 if (!response.ok) {
@@ -786,10 +791,10 @@
             const submit = document.querySelector("[data-bulk-move-submit]");
             if (submit.disabled) return;
             const errorStatus = document.querySelector("[data-bulk-move-error]");
-            errorStatus.textContent = movingDirectoryShortcutId ? "Moving directory shortcut..." :
+            errorStatus.textContent = creatingDirectoryShortcut ? "Creating directory shortcut..." : movingDirectoryShortcutId ? "Moving directory shortcut..." :
                 movingGalleryPath ? "Moving path..." : "Moving selected items...";
             const url = new URL(window.location.href);
-            url.searchParams.set("handler", movingDirectoryShortcutId ? "MoveDirectoryShortcut" :
+            url.searchParams.set("handler", creatingDirectoryShortcut ? "CreateDirectoryShortcut" : movingDirectoryShortcutId ? "MoveDirectoryShortcut" :
                 movingGalleryPath ? "MovePath" : "BulkMove");
             const body = new FormData(bulkMoveForm);
             if (movingDirectoryShortcutId) body.set("shortcutId", movingDirectoryShortcutId);
@@ -804,6 +809,10 @@
                     throw new Error(await response.text() || "Moving to the selected directory failed.");
                 }
                 const result = await response.json();
+                if (creatingDirectoryShortcut) {
+                    bulkMoveDialog.close();
+                    return;
+                }
                 window.location.assign(result.redirectPath);
             } catch (requestError) {
                 errorStatus.textContent = requestError.message;

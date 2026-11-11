@@ -920,7 +920,8 @@ public class GalleryModel : PageModel
     public async Task<IActionResult> OnGetSearchMovePathsAsync(
         [FromQuery] string? path,
         [FromQuery] string? query,
-        [FromQuery] bool movingPath = false)
+        [FromQuery] bool movingPath = false,
+        [FromQuery] bool creatingShortcut = false)
     {
         if (!AdminEnabled)
         {
@@ -956,14 +957,68 @@ public class GalleryModel : PageModel
             .Take(50)
             .ToListAsync(HttpContext.RequestAborted);
 
+        var linkedPaths = creatingShortcut
+            ? await _context.DirectoryShortcuts.Where(entry => entry.TargetPath.Path == sanitizedPath)
+                .Select(entry => entry.ParentPath.Path).ToListAsync(HttpContext.RequestAborted)
+            : [];
         return new JsonResult(paths.Select(entry => new
         {
             path = entry,
             displayPath = entry == "root" ? "/" : entry,
-            unavailable = string.Equals(entry, sanitizedPath, StringComparison.OrdinalIgnoreCase) ||
+            unavailable = (creatingShortcut
+                ? linkedPaths.Contains(entry, StringComparer.OrdinalIgnoreCase) ||
+                    string.Equals(entry, sourceParent, StringComparison.OrdinalIgnoreCase)
+                : string.Equals(entry, sanitizedPath, StringComparison.OrdinalIgnoreCase)) ||
                 (movingPath && (IsSameOrChildPath(entry, sanitizedPath) ||
                     string.Equals(entry, sourceParent ?? "root", StringComparison.OrdinalIgnoreCase)))
         }));
+    }
+
+    public async Task<IActionResult> OnPostCreateDirectoryShortcutAsync(
+        [FromForm] string? path,
+        [FromForm] string? targetPath)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!ModelState.IsValid || string.IsNullOrEmpty(sanitizedPath) ||
+            !string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        if (string.IsNullOrWhiteSpace(targetPath) || targetPath.Length > 1024)
+        {
+            return BadRequest("Select an existing destination directory.");
+        }
+        var source = await _context.Paths.FirstOrDefaultAsync(entry => entry.Path == sanitizedPath, HttpContext.RequestAborted);
+        var destination = await _context.Paths.FirstOrDefaultAsync(entry => entry.Path == targetPath, HttpContext.RequestAborted);
+        if (source is null || destination is null)
+        {
+            return NotFound("The source or destination directory no longer exists.");
+        }
+        var name = source.Path == "root" ? "Home" : source.Path.Split('/').Last();
+        if (await _context.DirectoryShortcuts.AnyAsync(entry => entry.ParentPathId == destination.Id &&
+                (entry.TargetPathId == source.Id || entry.Name == name), HttpContext.RequestAborted) ||
+            await _context.Paths.AnyAsync(entry => entry.ParentPath == destination.Path && entry.Path != entry.ParentPath &&
+                entry.Path == (destination.Path == "root" ? name : destination.Path + "/" + name), HttpContext.RequestAborted))
+        {
+            return new ConflictObjectResult("The destination already contains this directory or a shortcut with that name.");
+        }
+        _context.DirectoryShortcuts.Add(new DirectoryShortcut
+        {
+            ParentPathId = destination.Id,
+            TargetPathId = source.Id,
+            Name = name
+        });
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+        await _filesystemPersistence.PersistDirectoryShortcutsAsync(HttpContext.RequestAborted);
+        return new JsonResult(new { saved = true });
     }
 
     public async Task<IActionResult> OnPostMoveDirectoryShortcutAsync(

@@ -45,6 +45,7 @@ public sealed partial class NavigationSettingsTests
         Assert.Equal(admin, html.Contains("let movingGalleryPath = false;"));
         Assert.Equal(admin, html.Contains("class=\"directory-shortcut-delete-form\""));
         Assert.Equal(admin, html.Contains("data-move-directory-shortcut=\"7\""));
+        Assert.Equal(admin, html.Contains("data-open-directory-shortcut>Shortcut To</button>"));
         Assert.DoesNotContain("Delete directory shortcut Folder", html);
         if (admin)
         {
@@ -58,6 +59,8 @@ public sealed partial class NavigationSettingsTests
             Assert.Contains("data-move-path-note", html);
             Assert.Contains("movePath ? \"Move Path\" : \"Move selected items\"", html);
             Assert.Contains("movingGalleryPath ? \"MovePath\" : \"BulkMove\"", html);
+            Assert.Contains("creatingDirectoryShortcut ? \"CreateDirectoryShortcut\"", html);
+            Assert.Contains("if (creatingDirectoryShortcut) {\n                    bulkMoveDialog.close();", html.Replace("\r\n", "\n"));
         }
     }
 }

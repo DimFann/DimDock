@@ -812,6 +812,8 @@
 
     document.querySelector("[data-create-shortcut-form]")?.addEventListener("submit", async (event) => {
         event.preventDefault();
+        if (createShortcutSubmit.disabled) return;
+        createShortcutSubmit.disabled = true;
         const status = document.querySelector("[data-create-shortcut-status]");
         status.textContent = "Saving...";
         try {
@@ -824,8 +826,10 @@
             }
             status.textContent = "Shortcut created.";
             createShortcutSubmit.disabled = true;
+            shortcutToDialog.close();
         } catch (error) {
             status.textContent = error.message;
+            createShortcutSubmit.disabled = false;
         }
     });
 

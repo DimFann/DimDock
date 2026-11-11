@@ -354,6 +354,41 @@ try
     Check(await DeleteDirectoryShortcutAsync("root", removableAlias.Id) is NotFoundObjectResult, "already deleted alias returns not found");
     Console.WriteLine("PASS directory shortcut delete: authorization, antiforgery, scope, persistence and target folder/item/file preservation");
 
+    Check(await CreateDirectoryShortcutAsync("Album/Child", "2021", admin: false) is NotFoundResult, "shortcut creation requires admin");
+    Check(await CreateDirectoryShortcutAsync("Album/Child", "2021", validToken: false) is BadRequestObjectResult, "shortcut creation requires antiforgery");
+    Check(await CreateDirectoryShortcutAsync("../Album", "2021") is BadRequestObjectResult, "shortcut creation rejects unsafe path");
+    Check(await CreateDirectoryShortcutAsync("Album/Child", "missing") is NotFoundObjectResult, "shortcut creation requires destination");
+    Check(await CreateDirectoryShortcutAsync("Album/Child", "Album") is ConflictObjectResult, "shortcut creation rejects existing child directory");
+    Check(await CreateDirectoryShortcutAsync("Album/Child", "2021") is JsonResult, "shortcut creation succeeds");
+    Check(await context.DirectoryShortcuts.AnyAsync(link => link.TargetPathId == deletionTarget.Id &&
+        link.ParentPath.Path == "2021" && link.Name == "Child"), "shortcut creation retains canonical target and folder name");
+    Check(await CreateDirectoryShortcutAsync("Album/Child", "2021") is ConflictObjectResult, "shortcut creation rejects duplicates");
+    Check(await CreateDirectoryShortcutAsync("root", "2021") is JsonResult, "gallery root can be linked as Home");
+    using (var manifest = JsonDocument.Parse(await store.ReadAllTextAsync(FileStoreArea.Gallery, ".shortcuts.json")))
+    {
+        var aliases = manifest.RootElement.GetProperty("directory_shortcuts").GetProperty("2021");
+        Check(aliases.EnumerateArray().Any(entry => entry.GetProperty("name").GetString() == "Child" &&
+            entry.GetProperty("target_path").GetString() == "Album/Child"), "created shortcut persisted");
+        Check(aliases.EnumerateArray().Any(entry => entry.GetProperty("name").GetString() == "Home" &&
+            entry.GetProperty("target_path").GetString() == "root"), "root shortcut persisted");
+    }
+    Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "Album/Child/child.png") == "child-bytes", "creation preserves folder files");
+    Console.WriteLine("PASS directory shortcut creation: authorization, antiforgery, validation, duplicate prevention, root and persistence");
+
+    async Task<IActionResult> CreateDirectoryShortcutAsync(string path, string destination, bool admin = true, bool validToken = true)
+    {
+        var model = await GetGalleryAsync("root", admin);
+        model.Request.Method = "POST";
+        if (validToken)
+        {
+            var issuing = new DefaultHttpContext { RequestServices = services, User = model.User };
+            var tokens = services.GetRequiredService<IAntiforgery>().GetAndStoreTokens(issuing);
+            model.Request.Headers.Cookie = issuing.Response.Headers.SetCookie.ToString().Split(';')[0];
+            model.Request.Headers[tokens.HeaderName!] = tokens.RequestToken;
+        }
+        return await model.OnPostCreateDirectoryShortcutAsync(path, destination);
+    }
+
     async Task<IActionResult> DeleteDirectoryShortcutAsync(string path, ulong id, bool admin = true, bool validToken = true, string? moveTo = null)
     {
         var model = await GetGalleryAsync("root", admin);
