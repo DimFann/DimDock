@@ -131,7 +131,7 @@ try
     Check(!await context.DirectoryShortcuts.AnyAsync(link => link.Name == "Home"), "destination deletion cascades");
     using var updated = JsonDocument.Parse(await store.ReadAllTextAsync(FileStoreArea.Gallery, ".shortcuts.json"));
     Check(!updated.RootElement.GetProperty("directory_shortcuts").TryGetProperty("Destination", out _), "deleted destination removed from persisted JSON");
-    Check(updated.RootElement.GetProperty("shortcuts").GetProperty("root")[0].GetString() == "Album/file.png", "existing file shortcut data preserved");
+    Check(updated.RootElement.GetProperty("shortcuts").GetProperty("root")[0].GetString() == "Renamed/file.png", "file shortcut source follows renamed path");
     Console.WriteLine("PASS target/destination renames, deletion cascades, JSON persistence and file-shortcut preservation");
 
     static string ThumbnailKey(string parent, string name) => Convert.ToHexStringLower(
@@ -217,6 +217,98 @@ try
         "bulk tags require antiforgery");
     Check(!await context.Tags.AnyAsync(tag => tag.Name == "must-not-add"), "invalid requests do not create tags");
     Console.WriteLine("PASS bulk add tags: preservation, idempotency, shortcuts, manifests, scope, limits, authorization and antiforgery");
+
+    var movePaths = new[]
+    {
+        new PathEntry { Path = "2020", ParentPath = "root" },
+        new PathEntry { Path = "2020/Album", ParentPath = "2020", Description = "Keep description" },
+        new PathEntry { Path = "2020/Album/Child", ParentPath = "2020/Album" },
+        new PathEntry { Path = "2021", ParentPath = "root" },
+        new PathEntry { Path = "2021/Album", ParentPath = "2021" }
+    };
+    context.Paths.AddRange(movePaths);
+    await context.SaveChangesAsync();
+    foreach (var entry in movePaths)
+        await store.CreateDirectoryAsync(FileStoreArea.Gallery, entry.Path);
+    var childItem = new Item { OriginalName = "child.png", ParentPath = "2020/Album/Child",
+        ThumbnailKey = ThumbnailKey("2020/Album/Child", "child.png"), Type = "image" };
+    childItem.TagLinks.Add(new ItemTag { Tag = new Tag { Name = "2020" } });
+    childItem.TagLinks.Add(new ItemTag { TagId = keptTag.Id });
+    context.Items.Add(childItem);
+    await context.SaveChangesAsync();
+    context.Shortcuts.AddRange(
+        new Shortcut { OriginalId = childItem.Id, OriginalName = "child.png", ParentPath = childItem.ParentPath, ShortcutPath = "root" },
+        new Shortcut { OriginalId = photo.Id, OriginalName = "photo new.png", ParentPath = "With space", ShortcutPath = "2020/Album/Child" });
+    context.DirectoryShortcuts.Add(Link(movePaths[2], paths[6], "Outside"));
+    context.DirectoryShortcuts.Add(Link(paths[0], movePaths[2], "Moved child"));
+    await context.SaveChangesAsync();
+    await store.WriteAllTextAsync(FileStoreArea.Gallery, "2020/Album/Child/child.png", "child-bytes");
+    await store.WriteAllTextAsync(FileStoreArea.Thumbnails, childItem.ThumbnailKey + ".png", "child-thumb");
+    await store.WriteAllTextAsync(FileStoreArea.Gallery, "2020/Album/.description.md", "Keep description");
+    var shortcutConfig = System.Text.Json.Nodes.JsonNode.Parse(await store.ReadAllTextAsync(FileStoreArea.Gallery, ".shortcuts.json"))!;
+    shortcutConfig["shortcuts"]!["2020/Album/Child"] = new System.Text.Json.Nodes.JsonArray("With space/photo new.png");
+    shortcutConfig["shortcuts"]!["root"]!.AsArray().Add("2020/Album/Child/child.png");
+    await store.WriteAllTextAsync(FileStoreArea.Gallery, ".shortcuts.json", shortcutConfig.ToJsonString());
+    foreach (var (source, target) in new[] { ("root", "2021"), ("2020/Album", "2020/Album/Child"),
+        ("2020/Album", "2020/Album"), ("2020/Album", "2020"), ("2020/Album", "2021"), ("2020/Album", "missing") })
+    {
+        try { await persistence.MovePathAsync(source, target); Check(false, $"reject move {source} to {target}"); }
+        catch (GalleryPathRenameException) { }
+    }
+    await context.Paths.Where(entry => entry.Path == "2021/Album").ExecuteDeleteAsync();
+    await store.DeleteDirectoryAsync(FileStoreArea.Gallery, "2021/Album");
+    Check(await MovePathAsync("2020/Album", "2021", admin: false) is NotFoundResult, "move requires admin");
+    Check(await MovePathAsync("2020/Album", "2021", validToken: false) is BadRequestObjectResult, "move requires antiforgery");
+    Check(await MovePathAsync("../2020/Album", "2021") is BadRequestObjectResult, "move rejects unsafe path");
+    Check(await MovePathAsync("2020/Album", "2020/Album/Child") is ObjectResult { StatusCode: 409 }, "handler rejects descendant destination");
+    var picker = (JsonResult)await (await GetGalleryAsync("2020/Album", admin: true))
+        .OnGetSearchMovePathsAsync("2020/Album", "2020", movingPath: true);
+    using (var json = JsonDocument.Parse(JsonSerializer.Serialize(picker.Value)))
+        Check(json.RootElement.EnumerateArray().All(entry => entry.GetProperty("unavailable").GetBoolean()),
+            "path picker disables parent, self and descendant destinations");
+    Check(await MovePathAsync("2020/Album", "2021") is JsonResult { Value: not null } moveResult &&
+        JsonSerializer.Serialize(moveResult.Value).Contains("/Gallery/2021/Album"), "move handler returns new path");
+    context.ChangeTracker.Clear();
+    Check(await context.Paths.AnyAsync(entry => entry.Path == "2021/Album" && entry.ParentPath == "2021"), "moved root gets destination parent");
+    Check(await context.Paths.AnyAsync(entry => entry.Path == "2021/Album/Child" && entry.ParentPath == "2021/Album"), "child path and parent updated");
+    Check(await context.Items.AnyAsync(item => item.Id == childItem.Id && item.ParentPath == "2021/Album/Child"), "child item parent updated");
+    Check(!await context.Paths.AnyAsync(entry => entry.Path.StartsWith("2020/Album")), "old subtree paths removed");
+    Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "2021/Album/Child/child.png") == "child-bytes", "descendant file moved");
+    Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "2021/Album/.description.md") == "Keep description", "description moved");
+    Check(await store.FileExistsAsync(FileStoreArea.Thumbnails, childItem.ThumbnailKey + ".png"), "thumbnail references remain usable");
+    Check(await context.Shortcuts.AnyAsync(link => link.OriginalId == childItem.Id && link.ParentPath == "2021/Album/Child"), "external item shortcut original path updated");
+    Check(await context.Shortcuts.AnyAsync(link => link.OriginalId == photo.Id && link.ShortcutPath == "2021/Album/Child"), "contained item shortcut moved");
+    Check(await context.DirectoryShortcuts.AnyAsync(link => link.ParentPath.Path == "2021/Album/Child" && link.Name == "Outside"), "contained directory shortcut moved");
+    using (var manifest = JsonDocument.Parse(await store.ReadAllTextAsync(FileStoreArea.Gallery, "2021/Album/Child/.dimdock.json")))
+        Check(manifest.RootElement.GetProperty("items").GetProperty("child.png").GetProperty("tags")[0].GetString() == "keep-me", "descendant metadata persisted");
+    var childTags = await context.ItemTags.Where(link => link.ItemId == childItem.Id).Select(link => link.Tag.Name).ToListAsync();
+    Check(childTags.Contains("2021") && childTags.Contains("keep-me") && !childTags.Contains("2020"), "derived date tags updated without losing explicit tags");
+    Check((await GetGalleryAsync("root")).DirectoryLinks.Any(link => link.Name == "Moved child" && link.Path == "2021/Album/Child"), "directory shortcuts follow moved subtree");
+    using (var manifest = JsonDocument.Parse(await store.ReadAllTextAsync(FileStoreArea.Gallery, ".shortcuts.json")))
+    {
+        Check(manifest.RootElement.ToString().Contains("2021/Album/Child"), "directory shortcut manifest rewritten");
+        var fileShortcuts = manifest.RootElement.GetProperty("shortcuts");
+        Check(fileShortcuts.GetProperty("root").EnumerateArray().Any(value => value.GetString() == "2021/Album/Child/child.png"), "persisted file shortcut source follows moved subtree");
+        Check(fileShortcuts.GetProperty("2021/Album/Child")[0].GetString() == "With space/photo new.png", "persisted file shortcut destination follows moved subtree");
+    }
+    Check(await persistence.MovePathAsync("2021/Album", "root") == "Album", "subtree can move to root");
+    context.ChangeTracker.Clear();
+    Check(await context.Paths.AnyAsync(entry => entry.Path == "Album" && entry.ParentPath == "root"), "root move updates parent");
+    Check(await context.Items.AnyAsync(item => item.Id == childItem.Id && item.ParentPath == "Album/Child"), "root move updates descendants");
+    Console.WriteLine("PASS moving path subtree: destinations, collisions, child paths/items/files, shortcuts, date tags, thumbnails, manifests and root");
+
+    async Task<IActionResult> MovePathAsync(string path, string target, bool admin = true, bool validToken = true)
+    {
+        var model = await GetGalleryAsync("root", admin);
+        if (validToken)
+        {
+            var tokenHttp = new DefaultHttpContext { RequestServices = services, User = model.HttpContext.User };
+            var tokens = services.GetRequiredService<IAntiforgery>().GetAndStoreTokens(tokenHttp);
+            model.Request.Headers.Cookie = tokenHttp.Response.Headers.SetCookie.ToString().Split(';')[0];
+            model.Request.Headers[tokens.HeaderName!] = tokens.RequestToken;
+        }
+        return await model.OnPostMovePathAsync(path, target);
+    }
 
     async Task<IActionResult> AddTagsAsync(string path, List<ulong> ids, List<ulong> shortcutIds, string tags,
         bool admin = true, bool validToken = true)

@@ -22,6 +22,7 @@
                 @if (!string.Equals(Model.CurrentPath, "root", StringComparison.OrdinalIgnoreCase))
                 {
                     <button type="button" class="path-admin-button" data-open-rename-path>Rename Path</button>
+                    <button type="button" class="path-admin-button" data-open-move-path>Move Path</button>
                     <button type="button" class="path-admin-button path-admin-delete delete-path-button" data-open-delete-path>Delete Path</button>
                 }
             </div>
@@ -245,7 +246,8 @@
                         <img src="/img/cancel.png" alt="" />
                     </button>
                 </div>
-                <label for="bulkMovePathSearch">Search existing directories</label>
+                <p data-move-path-note hidden>Moves this directory and all child directories, items, and shortcuts. The directory name stays the same.</p>
+                <label for="bulkMovePathSearch">Search existing directories (enter / for root)</label>
                 <input id="bulkMovePathSearch" type="search" autocomplete="off" data-bulk-move-path-search />
                 <p class="shortcut-dialog-status" data-bulk-move-search-status role="status"></p>
                 <ul class="shortcut-path-results" data-bulk-move-path-results></ul>
@@ -559,8 +561,6 @@
         const bulkSelectionControls = document.querySelector("[data-bulk-selection-controls]");
         const bulkDeleteDialog = document.querySelector("[data-bulk-delete-dialog]");
         const bulkDeleteForm = document.querySelector("[data-bulk-delete-form]");
-        const bulkMoveDialog = document.querySelector("[data-bulk-move-dialog]");
-        const bulkMoveForm = document.querySelector("[data-bulk-move-form]");
         const bulkTagsDialog = document.querySelector("[data-bulk-tags-dialog]");
         const bulkTagsForm = document.querySelector("[data-bulk-tags-form]");
         const galleryItemGrid = document.querySelector("[data-gallery-grid]");
@@ -682,20 +682,40 @@
                 entries.append(hiddenInput);
             }
 
+            openGalleryMoveDialog(false);
+        });
+        bulkDeleteDialog.querySelectorAll("[data-close-bulk-delete]").forEach((button) => {
+            button.addEventListener("click", () => bulkDeleteDialog.close());
+        });
+    </script>
+}
+
+@if (Model.AdminEnabled && Model.PathEntry is not null)
+{
+    <script>
+        const bulkMoveDialog = document.querySelector("[data-bulk-move-dialog]");
+        const bulkMoveForm = document.querySelector("[data-bulk-move-form]");
+        let movingGalleryPath = false;
+        let moveSearchVersion = 0;
+        function openGalleryMoveDialog(movePath) {
+            window.clearTimeout(bulkMoveSearchTimeout);
+            moveSearchVersion++;
+            movingGalleryPath = movePath;
+            document.querySelector("#bulkMoveTitle").textContent = movePath ? "Move Path" : "Move selected items";
+            document.querySelector("[data-move-path-note]").hidden = !movePath;
             const search = document.querySelector("[data-bulk-move-path-search]");
             search.value = "";
             document.querySelector("[data-bulk-move-path-results]").replaceChildren();
             document.querySelector("[data-bulk-move-target-path]").value = "";
             document.querySelector("[data-bulk-move-submit]").disabled = true;
+            document.querySelector("[data-bulk-move-submit]").textContent = movePath ? "Move path" : "Move selected";
             document.querySelector("[data-bulk-move-search-status]").textContent =
-                "Enter at least two characters to search.";
+                "Enter at least two characters to search, or / for root.";
             document.querySelector("[data-bulk-move-error]").textContent = "";
             bulkMoveDialog.showModal();
             search.focus();
-        });
-        bulkDeleteDialog.querySelectorAll("[data-close-bulk-delete]").forEach((button) => {
-            button.addEventListener("click", () => bulkDeleteDialog.close());
-        });
+        }
+        document.querySelector("[data-open-move-path]")?.addEventListener("click", () => openGalleryMoveDialog(true));
         bulkMoveDialog.querySelectorAll("[data-close-bulk-move]").forEach((button) => {
             button.addEventListener("click", () => bulkMoveDialog.close());
         });
@@ -703,17 +723,20 @@
         const bulkMovePathSearch = document.querySelector("[data-bulk-move-path-search]");
         bulkMovePathSearch.addEventListener("input", () => {
             window.clearTimeout(bulkMoveSearchTimeout);
+            moveSearchVersion++;
+            document.querySelector("[data-bulk-move-path-results]").replaceChildren();
             document.querySelector("[data-bulk-move-target-path]").value = "";
             document.querySelector("[data-bulk-move-submit]").disabled = true;
             bulkMoveSearchTimeout = window.setTimeout(searchBulkMovePaths, 250);
         });
         async function searchBulkMovePaths() {
+            const searchVersion = moveSearchVersion;
             const query = bulkMovePathSearch.value.trim();
             const results = document.querySelector("[data-bulk-move-path-results]");
             const status = document.querySelector("[data-bulk-move-search-status]");
             results.replaceChildren();
-            if (query.length < 2) {
-                status.textContent = "Enter at least two characters to search.";
+            if (query.length < 2 && query !== "/") {
+                status.textContent = "Enter at least two characters to search, or / for root.";
                 return;
             }
 
@@ -722,16 +745,18 @@
             url.searchParams.set("handler", "SearchMovePaths");
             url.searchParams.set("path", "@Model.CurrentPath");
             url.searchParams.set("query", query);
+            url.searchParams.set("movingPath", String(movingGalleryPath));
             try {
                 const response = await fetch(url);
                 if (!response.ok) {
                     throw new Error(await response.text() || "Directory search failed.");
                 }
                 const paths = await response.json();
+                if (searchVersion !== moveSearchVersion) return;
                 for (const entry of paths) {
                     const button = document.createElement("button");
                     button.type = "button";
-                    button.textContent = entry.unavailable ? `${entry.displayPath} (current directory)` : entry.displayPath;
+                    button.textContent = entry.unavailable ? `${entry.displayPath} (unavailable)` : entry.displayPath;
                     button.disabled = entry.unavailable;
                     button.addEventListener("click", () => {
                         results.querySelectorAll("button").forEach((result) => result.classList.remove("selected"));
@@ -745,15 +770,18 @@
                 }
                 status.textContent = paths.length ? "" : "No matching directories found.";
             } catch (error) {
-                status.textContent = error.message;
+                if (searchVersion === moveSearchVersion) status.textContent = error.message;
             }
         }
         bulkMoveForm.addEventListener("submit", async (event) => {
             event.preventDefault();
+            const submit = document.querySelector("[data-bulk-move-submit]");
+            if (submit.disabled) return;
             const errorStatus = document.querySelector("[data-bulk-move-error]");
-            errorStatus.textContent = "Moving selected items...";
+            errorStatus.textContent = movingGalleryPath ? "Moving path..." : "Moving selected items...";
             const url = new URL(window.location.href);
-            url.searchParams.set("handler", "BulkMove");
+            url.searchParams.set("handler", movingGalleryPath ? "MovePath" : "BulkMove");
+            submit.disabled = true;
             try {
                 const response = await fetch(url, {
                     method: "POST",
@@ -767,8 +795,15 @@
                 window.location.assign(result.redirectPath);
             } catch (requestError) {
                 errorStatus.textContent = requestError.message;
+                submit.disabled = false;
             }
         });
+    </script>
+}
+
+@if (Model.AdminEnabled && Model.PathEntry is not null && Model.Items.Count > 0)
+{
+    <script>
         bulkDeleteForm.addEventListener("submit", async (event) => {
             event.preventDefault();
             const error = document.querySelector("[data-bulk-delete-error]");

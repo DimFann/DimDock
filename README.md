@@ -187,5 +187,7 @@ restored by `npm run build` in `website/`.
 | Database-backed checks (needs a throwaway MariaDB on loopback) | set `DIRECTORY_SHORTCUT_TEST_CONNECTION=Server=127.0.0.1;Port=<port>;User=root;Password=<pw>`, then `dotnet run --project tests\DirectoryShortcutChecks` from the repository root |
 | Python loader/storage tests | `docker build -f path_loader/Dockerfile.tests -t dimdock-storage-tests .` then `docker run --rm dimdock-storage-tests` |
 
+Database checks cover directory shortcuts, subtree moves, item edits and persisted metadata.
+
 Test checks create and remove their own databases, buckets and folders, and
 refuse non-loopback endpoints. Never point them at production.

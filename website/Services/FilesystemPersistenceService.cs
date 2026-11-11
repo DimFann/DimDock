@@ -21,7 +21,12 @@ public sealed class FilesystemPersistenceService(
     private static readonly Regex ImportableBlogFilename =
         new(@"^[A-Z]{2,5}_\d{8}_\d{6}\.md$", RegexOptions.Compiled);
 
-    public async Task PersistDirectoryShortcutsAsync(CancellationToken cancellationToken = default)
+    public Task PersistDirectoryShortcutsAsync(CancellationToken cancellationToken = default) =>
+        PersistDirectoryShortcutsAsync(null, cancellationToken);
+
+    private async Task PersistDirectoryShortcutsAsync(
+        (string OldPath, string NewPath)? relocation,
+        CancellationToken cancellationToken)
     {
         const string key = ".shortcuts.json";
         var sourceKey = await fileStore.FileExistsAsync(FileStoreArea.Gallery, key, cancellationToken)
@@ -31,6 +36,31 @@ public sealed class FilesystemPersistenceService(
             ? JsonNode.Parse(await fileStore.ReadAllTextAsync(FileStoreArea.Gallery, sourceKey, cancellationToken)) as JsonObject
                 ?? throw new InvalidDataException("Shortcut configuration must be a JSON object.")
             : new JsonObject();
+        if (relocation is { } move && document["shortcuts"] is JsonObject fileShortcuts)
+        {
+            string UpdatePath(string value) => IsSameOrChildPath(value, move.OldPath)
+                ? move.NewPath + value[move.OldPath.Length..]
+                : value;
+            var updated = new JsonObject();
+            foreach (var (parent, entries) in fileShortcuts)
+            {
+                var destination = UpdatePath(parent);
+                var values = entries as JsonArray
+                    ?? throw new InvalidDataException("File shortcuts must contain arrays of source paths.");
+                var sources = values.Select(value => UpdatePath(value?.GetValue<string>()
+                    ?? throw new InvalidDataException("File shortcut source paths must be strings.")));
+                if (updated[destination] is not JsonArray destinations)
+                {
+                    destinations = [];
+                    updated[destination] = destinations;
+                }
+                foreach (var source in sources)
+                {
+                    destinations.Add(source);
+                }
+            }
+            document["shortcuts"] = updated;
+        }
         var shortcuts = await context.DirectoryShortcuts.AsNoTracking()
             .Include(shortcut => shortcut.TargetPath)
             .Include(shortcut => shortcut.ParentPath)
@@ -1033,6 +1063,45 @@ public sealed class FilesystemPersistenceService(
                 "Path names must be 1-255 letters, numbers, underscores, or hyphens.");
         }
 
+        return await RelocatePathAsync(path, newName, null, cancellationToken);
+    }
+
+    public async Task<string> MovePathAsync(
+        string path,
+        string targetPath,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(path) || string.Equals(path, "root", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new GalleryPathRenameException("The root path cannot be moved.");
+        }
+        var target = await context.Paths.AsNoTracking()
+            .FirstOrDefaultAsync(entry => entry.Path == targetPath, cancellationToken)
+            ?? throw new GalleryPathRenameException("Select an existing destination directory.");
+        var source = await context.Paths.AsNoTracking()
+            .FirstOrDefaultAsync(entry => entry.Path == path, cancellationToken)
+            ?? throw new GalleryPathRenameException("The path no longer exists.");
+        if (IsSameOrChildPath(target.Path, source.Path))
+        {
+            throw new GalleryPathRenameException("A path cannot be moved into itself or one of its descendants.");
+        }
+        if (string.Equals(source.ParentPath ?? "root", target.Path, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new GalleryPathRenameException("The path is already in that directory.");
+        }
+        if (!await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, GalleryDirectoryKey(target.Path), cancellationToken))
+        {
+            throw new DirectoryNotFoundException($"Gallery directory does not exist: {target.Path}");
+        }
+        return await RelocatePathAsync(source.Path, source.Path.Split('/').Last(), target.Path, cancellationToken);
+    }
+
+    private async Task<string> RelocatePathAsync(
+        string path,
+        string newName,
+        string? targetParentPath,
+        CancellationToken cancellationToken)
+    {
         var sourceEntry = await context.Paths
             .AsNoTracking()
             .Where(entry => entry.Path == path)
@@ -1048,7 +1117,7 @@ public sealed class FilesystemPersistenceService(
         {
             throw new GalleryPathRenameException("The root path cannot be renamed.");
         }
-        var parentPath = sourceEntry.ParentPath ?? "root";
+        var parentPath = targetParentPath ?? sourceEntry.ParentPath ?? "root";
         var newPath = parentPath == "root" ? newName : $"{parentPath}/{newName}";
         if (newPath.Length > 1024)
         {
@@ -1110,7 +1179,7 @@ public sealed class FilesystemPersistenceService(
             IsSameOrChildPath(pendingPath, newPath)))
         {
             throw new GalleryPathRenameException(
-                "Finish queued path deletions before renaming this path.");
+                "Finish queued path deletions before changing this path.");
         }
 
         await context.Database.ExecuteSqlRawAsync(
@@ -1127,7 +1196,7 @@ public sealed class FilesystemPersistenceService(
         if (hasPendingItemDeletions)
         {
             throw new GalleryPathRenameException(
-                "Finish queued item deletions before renaming this path.");
+                "Finish queued item deletions before changing this path.");
         }
 
         var sourceDirectory = GalleryDirectoryKey(oldPath);
@@ -1199,6 +1268,9 @@ public sealed class FilesystemPersistenceService(
                                         ? newPath + entry.ParentPath.Substring(oldPath.Length)
                                         : entry.ParentPath),
                         cancellationToken);
+
+                await context.Paths.Where(entry => entry.Path == newPath)
+                    .ExecuteUpdateAsync(update => update.SetProperty(entry => entry.ParentPath, parentPath), cancellationToken);
 
                 await context.Items
                     .Where(item => item.ParentPath == oldPath || (item.ParentPath != null && item.ParentPath.StartsWith(oldPrefix)))
@@ -1291,7 +1363,7 @@ public sealed class FilesystemPersistenceService(
             catch (Exception rollbackError)
             {
                 throw new AggregateException(
-                    "Renaming the gallery path failed, and the directory could not be restored.",
+                    "Updating the gallery path failed, and the directory could not be restored.",
                     renameError,
                     rollbackError);
             }
@@ -1303,7 +1375,7 @@ public sealed class FilesystemPersistenceService(
         {
             await PersistPathAsync(renamedPath, cancellationToken);
         }
-        await PersistDirectoryShortcutsAsync(cancellationToken);
+        await PersistDirectoryShortcutsAsync((oldPath, newPath), cancellationToken);
 
         return newPath;
     }

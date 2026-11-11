@@ -919,7 +919,8 @@ public class GalleryModel : PageModel
 
     public async Task<IActionResult> OnGetSearchMovePathsAsync(
         [FromQuery] string? path,
-        [FromQuery] string? query)
+        [FromQuery] string? query,
+        [FromQuery] bool movingPath = false)
     {
         if (!AdminEnabled)
         {
@@ -946,8 +947,10 @@ public class GalleryModel : PageModel
             return new JsonResult(Array.Empty<object>());
         }
 
+        var sourceParent = await _context.Paths.Where(entry => entry.Path == sanitizedPath)
+            .Select(entry => entry.ParentPath).FirstAsync(HttpContext.RequestAborted);
         var paths = await _context.Paths
-            .Where(entry => entry.Path.Contains(search))
+            .Where(entry => entry.Path.Contains(search) || (search == "/" && entry.Path == "root"))
             .OrderBy(entry => entry.Path)
             .Select(entry => entry.Path)
             .Take(50)
@@ -957,8 +960,46 @@ public class GalleryModel : PageModel
         {
             path = entry,
             displayPath = entry == "root" ? "/" : entry,
-            unavailable = string.Equals(entry, sanitizedPath, StringComparison.OrdinalIgnoreCase)
+            unavailable = string.Equals(entry, sanitizedPath, StringComparison.OrdinalIgnoreCase) ||
+                (movingPath && (IsSameOrChildPath(entry, sanitizedPath) ||
+                    string.Equals(entry, sourceParent ?? "root", StringComparison.OrdinalIgnoreCase)))
         }));
+    }
+
+    public async Task<IActionResult> OnPostMovePathAsync(
+        [FromForm] string? path,
+        [FromForm] string? targetPath)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!ModelState.IsValid || string.IsNullOrEmpty(sanitizedPath) ||
+            !string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        if (string.IsNullOrWhiteSpace(targetPath) || targetPath.Length > 1024)
+        {
+            return BadRequest("Select an existing destination directory.");
+        }
+        try
+        {
+            var movedPath = await _filesystemPersistence.MovePathAsync(sanitizedPath, targetPath, HttpContext.RequestAborted);
+            return new JsonResult(new
+            {
+                redirectPath = "/Gallery/" + string.Join('/', movedPath.Split('/').Select(Uri.EscapeDataString))
+            });
+        }
+        catch (GalleryPathRenameException error)
+        {
+            return StatusCode(StatusCodes.Status409Conflict, error.Message);
+        }
     }
 
     public async Task<IActionResult> OnPostBulkMoveAsync(
