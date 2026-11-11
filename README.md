@@ -63,7 +63,7 @@ Header links are configured in **Admin** and saved to `admin/navigation.json`
 (local data directory or storage bucket). `Navigation` in
 `website/appsettings.json` supplies defaults until the first save.
 Home/About and Admin/Login cannot be hidden by these settings.
-Hidden pages require admin login; admins still see their header links in bold red.
+Hidden pages require admin login; admins see bold, underlined links on a light blue background.
 Hidden sections also protect their posts, image pages and uploaded assets.
 
 ## Data directory
@@ -161,6 +161,16 @@ Stop the services (`docker compose down`) first. `clean.bat` / `clean.sh` run
 Add `--dry-run` to preview any of them. Originals are never deleted.
 
 ## Development and tests
+
+Markdown supports source-only text using a fenced block with the `hidden` language:
+
+````markdown
+```hidden
+This text is in a hidden div in the page source, not the visible layout.
+```
+````
+
+This is not private: visitors can read it in the source.
 
 Run the website outside Docker with `dotnet run --project website` (the
 launch profiles use the `Development` environment). Front-end libraries are

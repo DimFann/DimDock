@@ -343,7 +343,6 @@
 }
 
 .gallery-directory-table a.admin-only-tagged,
-.site-header .nav-link.admin-only-tagged,
 a.admin-only-tagged {
   color: #a00;
   font-weight: 700;

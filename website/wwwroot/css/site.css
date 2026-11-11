@@ -60,11 +60,26 @@ html {
   color: #fff;
 }
 
+.site-header .nav-link.admin-only-tagged {
+  background-color: #cfe8ff;
+  border-radius: 3px;
+  color: #102a43;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
 .site-header-separator {
   align-items: center;
   display: flex;
   font-weight: 300;
   padding: 0 0.25rem;
+}
+
+@media (max-width: 575.98px) {
+  .site-header-separator {
+    display: none;
+  }
 }
 
 .soft-shadow {

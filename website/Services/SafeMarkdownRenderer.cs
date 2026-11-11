@@ -1,6 +1,9 @@
 using Markdig;
 using Markdig.Helpers;
 using Markdig.Parsers;
+using Markdig.Renderers;
+using Markdig.Renderers.Html;
+using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using System.Text.RegularExpressions;
 
@@ -17,7 +20,38 @@ public static class SafeMarkdownRenderer
     {
         var builder = new MarkdownPipelineBuilder().DisableHtml().UseSoftlineBreakAsHardlineBreak();
         builder.InlineParsers.Insert(0, new BreakInlineParser());
+        builder.Extensions.Add(new HiddenTextExtension());
         return builder.Build();
+    }
+
+    private sealed class HiddenTextExtension : IMarkdownExtension
+    {
+        public void Setup(MarkdownPipelineBuilder pipeline) { }
+
+        public void Setup(MarkdownPipeline pipeline, IMarkdownRenderer renderer)
+        {
+            if (renderer is HtmlRenderer htmlRenderer)
+            {
+                htmlRenderer.ObjectRenderers.Insert(0, new HiddenTextRenderer());
+            }
+        }
+    }
+
+    private sealed class HiddenTextRenderer : CodeBlockRenderer
+    {
+        protected override void Write(HtmlRenderer renderer, CodeBlock block)
+        {
+            if (block is not FencedCodeBlock { Info: "hidden" })
+            {
+                base.Write(renderer, block);
+                return;
+            }
+
+            renderer.EnsureLine();
+            renderer.Write("<div hidden style=\"display: none\">");
+            renderer.WriteEscape(block.Lines.ToString());
+            renderer.WriteLine("</div>");
+        }
     }
 
     private sealed class BreakInlineParser : InlineParser
