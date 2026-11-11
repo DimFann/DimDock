@@ -3,5 +3,6 @@ WORKDIR /app
 COPY path_loader/requirements.txt path_loader/requirements-test.txt ./
 RUN pip install --no-cache-dir -r requirements.txt -r requirements-test.txt
 COPY path_loader/*.py ./
+COPY path_loader/db-load-activity.sh ./
 COPY init/01-create-tables.sql ./
-ENTRYPOINT ["python", "-B", "-m", "unittest", "-v", "test_file_store", "test_load_paths", "test_build_shortcuts", "test_indexing"]
+ENTRYPOINT ["python", "-B", "-m", "unittest", "-v", "test_file_store", "test_load_paths", "test_build_shortcuts", "test_indexing", "test_fast_start"]

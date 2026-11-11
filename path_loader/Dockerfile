@@ -22,6 +22,7 @@ WORKDIR /app
 
 # Copy Python script and wait-for-db script
 COPY load_paths.py .
+COPY fast_start.py .
 COPY file_store.py .
 COPY linode_file_store.py .
 COPY storage_smoke.py .

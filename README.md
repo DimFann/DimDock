@@ -27,6 +27,13 @@ imports blog/About content; the website starts once it has finished
 (`docker compose logs -f path-loader` to watch). Edits made in the website are
 written back to the data files automatically.
 
+For code/layout-only restarts with unchanged content and a current database:
+`PATH_LOADER_FAST=true docker compose up -d --build` (Bash).
+In PowerShell, set `$env:PATH_LOADER_FAST = "true"` before the command and
+`Remove-Item Env:PATH_LOADER_FAST` afterward. Fast mode checks database readiness
+and initialization, but skips all content/shortcut imports and thumbnail generation.
+Use normal startup after disk/bucket changes, database resets or schema updates.
+
 ## Configuration
 
 All settings are read from `.env` by `compose.yaml`.
@@ -37,6 +44,7 @@ All settings are read from `.env` by `compose.yaml`.
 | `WSL_DATA_DIR` / `WSL_PROJECT_DIR` | — | Only if Docker runs in WSL2 and can't see Windows paths: the data and repository paths as WSL sees them (e.g. `/mnt/c/...`). |
 | `WEBSITE_PORT` | `18080` | Host port the website is published on. |
 | `THUMBNAIL_SERVICE_PORT` | `8080` | Internal port of the thumbnail service (not published). |
+| `PATH_LOADER_FAST` | `false` | `true` skips loader processing after initialization checks; use only with unchanged content and a current database. |
 | `FILE_STORAGE_PROVIDER` | `Local` | `Local` (files under `DATA_DIR`) or `Linode` (S3 bucket, see below). |
 | `FILE_STORAGE_ROOT` | `/data` | Path of the data volume inside the containers. Rarely needs changing. |
 | `LINODE_STORAGE_ENDPOINT` | — | Linode: S3 endpoint URL, without bucket or path. |

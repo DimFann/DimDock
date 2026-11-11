@@ -39,6 +39,7 @@ services:
     environment:
       DB_HOST: db
       DB_PORT: "3306"
+      PATH_LOADER_FAST: ${PATH_LOADER_FAST:-false}
       DB_USER: ${DB_USER:?Set DB_USER in .env}
       DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
       DB_NAME: ${DB_NAME:?Set DB_NAME in .env}

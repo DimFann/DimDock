@@ -1,11 +1,21 @@
 #!/bin/bash
 set -e
 
+case "${PATH_LOADER_FAST:-false}" in
+  true|false) ;;
+  *) echo "PATH_LOADER_FAST must be true or false." >&2; exit 1 ;;
+esac
+
 # Wait for the database to be ready
 until nc -z "$DB_HOST" 3306; do
   echo "Waiting for database at $DB_HOST..."
   sleep 1
 done
+
+if [ "${PATH_LOADER_FAST:-false}" = "true" ]; then
+  python /app/fast_start.py
+  exit 0
+fi
 
 marker_exists() {
   python -c '
