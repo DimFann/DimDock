@@ -177,7 +177,7 @@
         @foreach (var item in Model.Items)
         {
             var adminOnlyItem = item.TagLinks.Any(link => Model.AdminOnlyTags.Contains(link.Tag.Name));
-            <div class="gallery-image-result @(adminOnlyItem ? "admin-only-tagged" : "")" data-gallery-item-id="@item.Id">
+            <div class="gallery-image-result @(adminOnlyItem ? "admin-only-tagged" : "") @(Model.AdminEnabled && Model.IsNsfw(item) ? "nsfw-admin-item" : "") @(Model.ShouldBlur(item) ? "nsfw-blurred" : "")" data-gallery-item-id="@item.Id">
                 @if (Model.AdminEnabled)
                 {
                     <label class="gallery-bulk-select">
@@ -208,6 +208,10 @@
                         <img src="/img/link.png" alt="" class="gallery-shortcut-icon" title="Shortcut" />
                     }
                 </a>
+                @if (Model.ShouldBlur(item))
+                {
+                    <span class="nsfw-blur-label">NSFW</span>
+                }
                 @if (Model.AdminEnabled)
                 {
                     <div class="gallery-item-name">
@@ -241,7 +245,8 @@
              data-comic-viewer
              data-comic-count="@comicItems.Count"
              hidden="@(!string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase))">
-        <div class="comic-image-pane">
+        <div class="comic-image-pane @(firstItem is not null && Model.ShouldBlur(firstItem) ? "nsfw-blurred" : "") @(firstItem is not null && Model.AdminEnabled && Model.IsNsfw(firstItem) ? "nsfw-admin-item" : "")">
+            <span class="nsfw-blur-label" hidden="@(firstItem is null || !Model.ShouldBlur(firstItem))">NSFW</span>
             @if (firstItem is not null)
             {
                 <img data-comic-image alt="@firstItem.OriginalName" />
@@ -254,7 +259,9 @@
         <div class="comic-pages" hidden>
             @foreach (var item in comicItems)
             {
-                <span data-source="@Model.GetSourceUrl(item)" data-name="@item.OriginalName"></span>
+                <span data-source="@Model.GetSourceUrl(item)" data-name="@item.OriginalName"
+                      data-blur="@Model.ShouldBlur(item).ToString().ToLowerInvariant()"
+                      data-nsfw-admin="@((Model.AdminEnabled && Model.IsNsfw(item)).ToString().ToLowerInvariant())"></span>
             }
         </div>
         @if (comicItems.Count > 0)

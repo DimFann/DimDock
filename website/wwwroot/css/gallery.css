@@ -334,6 +334,34 @@
   border: 3px solid #a00;
 }
 
+.gallery-image-result.nsfw-admin-item,
+.comic-image-pane.nsfw-admin-item {
+  border: 3px solid #e87500;
+}
+
+.nsfw-blurred {
+  overflow: hidden;
+  position: relative;
+}
+
+.nsfw-blurred .gallery-image-link,
+.comic-image-pane.nsfw-blurred > img {
+  filter: blur(24px);
+  pointer-events: none;
+  user-select: none;
+}
+
+.nsfw-blur-label {
+  background: #102a43;
+  border-radius: 3px;
+  color: #fff;
+  left: 50%;
+  padding: 0.25rem 0.5rem;
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+}
+
 .image-viewer.admin-only-tagged {
   border: 2px solid var(--admin-blue);
 }

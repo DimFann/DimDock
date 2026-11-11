@@ -81,7 +81,7 @@ try
             await remote.WriteAsync(FileStoreArea.Gallery, "thumbnail-source.png", input);
         using var thumbnailClient = new HttpClient { BaseAddress = thumbnailUri };
         var page = new GalleryModel(null!, null!, null!, null!, null!, null!, null!, remote,
-            new TestClientFactory(thumbnailClient), new UploadOptions());
+            new TestClientFactory(thumbnailClient), new UploadOptions(), null!);
         var generate = typeof(GalleryModel).GetMethod("GenerateThumbnailAsync", BindingFlags.NonPublic | BindingFlags.Instance)
             ?? throw new Exception("Thumbnail generation method not found");
         var thumbnailKey = new string('a', 64);
@@ -187,7 +187,7 @@ try
     await using (var oversized = new MemoryStream(new byte[50 * 1024 * 1024 + 1]))
         await remote.WriteAsync(FileStoreArea.Gallery, "oversized.png", oversized);
     var unreachable = new GalleryModel(null!, null!, null!, null!, null!, null!, null!, remote,
-        new TestClientFactory(new HttpClient { BaseAddress = new Uri("http://127.0.0.1:9/") }), new UploadOptions());
+        new TestClientFactory(new HttpClient { BaseAddress = new Uri("http://127.0.0.1:9/") }), new UploadOptions(), null!);
     var thumbnailMethod = typeof(GalleryModel).GetMethod("GenerateThumbnailAsync", BindingFlags.NonPublic | BindingFlags.Instance)
         ?? throw new Exception("Thumbnail generation method not found");
     try

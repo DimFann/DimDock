@@ -325,6 +325,10 @@
 
             currentPage = Math.max(0, Math.min(index, pages.length - 1));
             const page = pages[currentPage];
+            const imagePane = comicViewer.querySelector(".comic-image-pane");
+            imagePane.classList.toggle("nsfw-blurred", page.dataset.blur === "true");
+            imagePane.classList.toggle("nsfw-admin-item", page.dataset.nsfwAdmin === "true");
+            imagePane.querySelector(".nsfw-blur-label").hidden = page.dataset.blur !== "true";
             image.src = page.dataset.source;
             image.alt = page.dataset.name;
             sourceLink.href = page.dataset.source;

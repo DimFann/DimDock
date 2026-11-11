@@ -60,6 +60,7 @@ try
     builder.Services.AddSingleton<IFileStore, LocalFileStore>();
     builder.Services.AddScoped<FilesystemPersistenceService>();
     builder.Services.AddScoped<AdminOnlyTagsProvider>();
+    builder.Services.AddSingleton<GalleryFilterPreferences>();
     await using var app = builder.Build();
     using var scope = app.Services.CreateScope();
     var services = scope.ServiceProvider;
@@ -220,7 +221,8 @@ try
         var model = new GalleryModel(context, services.GetRequiredService<ILogger<GalleryModel>>(),
             builder.Configuration, services.GetRequiredService<IWebHostEnvironment>(),
             services.GetRequiredService<IAntiforgery>(), services.GetRequiredService<AdminOnlyTagsProvider>(),
-            persistence, store, services.GetRequiredService<IHttpClientFactory>(), new UploadOptions())
+            persistence, store, services.GetRequiredService<IHttpClientFactory>(), new UploadOptions(),
+            services.GetRequiredService<GalleryFilterPreferences>())
         {
             PageContext = new PageContext(action)
         };

@@ -29,6 +29,7 @@ public class GalleryModel : PageModel
     private readonly IFileStore _fileStore;
     private readonly HttpClient _thumbnailClient;
     private readonly UploadOptions _uploadOptions;
+    private readonly GalleryFilterPreferences _filterPreferences;
 
     public GalleryModel(
         AppDbContext context,
@@ -40,7 +41,8 @@ public class GalleryModel : PageModel
         FilesystemPersistenceService filesystemPersistence,
         IFileStore fileStore,
         IHttpClientFactory httpClientFactory,
-        UploadOptions uploadOptions)
+        UploadOptions uploadOptions,
+        GalleryFilterPreferences filterPreferences)
     {
         _context = context;
         _logger = logger;
@@ -52,6 +54,7 @@ public class GalleryModel : PageModel
         _fileStore = fileStore;
         _thumbnailClient = httpClientFactory.CreateClient("ThumbnailService");
         _uploadOptions = uploadOptions;
+        _filterPreferences = filterPreferences;
     }
 
     // In Bypass mode, set when this request is not on the upload host: the Upload button opens this URL instead.
@@ -77,6 +80,10 @@ public class GalleryModel : PageModel
         User,
         AdminAccess.IsDevelopmentPasswordBypassEnabled(_configuration, _environment));
     public HashSet<string> AdminOnlyTags { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
+    public GalleryFilter ContentFilter { get; private set; } = GalleryFilter.BlurNsfw;
+
+    public bool IsNsfw(Item item) => GalleryFilterPreferences.IsNsfw(item);
+    public bool ShouldBlur(Item item) => GalleryFilterPreferences.ShouldBlur(item, ContentFilter, AdminEnabled);
 
     public IReadOnlyCollection<string> GetItemTags(Item item) =>
         item.TagLinks.Select(link => link.Tag.Name)
@@ -88,6 +95,8 @@ public class GalleryModel : PageModel
 
     public async Task<IActionResult> OnGetAsync(string? path)
     {
+        Response.Headers.CacheControl = "private, no-store";
+        ContentFilter = _filterPreferences.Read(Request).Filter;
         AdminOnlyTags = await _adminOnlyTagsProvider.GetTagsAsync(HttpContext.RequestAborted);
         var input = string.IsNullOrWhiteSpace(path) && string.IsNullOrWhiteSpace(Path)
             ? "root"
@@ -189,6 +198,8 @@ public class GalleryModel : PageModel
                 }
             }
         }
+
+        Items = Items.Where(item => !GalleryFilterPreferences.ShouldHide(item, ContentFilter, AdminEnabled)).ToList();
 
         if (string.Equals(PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase))
         {

@@ -96,6 +96,7 @@ builder.Services.Configure<FormOptions>(options =>
 });
 builder.Services.AddScoped<AdminOnlyTagsProvider>();
 builder.Services.AddScoped<NavigationSettingsProvider>();
+builder.Services.AddSingleton<GalleryFilterPreferences>();
 builder.Services.AddScoped<FilesystemPersistenceService>();
 builder.Services.AddHttpClient("ThumbnailService", client =>
 {
@@ -237,8 +238,11 @@ app.UseRateLimiter();
 app.Use(async (context, next) =>
 {
     var isLoginRequest = context.Request.Path.Equals("/Login", StringComparison.OrdinalIgnoreCase);
+    var isSettingsRequest = context.GetEndpoint()?.Metadata
+        .GetMetadata<Microsoft.AspNetCore.Mvc.RazorPages.PageActionDescriptor>()?.ViewEnginePath == "/Settings";
     if (HttpMethods.IsPost(context.Request.Method) &&
         !isLoginRequest &&
+        !isSettingsRequest &&
         !context.User.IsInRole("Admin"))
     {
         await context.ChallengeAsync();

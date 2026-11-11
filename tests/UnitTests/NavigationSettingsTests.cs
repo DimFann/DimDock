@@ -62,10 +62,12 @@ public sealed partial class NavigationSettingsTests : IAsyncLifetime
                 limiter.Window = TimeSpan.FromMinutes(1);
             }));
         builder.Services.AddRazorPages();
+        builder.Services.AddHttpClient();
         builder.Services.AddDbContext<AppDbContext>();
         builder.Services.AddSingleton<IFileStore, LocalFileStore>();
         builder.Services.AddHostedService<FileStoreInitializationService>();
         builder.Services.AddScoped<NavigationSettingsProvider>();
+        builder.Services.AddSingleton<GalleryFilterPreferences>();
         builder.Services.AddScoped<AdminOnlyTagsProvider>();
         builder.Services.AddScoped<FilesystemPersistenceService>();
         _app = builder.Build();

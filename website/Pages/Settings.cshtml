@@ -1,0 +1,53 @@
+@page
+@model Website.Pages.SettingsModel
+@using Website.Services
+@{
+    ViewData["Title"] = "Settings";
+    ViewData["BodyClass"] = "content-background";
+}
+
+<section class="admin-login">
+    <h1>Settings</h1>
+    <form method="post" data-filter-form data-adult-confirmed="@Model.AdultConfirmed.ToString().ToLowerInvariant()">
+        <label asp-for="Filter">Filters</label>
+        <select asp-for="Filter">
+            <option value="ShowAll">Show All</option>
+            <option value="HideNsfw">Hide NSFW</option>
+            <option value="BlurNsfw">Blur NSFW (Default)</option>
+        </select>
+        <span asp-validation-for="Filter" role="alert"></span>
+        <p>Applies to gallery and comic view in this browser. Direct image pages are not filtered.
+            Admins always see all items; NSFW items have an orange border.</p>
+        <button type="submit">Save filters</button>
+        <dialog class="path-description-dialog" data-age-confirmation open="@Model.NeedsConfirmation" aria-labelledby="ageConfirmationTitle">
+            <h2 id="ageConfirmationTitle">Adult content</h2>
+            <p>Show All includes content tagged NSFW. Confirm that you are 18 or older to continue.</p>
+            <button type="button" data-cancel-age-confirmation>Cancel</button>
+            <button type="submit" name="confirmAdult" value="true">I am 18 or older</button>
+        </dialog>
+    </form>
+    @if (Model.StatusMessage is not null)
+    {
+        <p role="status">@Model.StatusMessage</p>
+    }
+</section>
+
+@section Scripts {
+    <script>
+        const filterForm = document.querySelector("[data-filter-form]");
+        const ageDialog = filterForm.querySelector("[data-age-confirmation]");
+        filterForm.addEventListener("submit", (event) => {
+            if (filterForm.elements.Filter.value === "ShowAll" &&
+                filterForm.dataset.adultConfirmed !== "true" &&
+                event.submitter?.name !== "confirmAdult") {
+                event.preventDefault();
+                ageDialog.showModal();
+            }
+        });
+        filterForm.querySelector("[data-cancel-age-confirmation]").addEventListener("click", () => ageDialog.close());
+        if (ageDialog.open) {
+            ageDialog.close();
+            ageDialog.showModal();
+        }
+    </script>
+}

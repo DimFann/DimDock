@@ -94,6 +94,11 @@
                         }
                     </ul>
                     <ul class="navbar-nav ms-auto">
+                        <li class="nav-item">
+                            <a class="nav-link @(currentPage == "/Settings" ? "active" : "")"
+                               aria-current="@(currentPage == "/Settings" ? "page" : null)"
+                               asp-area="" asp-page="/Settings">Settings</a>
+                        </li>
                         @if (isAdminEnabled && !isAdminAuthenticated)
                         {
                             <li class="nav-item">
