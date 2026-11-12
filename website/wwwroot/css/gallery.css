@@ -367,7 +367,7 @@
 
 .nsfw-blurred .gallery-image-link,
 .comic-image-pane.nsfw-blurred > [data-comic-image] {
-  filter: blur(24px);
+  filter: blur(10px);
   user-select: none;
 }
 
