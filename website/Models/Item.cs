@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 
 namespace Website.Models
 {
@@ -46,6 +47,26 @@ namespace Website.Models
 
         [NotMapped]
         public bool IsImage => string.Equals(Type, "image", StringComparison.OrdinalIgnoreCase);
+
+        [NotMapped]
+        public string ThumbnailUrl
+        {
+            get
+            {
+                using var metadata = JsonDocument.Parse(Metadata ?? "{}");
+                var version = metadata.RootElement.TryGetProperty("thumbnailVersion", out var value)
+                    ? value.GetString() ?? "1" : "1";
+                return $"/img_db_thumbs/{ThumbnailKey}.png?v={Uri.EscapeDataString(version)}";
+            }
+        }
+
+        public void RefreshThumbnailVersion()
+        {
+            var metadata = JsonNode.Parse(Metadata ?? "{}") as JsonObject
+                ?? throw new InvalidOperationException("Item metadata must be a JSON object.");
+            metadata["thumbnailVersion"] = Guid.NewGuid().ToString("N");
+            Metadata = metadata.ToJsonString();
+        }
 
         public ICollection<ItemTag> TagLinks { get; set; } = new List<ItemTag>();
     }

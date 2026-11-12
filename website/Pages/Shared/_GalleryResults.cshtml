@@ -215,7 +215,7 @@
                 <a href="@(item.ShortcutId is ulong shortcutId ? $"/image/{item.Id}?shortcutId={shortcutId}" : $"/image/{item.Id}")" class="gallery-image-link">
                     @if (item.IsImage)
                     {
-                        <img src="@($"/img_db_thumbs/{item.ThumbnailKey}.png")"
+                        <img src="@item.ThumbnailUrl"
                              alt="@item.OriginalName"
                              class="gallery-image-thumbnail"
                              data-gallery-item-thumbnail />

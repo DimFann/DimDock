@@ -13,7 +13,7 @@
         {
             <form method="post" asp-page-handler="RegenerateThumbnail" class="regenerate-thumbnail-form" data-regenerate-thumbnail>
                 @Html.AntiForgeryToken()
-                <button type="submit" class="shortcut-toolbar-button">Regenerate thumbnail</button>
+                <button type="submit" class="shortcut-toolbar-button">Regenerate Thumbnail</button>
                 <span role="status" data-regenerate-thumbnail-status></span>
             </form>
         }
@@ -387,6 +387,8 @@
         try {
             const response = await fetch(form.action, { method: "POST", body: new FormData(form) });
             if (!response.ok) throw new Error(await response.text() || "Thumbnail regeneration failed.");
+            const result = await response.json();
+            if (result.saved !== true) throw new Error("Thumbnail regeneration was not confirmed.");
             status.textContent = "Thumbnail regenerated.";
         } catch (error) {
             status.textContent = error.message;

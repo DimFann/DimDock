@@ -387,7 +387,8 @@ try
     Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "Album/Child/child.png") == "child-bytes", "creation preserves folder files");
     Console.WriteLine("PASS directory shortcut creation: authorization, antiforgery, validation, duplicate prevention, root and persistence");
 
-    async Task<IActionResult> RegenerateAsync(ulong id, bool admin = true, bool token = true)
+    async Task<IActionResult> RegenerateAsync(ulong id, bool admin = true, bool token = true,
+        System.Net.HttpStatusCode status = System.Net.HttpStatusCode.OK)
     {
         var gallery = await GetGalleryAsync("root", admin);
         gallery.Request.Method = "POST";
@@ -401,17 +402,45 @@ try
         var image = new Website.Pages.ImageModel(context, builder.Configuration,
             services.GetRequiredService<IWebHostEnvironment>(), services.GetRequiredService<IAntiforgery>(),
             services.GetRequiredService<AdminOnlyTagsProvider>(), persistence) { PageContext = gallery.PageContext };
-        return await image.OnPostRegenerateThumbnailAsync(id, store, new TestThumbnailClientFactory());
+        return await image.OnPostRegenerateThumbnailAsync(id, store, new TestThumbnailClientFactory(status));
     }
+    await context.Items.Where(item => item.Id == childItem.Id).ExecuteUpdateAsync(
+        update => update.SetProperty(item => item.Metadata, """{"custom":true}"""));
+    var beforeRegeneration = await context.Items.AsNoTracking().SingleAsync(item => item.Id == childItem.Id);
     Check(await RegenerateAsync(childItem.Id, admin: false) is NotFoundResult, "thumbnail regeneration requires admin");
     Check(await RegenerateAsync(childItem.Id, token: false) is BadRequestObjectResult, "thumbnail regeneration requires antiforgery");
     Check(await RegenerateAsync(ulong.MaxValue) is NotFoundResult, "thumbnail regeneration rejects missing item");
-    Check(await RegenerateAsync(childItem.Id) is JsonResult, "thumbnail regeneration succeeds");
+    var regenerated = await RegenerateAsync(childItem.Id) as JsonResult;
+    Check(regenerated is not null, "thumbnail regeneration succeeds");
+    var afterRegeneration = await context.Items.AsNoTracking().SingleAsync(item => item.Id == childItem.Id);
+    Check(afterRegeneration.ThumbnailUrl != beforeRegeneration.ThumbnailUrl, "regeneration persists a fresh URL");
+    var regenerationResponse = JsonSerializer.SerializeToElement(regenerated!.Value);
+    Check(regenerationResponse.GetProperty("saved").GetBoolean() &&
+        regenerationResponse.GetProperty("thumbnailUrl").GetString() == afterRegeneration.ThumbnailUrl,
+        "regeneration returns the persisted URL");
+    using (var metadata = JsonDocument.Parse(afterRegeneration.Metadata!))
+        Check(metadata.RootElement.GetProperty("custom").GetBoolean(), "regeneration preserves unrelated metadata");
+    context.ChangeTracker.Clear();
+    var regeneratedGallery = await GetGalleryAsync("Album/Child", admin: true);
+    Check((await RenderAsync(regeneratedGallery)).Contains($"src=\"{afterRegeneration.ThumbnailUrl}\""),
+        "gallery renders persisted version");
+    var shortcutGallery = await GetGalleryAsync("root", admin: true);
+    Check(shortcutGallery.Items.Single(item => item.Id == childItem.Id && item.ShortcutId.HasValue).ThumbnailUrl ==
+        afterRegeneration.ThumbnailUrl, "file shortcuts use the original item's persisted version");
+    Check((await RenderAsync(shortcutGallery)).Contains($"src=\"{afterRegeneration.ThumbnailUrl}\""),
+        "shortcut tiles render the persisted version");
+    Check(await RegenerateAsync(childItem.Id, status: System.Net.HttpStatusCode.InternalServerError) is ObjectResult { StatusCode: 502 },
+        "generation failures surface as errors");
+    Check((await context.Items.AsNoTracking().SingleAsync(item => item.Id == childItem.Id)).ThumbnailUrl == afterRegeneration.ThumbnailUrl,
+        "failed generation leaves the URL unchanged");
+    Check(await RegenerateAsync(childItem.Id) is JsonResult, "repeated regeneration succeeds");
+    var repeatedRegeneration = await context.Items.AsNoTracking().SingleAsync(item => item.Id == childItem.Id);
+    Check(repeatedRegeneration.ThumbnailUrl != afterRegeneration.ThumbnailUrl, "each regeneration changes the URL");
     Check(await store.ReadAllTextAsync(FileStoreArea.Thumbnails, childItem.ThumbnailKey + ".png") == "regenerated",
         "thumbnail regeneration replaces existing thumbnail");
     Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "Album/Child/child.png") == "child-bytes",
         "thumbnail regeneration preserves original");
-    Console.WriteLine("PASS viewer thumbnail regeneration: authorization, antiforgery, missing item and overwrite");
+    Console.WriteLine("PASS viewer thumbnail regeneration: authorization, antiforgery, overwrite, persistent versions, gallery/shortcuts and failure preservation");
 
     async Task<IActionResult> CreateDirectoryShortcutAsync(string path, string destination, bool admin = true, bool validToken = true)
     {
@@ -570,14 +599,14 @@ static void Check(bool condition, string message)
         throw new InvalidOperationException($"FAIL: {message}");
 }
 
-sealed class TestThumbnailClientFactory : IHttpClientFactory
+sealed class TestThumbnailClientFactory(System.Net.HttpStatusCode status) : IHttpClientFactory
 {
     public HttpClient CreateClient(string name) =>
-        new(new Handler()) { BaseAddress = new Uri("http://thumbnail.test/") };
+        new(new Handler(status)) { BaseAddress = new Uri("http://thumbnail.test/") };
 
-    private sealed class Handler : HttpMessageHandler
+    private sealed class Handler(System.Net.HttpStatusCode status) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
-            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("regenerated") });
+            Task.FromResult(new HttpResponseMessage(status) { Content = new StringContent("regenerated") });
     }
 }

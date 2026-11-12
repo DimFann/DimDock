@@ -672,7 +672,7 @@ public class GalleryModel : PageModel
         try
         {
             var item = await _filesystemPersistence.RenameItemAsync(itemId, newName, HttpContext.RequestAborted);
-            return new JsonResult(new { id = item.Id, name = item.OriginalName, thumbnailKey = item.ThumbnailKey });
+            return new JsonResult(new { id = item.Id, name = item.OriginalName, thumbnailKey = item.ThumbnailKey, thumbnailUrl = item.ThumbnailUrl });
         }
         catch (GalleryItemRenameException error)
         {

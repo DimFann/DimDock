@@ -978,7 +978,7 @@
                 const thumbnail = entry.querySelector("[data-gallery-item-thumbnail]");
                 if (thumbnail) {
                     thumbnail.alt = result.name;
-                    thumbnail.src = `/img_db_thumbs/${result.thumbnailKey}.png`;
+                    thumbnail.src = result.thumbnailUrl;
                 }
                 const fileName = entry.querySelector("[data-gallery-item-file-name]");
                 if (fileName) {

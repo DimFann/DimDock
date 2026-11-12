@@ -118,7 +118,16 @@ public class ImageModel : PageModel
         {
             return StatusCode(StatusCodes.Status502BadGateway, $"Thumbnail service failed: {error.Message}");
         }
-        return new JsonResult(new { saved = true });
+        item.RefreshThumbnailVersion();
+        var updated = await _context.Items
+            .Where(entry => entry.Id == item.Id && entry.ThumbnailKey == item.ThumbnailKey)
+            .ExecuteUpdateAsync(update => update.SetProperty(entry => entry.Metadata, item.Metadata),
+                HttpContext.RequestAborted);
+        if (updated != 1)
+        {
+            throw new InvalidOperationException("The item changed while its thumbnail was being regenerated.");
+        }
+        return new JsonResult(new { saved = true, thumbnailUrl = item.ThumbnailUrl });
     }
 
     public async Task<IActionResult> OnGetAsync(ulong id, ulong? shortcutId)
@@ -475,7 +484,7 @@ public class ImageModel : PageModel
         try
         {
             var item = await _filesystemPersistence.RenameItemAsync(id, newName, HttpContext.RequestAborted);
-            return new JsonResult(new { id = item.Id, name = item.OriginalName, thumbnailKey = item.ThumbnailKey });
+            return new JsonResult(new { id = item.Id, name = item.OriginalName, thumbnailKey = item.ThumbnailKey, thumbnailUrl = item.ThumbnailUrl });
         }
         catch (GalleryItemRenameException error)
         {

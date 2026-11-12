@@ -138,6 +138,10 @@ Media is served through the website, so the bucket never needs public access.
 The site also clears out abandoned multipart uploads; a bucket lifecycle rule
 that aborts incomplete uploads after a day is a useful backstop.
 
+Thumbnail URLs include a persistent version in item metadata, changed after
+successful admin regeneration. Configure proxy/CDN caches to include query strings
+in their cache keys. Existing thumbnails start with `?v=1`; no schema update is needed.
+
 ## Old site redirects
 
 Old links can be redirected (301) by creating `website/legacy_redirects.json`.
