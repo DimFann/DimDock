@@ -8,14 +8,17 @@
 <div class="gallery-top-layout">
     <div class="gallery-directory">
         <table class="gallery-directory-table">
-            <tr class="gallery-directory-row-even">
-                <td><a href="/Gallery">/</a></td>
-            </tr>
-            <tr class="gallery-directory-row-odd">
-                <td>
-                    <a href="@($"/Gallery/{(Model.ParentPath == "root" ? "" : Model.ParentPath)}")">..</a>
-                </td>
-            </tr>
+            @if (!string.Equals(Model.CurrentPath, "root", StringComparison.OrdinalIgnoreCase))
+            {
+                <tr class="gallery-directory-row-even">
+                    <td><a href="/Gallery">/</a></td>
+                </tr>
+                <tr class="gallery-directory-row-odd">
+                    <td>
+                        <a href="@($"/Gallery/{(Model.ParentPath == "root" ? "" : Model.ParentPath)}")">..</a>
+                    </td>
+                </tr>
+            }
             @if (Model.DirectoryLinks.Any())
             {
                 var rowIndex = 0;

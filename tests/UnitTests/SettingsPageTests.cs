@@ -140,6 +140,14 @@ public sealed partial class NavigationSettingsTests
             output, new HtmlHelperOptions()));
         var html = output.ToString();
 
+        Assert.Contains(">/</a>", html);
+        Assert.Contains(">..</a>", html);
+        model.CurrentPath = "root";
+        var rootPage = await RenderAsync("/Pages/Gallery.cshtml", model);
+        Assert.DoesNotContain(">/</a>", rootPage);
+        Assert.DoesNotContain(">..</a>", rootPage);
+        model.CurrentPath = "Album";
+
         Assert.Equal(!admin, Regex.IsMatch(html, "class=\"gallery-image-result [^\"]*nsfw-blurred[^\"]*\" data-gallery-item-id=\"1\""));
         Assert.DoesNotMatch("class=\"gallery-image-result [^\"]*nsfw-blurred[^\"]*\" data-gallery-item-id=\"2\"", html);
         Assert.Equal(admin, Regex.IsMatch(html, "class=\"gallery-image-result [^\"]*nsfw-admin-item[^\"]*\" data-gallery-item-id=\"1\""));
