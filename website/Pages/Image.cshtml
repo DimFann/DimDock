@@ -390,9 +390,7 @@
             if (narrowViewport.matches) {
                 setImageExpanded(true);
             }
-            if (imageToggle.classList.contains("expanded") ||
-                !viewerImage.naturalWidth ||
-                !viewerImage.naturalHeight) {
+            if (imageToggle.classList.contains("expanded")) {
                 return;
             }
 
@@ -406,6 +404,10 @@
                 0,
                 viewportHeight - (imageRect.top + window.scrollY) - belowImageHeight - afterViewerHeight - 8);
             const availableWidth = Math.max(0, imageContent.clientWidth - 18);
+            imageToggle.style.setProperty("--viewer-image-height", `${availableHeight}px`);
+            if (!viewerImage.naturalWidth || !viewerImage.naturalHeight) {
+                return;
+            }
             const scale = Math.min(
                 availableHeight / viewerImage.naturalHeight,
                 availableWidth / viewerImage.naturalWidth);

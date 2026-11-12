@@ -221,6 +221,22 @@
   width: 100%;
 }
 
+.image-viewer-image-toggle:not(.expanded) img {
+  max-height: var(--viewer-image-height, 70dvh);
+}
+
+@media (max-width: 767.98px) {
+  .image-viewer-image-toggle,
+  .image-viewer-image-toggle img {
+    display: block;
+    width: 100%;
+  }
+
+  .image-viewer-image-toggle:not(.expanded) img {
+    max-height: none;
+  }
+}
+
 .image-viewer-tags {
   border-top: 1px solid #ccd3d3;
   margin-top: 1rem;
