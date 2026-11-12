@@ -110,6 +110,18 @@ try
     var empty = await GetGalleryAsync("Empty");
     Check(empty.Message is null && empty.DirectoryLinks.Single().Path == "root", "alias-only directory has no empty warning");
     Check((await RenderAsync(empty)).Contains("href=\"/Gallery/\">Home</a>"), "root shortcut navigation");
+    foreach (var isAdmin in new[] { false, true })
+    {
+        var missing = await GetGalleryAsync("root", admin: isAdmin);
+        Check(await missing.OnGetAsync("Missing/Folder") is RedirectToPageResult
+            { PageName: "/Gallery" } redirect && redirect.RouteValues!["path"] is null,
+            "missing gallery path redirects to root without ambient path");
+        missing.Request.Headers["X-Requested-With"] = "XMLHttpRequest";
+        Check(await missing.OnGetAsync("Missing/Folder") is RedirectToPageResult { PageName: "/Gallery" },
+            "missing partial gallery path redirects to root");
+        var existingEmpty = await GetGalleryAsync("root", admin: isAdmin);
+        Check(await existingEmpty.OnGetAsync("Comic") is PageResult, "existing empty folder stays accessible");
+    }
     var comic = await GetGalleryAsync("Comic");
     Check(comic.PathEntry?.Type == "comic", "canonical comic target retains display type");
     Check(await GetGalleryAsync("Hidden/Child") is { Message: "NOT_FOUND" }, "canonical hidden target rejects visitors");

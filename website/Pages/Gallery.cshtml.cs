@@ -106,6 +106,16 @@ public class GalleryModel : PageModel
         _logger.LogDebug("Gallery path: {Path}", sanitized);
 
         CurrentPath = sanitized;
+        PathEntry = await _context.Paths
+            .Include(entry => entry.TagLinks)
+            .ThenInclude(link => link.Tag)
+            .FirstOrDefaultAsync(entry => entry.Path == sanitized);
+        if (PathEntry is null)
+        {
+            return string.Equals(sanitized, "root", StringComparison.OrdinalIgnoreCase)
+                ? NotFound()
+                : RedirectToPage("/Gallery", new { path = (string?)null });
+        }
         var hiddenPaths = await _context.Paths
                 .Where(entry => entry.TagLinks.Any(link => AdminOnlyTags.Contains(link.Tag.Name)))
                 .Select(entry => entry.Path)
@@ -115,10 +125,6 @@ public class GalleryModel : PageModel
             return NotFound();
         }
 
-        PathEntry = await _context.Paths
-            .Include(entry => entry.TagLinks)
-            .ThenInclude(link => link.Tag)
-            .FirstOrDefaultAsync(entry => entry.Path == sanitized);
         Items = await _context.Items
             .Include(item => item.TagLinks)
             .ThenInclude(link => link.Tag)
