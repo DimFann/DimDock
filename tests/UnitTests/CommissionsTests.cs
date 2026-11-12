@@ -156,7 +156,7 @@ public sealed partial class NavigationSettingsTests
         using var admin = await SignInAsync();
         var html = await admin.GetStringAsync("/commissions");
         Assert.Contains("Edit Commissions Markdown", html);
-        Assert.Matches("<a class=\"[^\"]*admin-only-tagged[^\"]*\"[^>]*>Commissions</a>", html);
+        Assert.Matches("<a\\b[^>]*class=\"[^\"]*admin-only-tagged[^\"]*\"[^>]*>Commissions</a>", html);
         using var responseFromAdmin = await admin.PostAsync("/commissions?handler=Preview",
             new FormUrlEncodedContent(new Dictionary<string, string>
             {

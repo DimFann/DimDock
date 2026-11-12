@@ -85,10 +85,6 @@
 }
 
 @media (max-width: 360px) {
-  .gallery-admin-toolbar .path-type-label-prefix {
-    display: none;
-  }
-
   .gallery-admin-toolbar .admin-toolbar-danger .path-admin-button {
     padding-left: 0.15rem;
     padding-right: 0.15rem;

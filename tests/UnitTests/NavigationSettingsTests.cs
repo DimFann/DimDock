@@ -32,6 +32,30 @@ public sealed partial class NavigationSettingsTests : IAsyncLifetime
     private readonly WebApplication _app;
     private readonly IServiceScope _scope;
     private IServiceProvider Services => _scope.ServiceProvider;
+    [Theory]
+    [InlineData("upload.example.com", true)]
+    [InlineData("dimdock.com", false)]
+    public async Task HeaderNavigationUsesMainSiteOnlyOnUploadHost(string host, bool external)
+    {
+        Configuration["Uploads:Mode"] = "Bypass";
+        Configuration["Uploads:BypassHost"] = "upload.example.com";
+        Configuration["Uploads:MainSiteUrl"] = "https://dimdock.com";
+        var model = new LoginModel(Configuration, Services.GetRequiredService<IWebHostEnvironment>())
+        {
+            PageContext = CreatePageContext("/Login", admin: true)
+        };
+        model.Request.Host = new HostString(host);
+        var html = await RenderAsync("/Pages/Login.cshtml", model);
+        var header = html[..html.IndexOf("</header>", StringComparison.Ordinal)];
+        var links = Regex.Matches(header, "<a\\b[^>]*href=\"([^\"]+)\"");
+        Assert.Equal(8, links.Count);
+        foreach (Match link in links)
+        {
+            Assert.Equal(external, link.Groups[1].Value.StartsWith("https://dimdock.com/", StringComparison.Ordinal));
+        }
+        Assert.Contains("handler=Logout", header);
+    }
+
     private IConfiguration Configuration => Services.GetRequiredService<IConfiguration>();
     private IFileStore Store => Services.GetRequiredService<IFileStore>();
     private NavigationSettingsProvider Provider => Services.GetRequiredService<NavigationSettingsProvider>();
@@ -285,7 +309,7 @@ public sealed partial class NavigationSettingsTests : IAsyncLifetime
             foreach (var (name, visible) in new[] { ("Gallery", gallery), ("Search", search), ("Blog", blog) })
             {
                 Assert.Equal(admin && !visible,
-                    Regex.IsMatch(html, $"<a class=\"[^\"]*admin-only-tagged[^\"]*\"[^>]*>{name}</a>"));
+                    Regex.IsMatch(html, $"<a\\b[^>]*class=\"[^\"]*admin-only-tagged[^\"]*\"[^>]*>{name}</a>"));
             }
             Assert.Equal(admin, html.Contains(">Admin</a>"));
             Assert.Equal(!admin, html.Contains(">Login</a>"));

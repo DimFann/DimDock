@@ -3,6 +3,22 @@
 const editorFieldSelector =
     "textarea, input:not([type=hidden]):not([type=file]):not([type=checkbox]):not([type=radio]):not([type=button]):not([type=submit])";
 
+function updateEditorViewport() {
+    const viewport = window.visualViewport;
+    document.documentElement.style.setProperty("--editor-viewport-height", `${viewport?.height ?? window.innerHeight}px`);
+    document.documentElement.style.setProperty("--editor-viewport-top", `${viewport?.offsetTop ?? 0}px`);
+    const field = document.activeElement;
+    document.body.classList.toggle("mobile-text-editing",
+        field instanceof HTMLTextAreaElement && !field.closest("dialog"));
+}
+
+window.visualViewport?.addEventListener("resize", updateEditorViewport);
+window.visualViewport?.addEventListener("scroll", updateEditorViewport);
+window.addEventListener("resize", updateEditorViewport);
+document.addEventListener("focusin", updateEditorViewport);
+document.addEventListener("focusout", () => window.setTimeout(updateEditorViewport, 0));
+updateEditorViewport();
+
 function commitEditorValues(root) {
     root?.querySelectorAll(editorFieldSelector).forEach((field) => {
         field.defaultValue = field.value;

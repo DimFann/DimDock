@@ -55,6 +55,7 @@ All settings are read from `.env` by `compose.yaml`.
 | `UPLOAD_MODE` | `Chunked` | Gallery upload mode: `Chunked` or `Bypass` (see [Uploads](#uploads)). |
 | `UPLOAD_CHUNK_SIZE_MB` | `50` | Chunked mode request size, 5–95 MB. Keep it under your proxy/CDN limit. |
 | `UPLOAD_BYPASS_HOST` | — | Required for `Bypass`: host name (optional `:port`) of a DNS-only upload host. |
+| `MAIN_SITE_URL` | `https://dimdock.com` | Main HTTP(S) site origin; header links on the bypass upload host return here. Set this to your own site. |
 | `DB_ROOT_PASSWORD` | — | **Required.** MariaDB root password. |
 | `DB_NAME` | `mydb` | Database name. |
 | `DB_USER` | `dimdock` | Application database user. |

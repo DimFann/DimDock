@@ -40,6 +40,8 @@ public sealed partial class NavigationSettingsTests
                 : []
         };
         var html = await RenderAsync("/Pages/Gallery.cshtml", model);
+        Assert.DoesNotContain("path-type-label-prefix", html);
+        Assert.Equal(admin, html.Contains("aria-label=\"Directory display type\""));
         Assert.Equal(admin && !root, html.Contains("data-open-move-path>Move Path</button>"));
         Assert.Equal(admin, html.Contains("data-bulk-move-dialog"));
         Assert.Equal(admin, html.Contains("let movingGalleryPath = false;"));

@@ -192,6 +192,29 @@
   width: 100%;
 }
 
+@media (max-width: 767.98px) {
+  .description-editor {
+    position: fixed;
+    top: calc(var(--editor-viewport-top, 0px) + 8px);
+    bottom: auto;
+    margin: 0 auto;
+    height: calc(var(--editor-viewport-height, 100dvh) - 16px);
+    max-height: calc(var(--editor-viewport-height, 100dvh) - 16px);
+    overflow: auto;
+    padding: 0.75rem;
+  }
+
+  .description-editor textarea {
+    font-size: 16px;
+    resize: none;
+    overflow: auto;
+  }
+
+  body.mobile-text-editing {
+    padding-bottom: calc(100vh - var(--editor-viewport-height, 100dvh) + 35vh);
+  }
+}
+
 .description-editor-preview {
   border: 1px solid #ccd3d3;
   flex: 1;

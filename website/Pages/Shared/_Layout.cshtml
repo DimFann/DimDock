@@ -8,6 +8,9 @@
     var isAdminEnabled = Configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
     var isAdminAuthenticated = User.IsInRole("Admin");
     var navigation = await NavigationSettingsProvider.GetAsync(Context.RequestAborted);
+    var uploads = Configuration.GetSection("Uploads").Get<Website.Services.UploadOptions>() ?? new Website.Services.UploadOptions();
+    string HeaderUrl(string page) => uploads.HeaderUrl(Context.Request,
+        Url.Page(page) ?? throw new InvalidOperationException($"Header route not found: {page}"));
 }
 <html lang="en">
 <head>
@@ -33,7 +36,7 @@
     <header>
         <nav class="navbar navbar-expand-sm navbar-toggleable-sm navbar-light site-header border-bottom box-shadow mb-3">
             <div class="container">
-                <a class="navbar-brand fw-bold" asp-area="" asp-page="/Index">
+                <a class="navbar-brand fw-bold" href="@HeaderUrl("/Index")">
                     <img class="site-logo" src="~/img/greenfan.png" asp-append-version="true" width="32" height="32" alt="" />
                     <span>@siteTitle</span>
                 </a>
@@ -46,14 +49,14 @@
                         <li class="nav-item">
                             <a class="nav-link @(currentPage == "/Index" ? "active" : "")"
                                aria-current="@(currentPage == "/Index" ? "page" : null)"
-                               asp-area="" asp-page="/Index">Home</a>
+                               href="@HeaderUrl("/Index")">Home</a>
                         </li>
                         @if (navigation.Gallery || isAdminAuthenticated)
                         {
                             <li class="nav-item">
                                 <a class="nav-link @(currentPage == "/Gallery" ? "active" : "") @(!navigation.Gallery ? "admin-only-tagged" : "")"
                                    aria-current="@(currentPage == "/Gallery" ? "page" : null)"
-                                   href="~/gallery">Gallery</a>
+                                   href="@HeaderUrl("/Gallery")">Gallery</a>
                             </li>
                         }
                         @if (navigation.Search || isAdminAuthenticated)
@@ -61,7 +64,7 @@
                             <li class="nav-item">
                                 <a class="nav-link @(currentPage == "/Search" ? "active" : "") @(!navigation.Search ? "admin-only-tagged" : "")"
                                    aria-current="@(currentPage == "/Search" ? "page" : null)"
-                                   asp-area="" asp-page="/Search">Search</a>
+                                   href="@HeaderUrl("/Search")">Search</a>
                             </li>
                         }
                         @if (navigation.Blog || isAdminAuthenticated)
@@ -69,7 +72,7 @@
                             <li class="nav-item">
                                 <a class="nav-link @(isBlogPage ? "active" : "") @(!navigation.Blog ? "admin-only-tagged" : "")"
                                    aria-current="@(isBlogPage ? "page" : null)"
-                                   asp-area="" asp-page="/Blog">Blog</a>
+                                   href="@HeaderUrl("/Blog")">Blog</a>
                             </li>
                         }
                         @if (navigation.Commissions || isAdminAuthenticated)
@@ -77,7 +80,7 @@
                             <li class="nav-item">
                                 <a class="nav-link @(currentPage == "/Commissions" ? "active" : "") @(!navigation.Commissions ? "admin-only-tagged" : "")"
                                    aria-current="@(currentPage == "/Commissions" ? "page" : null)"
-                                   asp-area="" asp-page="/Commissions">Commissions</a>
+                                   href="@HeaderUrl("/Commissions")">Commissions</a>
                             </li>
                         }
                         @if (isAdminEnabled && isAdminAuthenticated)
@@ -89,7 +92,7 @@
                             <li class="nav-item">
                                 <a class="nav-link @(currentPage == "/Admin" ? "active" : "")"
                                    aria-current="@(currentPage == "/Admin" ? "page" : null)"
-                                   asp-area="" asp-page="/Admin">Admin</a>
+                                   href="@HeaderUrl("/Admin")">Admin</a>
                             </li>
                         }
                     </ul>
@@ -97,14 +100,14 @@
                         <li class="nav-item">
                             <a class="nav-link @(currentPage == "/Settings" ? "active" : "")"
                                aria-current="@(currentPage == "/Settings" ? "page" : null)"
-                               asp-area="" asp-page="/Settings">Settings</a>
+                               href="@HeaderUrl("/Settings")">Settings</a>
                         </li>
                         @if (isAdminEnabled && !isAdminAuthenticated)
                         {
                             <li class="nav-item">
                                 <a class="nav-link @(currentPage == "/Login" ? "active" : "")"
                                    aria-current="@(currentPage == "/Login" ? "page" : null)"
-                                   asp-area="" asp-page="/Login">Login</a>
+                                   href="@HeaderUrl("/Login")">Login</a>
                             </li>
                         }
                         @if (isAdminAuthenticated)

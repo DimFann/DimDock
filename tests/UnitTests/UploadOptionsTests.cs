@@ -6,6 +6,32 @@ namespace UnitTests;
 public class UploadOptionsTests
 {
     [Theory]
+    [InlineData("https://example.com/path")]
+    [InlineData("https://user@example.com")]
+    [InlineData("https://upload.example.com")]
+    [InlineData("https://example.com?x=1")]
+    [InlineData("javascript:alert(1)")]
+    public void BypassRejectsInvalidMainSiteOrigin(string url)
+    {
+        var options = new UploadOptions { Mode = UploadMode.Bypass, BypassHost = "upload.example.com", MainSiteUrl = url };
+        Assert.Throws<InvalidOperationException>(options.Validate);
+    }
+
+    [Theory]
+    [InlineData("upload.example.com", "https://dimdock.com/site/Gallery")]
+    [InlineData("dimdock.com", "/site/Gallery")]
+    public void HeaderLinksReturnToMainSiteOnlyOnBypassHost(string host, string expected)
+    {
+        var options = new UploadOptions { Mode = UploadMode.Bypass, BypassHost = "upload.example.com" };
+        options.Validate();
+        var request = new DefaultHttpContext().Request;
+        request.Host = new HostString(host);
+        Assert.Equal(expected, options.HeaderUrl(request, "/site/Gallery"));
+        options.Mode = UploadMode.Chunked;
+        Assert.Equal("/site/Gallery", options.HeaderUrl(request, "/site/Gallery"));
+    }
+
+    [Theory]
     [InlineData(4)]
     [InlineData(96)]
     public void ChunkSizeOutsideRangeIsRejected(int chunkSizeMB)
