@@ -59,7 +59,7 @@ public class GalleryModel : PageModel
     // In Bypass mode, set when this request is not on the upload host: the Upload button opens this URL instead.
     public string? UploadRedirectUrl =>
         _uploadOptions.Mode == UploadMode.Bypass && !_uploadOptions.IsBypassHost(Request)
-            ? $"https://{_uploadOptions.BypassHost}{Request.PathBase}{Request.Path}{Request.QueryString}"
+            ? $"https://{_uploadOptions.BypassHost}{Request.PathBase}/Login?ReturnUrl={Uri.EscapeDataString(Request.PathBase + Request.Path + Request.QueryString)}"
             : null;
 
     [BindProperty(SupportsGet = true)]

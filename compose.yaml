@@ -81,6 +81,7 @@ services:
       Development__AllowAnyAdminPassword: ${DEV_ALLOW_ANY_ADMIN_PASSWORD:-false}
       AdminAuth__Username: ${ADMIN_USERNAME:-}
       AdminAuth__Password: ${ADMIN_PASSWORD:-}
+      AdminAuth__CookieDomain: ${ADMIN_COOKIE_DOMAIN:-}
       DataProtection__KeysPath: ${FILE_STORAGE_ROOT:-/data}/app_state/data-protection-keys
       FileStorage__Provider: ${FILE_STORAGE_PROVIDER:-Local}
       FileStorage__RootPath: ${FILE_STORAGE_ROOT:-/data}

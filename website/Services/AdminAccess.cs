@@ -9,6 +9,23 @@ public static class AdminAccess
 {
     private const int MinimumPasswordLength = 12;
 
+    public static string? GetCookieDomain(IConfiguration configuration)
+    {
+        var domain = configuration["AdminAuth:CookieDomain"]?.Trim();
+        if (string.IsNullOrEmpty(domain))
+        {
+            return null;
+        }
+        domain = domain.StartsWith('.') ? domain[1..] : domain;
+        if (Uri.CheckHostName(domain) != UriHostNameType.Dns ||
+            !domain.Contains('.') || domain.EndsWith('.') || domain.Contains(".."))
+        {
+            throw new InvalidOperationException(
+                "AdminAuth:CookieDomain (ADMIN_COOKIE_DOMAIN) must be a DNS domain such as example.com, without a scheme, port or path.");
+        }
+        return domain;
+    }
+
     public static bool IsFeatureEnabled(IConfiguration configuration) =>
         configuration.GetValue<bool?>("Features:AdminEnabled") ?? true;
 

@@ -17,6 +17,39 @@ namespace UnitTests;
 
 public sealed partial class NavigationSettingsTests
 {
+    [Theory]
+    [InlineData("dimdock.com", UploadMode.Bypass, true)]
+    [InlineData("upload.example.com", UploadMode.Bypass, false)]
+    [InlineData("dimdock.com", UploadMode.Chunked, false)]
+    public void UploadHostTransitionGoesThroughLocalLogin(string host, UploadMode mode, bool redirects)
+    {
+        var model = new GalleryModel(
+            Services.GetRequiredService<AppDbContext>(), Services.GetRequiredService<ILogger<GalleryModel>>(),
+            Configuration, Services.GetRequiredService<IWebHostEnvironment>(),
+            Services.GetRequiredService<IAntiforgery>(), Services.GetRequiredService<AdminOnlyTagsProvider>(),
+            Services.GetRequiredService<FilesystemPersistenceService>(), Store,
+            Services.GetRequiredService<IHttpClientFactory>(),
+            new UploadOptions { Mode = mode, BypassHost = "upload.example.com" },
+            Services.GetRequiredService<GalleryFilterPreferences>())
+        {
+            PageContext = CreatePageContext("/Gallery", admin: true)
+        };
+        model.Request.Host = new Microsoft.AspNetCore.Http.HostString(host);
+        model.Request.PathBase = "/site";
+        model.Request.Path = "/Gallery/With%20space";
+        model.Request.QueryString = new Microsoft.AspNetCore.Http.QueryString("?sort=date&page=2");
+        if (redirects)
+        {
+            Assert.Equal(
+                "https://upload.example.com/site/Login?ReturnUrl=%2Fsite%2FGallery%2FWith%2520space%3Fsort%3Ddate%26page%3D2",
+                model.UploadRedirectUrl);
+        }
+        else
+        {
+            Assert.Null(model.UploadRedirectUrl);
+        }
+    }
+
     [Fact]
     public async Task BlurredImageConfirmationRemembersAgeWithoutChangingFilter()
     {

@@ -14,7 +14,7 @@
     var loginReturnUrl = currentPage == "/Login"
         ? Context.Request.Query["ReturnUrl"].ToString()
         : Context.Request.PathBase + Context.Request.Path + Context.Request.QueryString;
-    var loginUrl = HeaderUrl("/Login");
+    var loginUrl = Url.Page("/Login") ?? throw new InvalidOperationException("Login route not found.");
     if (!string.IsNullOrEmpty(loginReturnUrl))
     {
         loginUrl += "?ReturnUrl=" + Uri.EscapeDataString(loginReturnUrl);

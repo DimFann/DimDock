@@ -62,11 +62,13 @@ if (!string.IsNullOrWhiteSpace(dataProtectionKeysPath))
 }
 
 // Add services
+var adminCookieDomain = AdminAccess.GetCookieDomain(builder.Configuration);
 builder.Services
     .AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme)
     .AddCookie(options =>
     {
         options.Cookie.Name = "DimDock.Admin";
+        options.Cookie.Domain = adminCookieDomain;
         options.Cookie.HttpOnly = true;
         options.Cookie.SameSite = SameSiteMode.Strict;
         options.Cookie.SecurePolicy = CookieSecurePolicy.Always;

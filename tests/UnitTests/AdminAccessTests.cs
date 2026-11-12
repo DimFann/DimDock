@@ -20,6 +20,37 @@ public class AdminAccessTests
         ? new ClaimsPrincipal(new ClaimsIdentity())
         : new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "test"));
 
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData("", null)]
+    [InlineData("  ", null)]
+    [InlineData("example.com", "example.com")]
+    [InlineData(" .example.com ", "example.com")]
+    [InlineData("admin.example.com", "admin.example.com")]
+    public void CookieDomainIsOptionalAndNormalized(string? configured, string? expected)
+    {
+        var config = Config();
+        config["AdminAuth:CookieDomain"] = configured;
+        Assert.Equal(expected, AdminAccess.GetCookieDomain(config));
+    }
+
+    [Theory]
+    [InlineData("https://example.com")]
+    [InlineData("example.com:443")]
+    [InlineData("example.com/path")]
+    [InlineData("localhost")]
+    [InlineData("127.0.0.1")]
+    [InlineData("..example.com")]
+    [InlineData("example.com.")]
+    [InlineData("example..com")]
+    [InlineData("user@example.com")]
+    public void InvalidCookieDomainsFailExplicitly(string configured)
+    {
+        var config = Config();
+        config["AdminAuth:CookieDomain"] = configured;
+        Assert.Throws<InvalidOperationException>(() => AdminAccess.GetCookieDomain(config));
+    }
+
     [Fact]
     public void ValidCredentialsAreAccepted() =>
         Assert.True(AdminAccess.ValidateCredentials(Config(), "admin", Password));

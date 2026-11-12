@@ -56,6 +56,28 @@ public sealed partial class NavigationSettingsTests : IAsyncLifetime
         Assert.Contains("handler=Logout", header);
     }
 
+    [Theory]
+    [InlineData("upload.example.com")]
+    [InlineData("dimdock.com")]
+    public async Task HeaderLoginStaysOnCurrentHostAndPreservesReturnUrl(string host)
+    {
+        Configuration["Uploads:Mode"] = "Bypass";
+        Configuration["Uploads:BypassHost"] = "upload.example.com";
+        Configuration["Uploads:MainSiteUrl"] = "https://dimdock.com";
+        var model = new LoginModel(Configuration, Services.GetRequiredService<IWebHostEnvironment>())
+        {
+            PageContext = CreatePageContext("/Login", admin: false)
+        };
+        model.Request.Host = new HostString(host);
+        model.Request.QueryString = new QueryString("?ReturnUrl=%2FGallery%2FAlbum%3Fsort%3Ddate");
+        var html = await RenderAsync("/Pages/Login.cshtml", model);
+        var header = html[..html.IndexOf("</header>", StringComparison.Ordinal)];
+        var login = System.Net.WebUtility.HtmlDecode(
+            Regex.Match(header, "href=\"([^\"]+)\"[^>]*>Login</a>").Groups[1].Value);
+        Assert.Equal("/Login?ReturnUrl=%2FGallery%2FAlbum%3Fsort%3Ddate", login);
+        Assert.Contains("<form method=\"post\">", html);
+    }
+
     private IConfiguration Configuration => Services.GetRequiredService<IConfiguration>();
     private IFileStore Store => Services.GetRequiredService<IFileStore>();
     private NavigationSettingsProvider Provider => Services.GetRequiredService<NavigationSettingsProvider>();
@@ -78,7 +100,11 @@ public sealed partial class NavigationSettingsTests : IAsyncLifetime
         builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
         builder.Services.AddDataProtection().UseEphemeralDataProtectionProvider();
-        builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie();
+        builder.Services.AddAuthentication(CookieAuthenticationDefaults.AuthenticationScheme).AddCookie(options =>
+        {
+            options.Cookie.Name = "DimDock.Admin";
+            options.Cookie.Domain = AdminAccess.GetCookieDomain(builder.Configuration);
+        });
         builder.Services.AddRateLimiter(options =>
             options.AddFixedWindowLimiter("admin-login", limiter =>
             {

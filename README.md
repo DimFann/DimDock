@@ -61,6 +61,7 @@ All settings are read from `.env` by `compose.yaml`.
 | `DB_USER` | `dimdock` | Application database user. |
 | `DB_PASSWORD` | — | **Required.** Application database password. |
 | `ADMIN_USERNAME` / `ADMIN_PASSWORD` | — | **Required.** Website admin login (password at least 12 characters). |
+| `ADMIN_COOKIE_DOMAIN` | — | Optional shared login domain, e.g. `dimdock.com`. Blank keeps login host-only. Shares with **all** subdomains; use only with trusted subdomains and HTTPS. |
 | `ASPNETCORE_ENVIRONMENT` | `Production` | Keep `Production` for deployments. |
 | `DEV_ALLOW_ANY_ADMIN_PASSWORD` | `false` | Development only: accept any password for the admin user. Ignored unless the environment is `Development`. |
 
@@ -118,8 +119,19 @@ gallery uploads use one of two modes:
   DNS-only (not proxied) host name with its own valid TLS certificate, which
   must reach the same server. The proxy must pass the original `Host` header
   and allow unlimited bodies for it (nginx: `client_max_body_size 0;`). Admins
-  sign in again on that host. This exposes the server's real IP, so consider
+  sign in again on that host unless shared login is configured: Upload takes you through its local login and back
+  to the same folder, where Upload opens the file picker. Login/logout stay on
+  that host; ordinary header navigation returns to `MAIN_SITE_URL`.
+  This exposes the server's real IP, so consider
   restricting it to your own IPs.
+
+For shared login between `dimdock.com` and `upload.dimdock.com`, set
+`ADMIN_COOKIE_DOMAIN=dimdock.com`. Both hosts must serve the same application
+with shared data-protection keys (as in this Compose setup) over HTTPS. This also
+shares logout; it does not share the NSFW preference cookie. Unrelated domains
+cannot share a login cookie. After enabling or disabling this setting, clear
+existing `DimDock.Admin` cookies for both hosts and the parent domain, then sign
+in again to avoid conflicting old host-only/domain cookies.
 
 ## Linode Object Storage
 
