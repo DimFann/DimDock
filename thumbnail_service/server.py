@@ -63,7 +63,7 @@ class ThumbnailHandler(BaseHTTPRequestHandler):
                 warnings.simplefilter("error", Image.DecompressionBombWarning)
                 with Image.open(io.BytesIO(image_bytes)) as source:
                     source.load()
-                    thumbnail = source.convert("RGB")
+                    thumbnail = source.convert("RGBA")
             thumbnail.thumbnail(MAX_THUMBNAIL_SIZE)
         except (Image.DecompressionBombError, Image.DecompressionBombWarning):
             self._send_error(400, "Image dimensions exceed the 100-megapixel limit.")
@@ -79,6 +79,7 @@ class ThumbnailHandler(BaseHTTPRequestHandler):
                 (MAX_THUMBNAIL_SIZE[0] - thumbnail.width) // 2,
                 (MAX_THUMBNAIL_SIZE[1] - thumbnail.height) // 2,
             ),
+            thumbnail,
         )
 
         thumbnail_bytes = io.BytesIO()

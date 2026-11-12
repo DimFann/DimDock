@@ -9,6 +9,15 @@
 {
     <div class="admin-options-toolbar image-admin-options-toolbar">
         <strong class="admin-options-toolbar-title">Admin Options</strong>
+        @if (Model.Item.IsImage)
+        {
+            <form method="post" asp-page-handler="RegenerateThumbnail" class="regenerate-thumbnail-form" data-regenerate-thumbnail>
+                @Html.AntiForgeryToken()
+                <button type="submit" class="shortcut-toolbar-button">Regenerate thumbnail</button>
+                <span role="status" data-regenerate-thumbnail-status></span>
+            </form>
+        }
+        <div class="image-admin-primary-actions">
         @if (Model.CurrentShortcutId.HasValue)
         {
             <button type="button" class="shortcut-toolbar-button" data-open-remove-shortcut>Remove Shortcut</button>
@@ -23,6 +32,7 @@
                 data-open-delete-item>
             @(Model.CurrentShortcutId.HasValue ? "Delete Shortcut" : "Delete")
         </button>
+        </div>
     </div>
 }
 
@@ -366,6 +376,24 @@
 </main>
 
 <script>
+    document.querySelector("[data-regenerate-thumbnail]")?.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.currentTarget;
+        const button = form.querySelector("button");
+        if (button.disabled) return;
+        button.disabled = true;
+        const status = form.querySelector("[data-regenerate-thumbnail-status]");
+        status.textContent = "Generating...";
+        try {
+            const response = await fetch(form.action, { method: "POST", body: new FormData(form) });
+            if (!response.ok) throw new Error(await response.text() || "Thumbnail regeneration failed.");
+            status.textContent = "Thumbnail regenerated.";
+        } catch (error) {
+            status.textContent = error.message;
+        } finally {
+            button.disabled = false;
+        }
+    });
     const imageToggle = document.querySelector(".image-viewer-image-toggle");
     if (imageToggle) {
         const imageContent = document.querySelector(".image-viewer-content");

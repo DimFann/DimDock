@@ -15,7 +15,6 @@ using Website.Services;
 
 public class GalleryModel : PageModel
 {
-    private const long MaximumThumbnailSourceBytes = 50L * 1024 * 1024;
     private static readonly HashSet<string> ThumbnailImageExtensions =
         new(StringComparer.OrdinalIgnoreCase) { ".jpg", ".jpeg", ".png", ".gif" };
 
@@ -1601,7 +1600,7 @@ public class GalleryModel : PageModel
             uploadSucceeded = true;
             return null;
         }
-        catch (InvalidImageUploadException error)
+        catch (InvalidThumbnailImageException error)
         {
             return $"{fileName}: {error.Message}";
         }
@@ -1648,37 +1647,7 @@ public class GalleryModel : PageModel
         string thumbnailKey,
         CancellationToken cancellationToken)
     {
-        await using var source = await _fileStore.OpenReadAsync(
-            FileStoreArea.Gallery,
-            sourceKey,
-            cancellationToken);
-        if (source.Length > MaximumThumbnailSourceBytes)
-        {
-            throw new InvalidImageUploadException("Images cannot exceed 50 MB.");
-        }
-
-        using var content = new StreamContent(source);
-        content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/octet-stream");
-        content.Headers.ContentLength = source.Length;
-        using var response = await _thumbnailClient.PostAsync(
-            $"thumbnail/{thumbnailKey}",
-            content,
-            cancellationToken);
-        if (response.StatusCode is System.Net.HttpStatusCode.BadRequest or
-            System.Net.HttpStatusCode.RequestEntityTooLarge)
-        {
-            throw new InvalidImageUploadException(
-                await response.Content.ReadAsStringAsync(cancellationToken));
-        }
-
-        response.EnsureSuccessStatusCode();
-        await using var thumbnail = await response.Content.ReadAsStreamAsync(cancellationToken);
-        await _fileStore.WriteAsync(
-            FileStoreArea.Thumbnails,
-            $"{thumbnailKey}.png",
-            thumbnail,
-            overwrite: true,
-            cancellationToken);
+        await ThumbnailGenerator.GenerateAsync(_fileStore, _thumbnailClient, sourceKey, thumbnailKey, cancellationToken);
     }
 
     private static string GalleryDirectoryKey(string path)
@@ -1693,10 +1662,6 @@ public class GalleryModel : PageModel
 
     private static string JoinStorageKey(string directory, string name) =>
         string.IsNullOrEmpty(directory) ? name : $"{directory}/{name}";
-
-    private sealed class InvalidImageUploadException(string message) : Exception(message)
-    {
-    }
 
     private static DateTime GetCreatedDate(string fileName, string path, DateTime fallback)
     {

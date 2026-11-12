@@ -387,6 +387,32 @@ try
     Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "Album/Child/child.png") == "child-bytes", "creation preserves folder files");
     Console.WriteLine("PASS directory shortcut creation: authorization, antiforgery, validation, duplicate prevention, root and persistence");
 
+    async Task<IActionResult> RegenerateAsync(ulong id, bool admin = true, bool token = true)
+    {
+        var gallery = await GetGalleryAsync("root", admin);
+        gallery.Request.Method = "POST";
+        if (token)
+        {
+            var issuing = new DefaultHttpContext { RequestServices = services, User = gallery.User };
+            var tokens = services.GetRequiredService<IAntiforgery>().GetAndStoreTokens(issuing);
+            gallery.Request.Headers.Cookie = issuing.Response.Headers.SetCookie.ToString().Split(';')[0];
+            gallery.Request.Headers[tokens.HeaderName!] = tokens.RequestToken;
+        }
+        var image = new Website.Pages.ImageModel(context, builder.Configuration,
+            services.GetRequiredService<IWebHostEnvironment>(), services.GetRequiredService<IAntiforgery>(),
+            services.GetRequiredService<AdminOnlyTagsProvider>(), persistence) { PageContext = gallery.PageContext };
+        return await image.OnPostRegenerateThumbnailAsync(id, store, new TestThumbnailClientFactory());
+    }
+    Check(await RegenerateAsync(childItem.Id, admin: false) is NotFoundResult, "thumbnail regeneration requires admin");
+    Check(await RegenerateAsync(childItem.Id, token: false) is BadRequestObjectResult, "thumbnail regeneration requires antiforgery");
+    Check(await RegenerateAsync(ulong.MaxValue) is NotFoundResult, "thumbnail regeneration rejects missing item");
+    Check(await RegenerateAsync(childItem.Id) is JsonResult, "thumbnail regeneration succeeds");
+    Check(await store.ReadAllTextAsync(FileStoreArea.Thumbnails, childItem.ThumbnailKey + ".png") == "regenerated",
+        "thumbnail regeneration replaces existing thumbnail");
+    Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "Album/Child/child.png") == "child-bytes",
+        "thumbnail regeneration preserves original");
+    Console.WriteLine("PASS viewer thumbnail regeneration: authorization, antiforgery, missing item and overwrite");
+
     async Task<IActionResult> CreateDirectoryShortcutAsync(string path, string destination, bool admin = true, bool validToken = true)
     {
         var model = await GetGalleryAsync("root", admin);
@@ -542,4 +568,16 @@ static void Check(bool condition, string message)
 {
     if (!condition)
         throw new InvalidOperationException($"FAIL: {message}");
+}
+
+sealed class TestThumbnailClientFactory : IHttpClientFactory
+{
+    public HttpClient CreateClient(string name) =>
+        new(new Handler()) { BaseAddress = new Uri("http://thumbnail.test/") };
+
+    private sealed class Handler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK) { Content = new StringContent("regenerated") });
+    }
 }

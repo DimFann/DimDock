@@ -373,7 +373,7 @@ def process_image(file_key, thumbnail_key):
     try:
         with STORE.open_read('gallery', file_key) as source:
             with Image.open(source) as img:
-                img = img.convert("RGB")
+                img = img.convert("RGBA")
                 thumb = img.copy()
                 thumb.thumbnail(MAX_THUMBNAIL_SIZE)
                 thumb_with_bg = Image.new("RGB", MAX_THUMBNAIL_SIZE, (255, 255, 255))
@@ -383,6 +383,7 @@ def process_image(file_key, thumbnail_key):
                         (MAX_THUMBNAIL_SIZE[0] - thumb.width) // 2,
                         (MAX_THUMBNAIL_SIZE[1] - thumb.height) // 2,
                     ),
+                    thumb,
                 )
                 thumbnail_content = io.BytesIO()
                 thumb_with_bg.save(thumbnail_content, format="PNG", optimize=True, quality=85)

@@ -83,6 +83,44 @@ public class ImageModel : PageModel
             .Where(tag => AdminEnabled || !AdminOnlyTags.Contains(tag))
             .OrderBy(name => name, StringComparer.Ordinal);
 
+    public async Task<IActionResult> OnPostRegenerateThumbnailAsync(
+        ulong id, [FromServices] IFileStore store, [FromServices] IHttpClientFactory clients)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        var item = await _context.Items.AsNoTracking().FirstOrDefaultAsync(entry => entry.Id == id, HttpContext.RequestAborted);
+        if (item is null)
+        {
+            return NotFound();
+        }
+        if (!item.IsImage)
+        {
+            return BadRequest("Only images have generated thumbnails.");
+        }
+        var sourceKey = string.IsNullOrEmpty(item.ParentPath) || item.ParentPath == "root"
+            ? item.OriginalName : $"{item.ParentPath}/{item.OriginalName}";
+        try
+        {
+            await ThumbnailGenerator.GenerateAsync(store, clients.CreateClient("ThumbnailService"),
+                sourceKey, item.ThumbnailKey, HttpContext.RequestAborted);
+        }
+        catch (InvalidThumbnailImageException error)
+        {
+            return BadRequest(error.Message);
+        }
+        catch (HttpRequestException error)
+        {
+            return StatusCode(StatusCodes.Status502BadGateway, $"Thumbnail service failed: {error.Message}");
+        }
+        return new JsonResult(new { saved = true });
+    }
+
     public async Task<IActionResult> OnGetAsync(ulong id, ulong? shortcutId)
     {
         if (!await LoadItemAsync(id))

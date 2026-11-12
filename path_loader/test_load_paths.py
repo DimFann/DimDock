@@ -1,8 +1,10 @@
 import unittest
 import json
+import io
 from unittest.mock import Mock, call, patch
 
 import mysql.connector
+from PIL import Image
 
 with patch.dict('os.environ', {
     'DB_HOST': 'test',
@@ -12,6 +14,27 @@ with patch.dict('os.environ', {
 }):
     import load_paths
 
+
+class ThumbnailTransparencyTests(unittest.TestCase):
+    def test_transparency_is_composited_over_white(self):
+        for mode, color, expected in (
+            ('RGBA', (0, 0, 0, 0), (255, 255, 255)),
+            ('RGBA', (0, 0, 0, 128), (127, 127, 127)),
+            ('RGBA', (255, 0, 0, 255), (255, 0, 0)),
+            ('RGB', (0, 0, 0), (0, 0, 0)),
+        ):
+            with self.subTest(mode=mode, color=color):
+                source = io.BytesIO()
+                Image.new(mode, (16, 16), color).save(source, format='PNG')
+                store = Mock()
+                store.open_read.return_value = io.BytesIO(source.getvalue())
+                with patch.object(load_paths, 'STORE', store):
+                    load_paths.process_image('test.png', 'test-key')
+                store.write.assert_called_once()
+                with Image.open(io.BytesIO(store.write.call_args.args[2])) as thumbnail:
+                    self.assertEqual(thumbnail.size, load_paths.MAX_THUMBNAIL_SIZE)
+                    self.assertEqual(thumbnail.getpixel((128, 128)), expected)
+                    self.assertEqual(thumbnail.getpixel((0, 0)), (255, 255, 255))
 
 class AdminTagInitializationTests(unittest.TestCase):
     def test_missing_configuration_is_created_with_hidden_tag(self):
