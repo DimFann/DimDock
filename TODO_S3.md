@@ -4,6 +4,33 @@ Local and Linode Object Storage adapters are done and the live site runs on
 Linode. The bucket stays private; media is streamed through the app. Remaining
 work is about rebuilding from storage and recovering from partial failures.
 
+## LinodeMeta mode
+
+- [ ] Add `LinodeMeta` alongside `Local` and `Linode`; preserve both existing
+  modes and their directory-based storage behavior.
+- [ ] Separate logical gallery paths from immutable object keys in LinodeMeta.
+  Use stable item/folder IDs and parent relationships so moves and renames
+  update metadata without copying source objects or regenerating thumbnails.
+- [ ] Store a portable catalog in the bucket covering names, paths, tags,
+  descriptions, timestamps, ordering, shortcuts, deletions and settings.
+  Support rebuilding a fresh database with IDs and relationships preserved.
+- [ ] Make catalog updates retryable through a transactional database outbox;
+  define crash recovery, reconciliation and versioned snapshots. Avoid
+  rewriting the entire catalog for each edit.
+- [ ] Wire website reads/uploads/edits, thumbnails, loader/rebuild and admin
+  operations through the selected mode; test equivalent gallery behavior.
+- [ ] Add migration scripts that build a **new destination bucket** from an
+  existing Linode bucket, copying originals/assets and translating manifests
+  and shortcuts into stable-key objects and catalog records. Keep the source
+  untouched; reject identical source/destination locations and unsafe
+  destination overwrites.
+- [ ] Support migration dry-run, inventory/reporting, resumable copies,
+  integrity checks and explicit failure reporting. Freeze source writes or
+  reconcile changes before cutover; verify counts, content and relationships
+  with a fresh-database rebuild before switching modes.
+- [ ] Document credentials, migration/cutover, backup/restore and rollback to
+  the old bucket; provide an export to a conventional directory tree.
+
 ## Rebuild from storage
 
 - [ ] Persist stable item IDs. IDs are auto-incremented today, so a fresh index
