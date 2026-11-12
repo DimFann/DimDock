@@ -31,6 +31,10 @@ public class LoginModel(IConfiguration configuration, IWebHostEnvironment enviro
     {
         if (AdminAccess.IsAdmin(configuration, User, DevelopmentPasswordBypassEnabled))
         {
+            if (!string.IsNullOrWhiteSpace(ReturnUrl) && Url.IsLocalUrl(ReturnUrl))
+            {
+                return LocalRedirect(ReturnUrl);
+            }
             return RedirectToPage("/Admin");
         }
 

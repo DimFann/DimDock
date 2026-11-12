@@ -11,6 +11,14 @@
     var uploads = Configuration.GetSection("Uploads").Get<Website.Services.UploadOptions>() ?? new Website.Services.UploadOptions();
     string HeaderUrl(string page) => uploads.HeaderUrl(Context.Request,
         Url.Page(page) ?? throw new InvalidOperationException($"Header route not found: {page}"));
+    var loginReturnUrl = currentPage == "/Login"
+        ? Context.Request.Query["ReturnUrl"].ToString()
+        : Context.Request.PathBase + Context.Request.Path + Context.Request.QueryString;
+    var loginUrl = HeaderUrl("/Login");
+    if (!string.IsNullOrEmpty(loginReturnUrl))
+    {
+        loginUrl += "?ReturnUrl=" + Uri.EscapeDataString(loginReturnUrl);
+    }
 }
 <html lang="en">
 <head>
@@ -107,7 +115,7 @@
                             <li class="nav-item">
                                 <a class="nav-link @(currentPage == "/Login" ? "active" : "")"
                                    aria-current="@(currentPage == "/Login" ? "page" : null)"
-                                   href="@HeaderUrl("/Login")">Login</a>
+                                   href="@loginUrl">Login</a>
                             </li>
                         }
                         @if (isAdminAuthenticated)

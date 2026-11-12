@@ -61,6 +61,7 @@ html {
 }
 
 .site-header .nav-link.admin-only-tagged {
+  width: fit-content;
   background-color: #cfe8ff;
   border-radius: 3px;
   color: #102a43;
