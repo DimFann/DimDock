@@ -46,7 +46,7 @@
                 @if (Model.Items.Count > 0)
                 {
                     <button type="button" class="path-admin-button" data-toggle-bulk-select aria-pressed="false"
-                            hidden="@string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase)">Select items</button>
+                            hidden="@string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase)">Select Items</button>
                     <label class="gallery-show-names-toggle"
                            hidden="@string.Equals(Model.PathEntry?.Type, "comic", StringComparison.OrdinalIgnoreCase)">
                         <input type="checkbox" data-toggle-item-names />
@@ -580,7 +580,7 @@
             galleryItemGrid.classList.toggle("bulk-select-mode", enabled);
             bulkSelectionControls.hidden = !enabled;
             bulkSelectToggle.setAttribute("aria-pressed", String(enabled));
-            bulkSelectToggle.textContent = enabled ? "Selection mode on" : "Select items";
+            bulkSelectToggle.textContent = enabled ? "Cancel Select" : "Select Items";
             if (!enabled) {
                 bulkSelectionInputs().forEach((input) => { input.checked = false; });
             }
