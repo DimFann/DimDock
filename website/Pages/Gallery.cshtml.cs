@@ -80,6 +80,7 @@ public class GalleryModel : PageModel
         AdminAccess.IsDevelopmentPasswordBypassEnabled(_configuration, _environment));
     public HashSet<string> AdminOnlyTags { get; private set; } = new(StringComparer.OrdinalIgnoreCase);
     public GalleryFilter ContentFilter { get; private set; } = GalleryFilter.BlurNsfw;
+    public bool AdultConfirmed => _filterPreferences.Read(Request).AdultConfirmed;
 
     public bool IsNsfw(Item item) => GalleryFilterPreferences.IsNsfw(item);
     public bool ShouldBlur(Item item) => GalleryFilterPreferences.ShouldBlur(item, ContentFilter, AdminEnabled);

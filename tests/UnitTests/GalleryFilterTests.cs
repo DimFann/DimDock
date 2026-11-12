@@ -25,6 +25,7 @@ public sealed class GalleryFilterTests
 
     [Theory]
     [InlineData(GalleryFilter.BlurNsfw, false)]
+    [InlineData(GalleryFilter.BlurNsfw, true)]
     [InlineData(GalleryFilter.HideNsfw, false)]
     [InlineData(GalleryFilter.ShowAll, true)]
     [InlineData(GalleryFilter.HideNsfw, true)]
@@ -106,6 +107,21 @@ public sealed class GalleryFilterTests
         Assert.IsType<PageResult>(model.OnPost());
         Assert.False(model.ModelState.IsValid);
         Assert.Equal(0, model.Response.Headers.SetCookie.Count);
+    }
+
+    [Theory]
+    [InlineData(GalleryFilter.BlurNsfw)]
+    [InlineData(GalleryFilter.HideNsfw)]
+    [InlineData(GalleryFilter.ShowAll)]
+    public void ConfirmingImagePreservesExistingFilter(GalleryFilter filter)
+    {
+        var http = new DefaultHttpContext();
+        http.Request.Headers.Cookie = SaveAndReadRequest(new(filter, filter == GalleryFilter.ShowAll)).Headers.Cookie;
+        var model = Model(http);
+        Assert.IsType<JsonResult>(model.OnPostConfirmAdult(confirmAdult: true));
+        var next = new DefaultHttpContext();
+        next.Request.Headers.Cookie = http.Response.Headers.SetCookie.ToString().Split(';')[0];
+        Assert.Equal(new GalleryFilterPreference(filter, true), _preferences.Read(next.Request));
     }
 
     [Fact]

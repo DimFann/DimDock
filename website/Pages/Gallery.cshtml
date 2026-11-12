@@ -271,6 +271,24 @@
     </div>
 </div>
 
+@if (!Model.AdminEnabled)
+{
+    <dialog class="path-description-dialog" data-gallery-age-confirmation
+            data-adult-confirmed="@Model.AdultConfirmed.ToString().ToLowerInvariant()"
+            aria-labelledby="galleryAgeConfirmationTitle">
+        <form method="post" asp-page="/Settings" asp-page-handler="ConfirmAdult">
+            <h2 id="galleryAgeConfirmationTitle">Adult content</h2>
+            <p>This image is tagged NSFW. Confirm that you are 18 or older to continue.</p>
+            <p>You can change NSFW filtering in <a asp-page="/Settings">Settings</a>.
+                Images will stay blurred in the gallery unless you change that setting.</p>
+            <p role="alert" data-gallery-age-error></p>
+            <button type="button" data-cancel-gallery-age>Cancel</button>
+            <button type="submit" name="confirmAdult" value="true">I am 18 or older</button>
+        </form>
+    </dialog>
+}
+
+<script src="~/js/gallery-age-confirmation.js" asp-append-version="true"></script>
 <script>
     const pathTypeSelect = document.querySelector("[data-path-type-form] select[name='type']");
     const comicViewer = document.querySelector("[data-comic-viewer]");

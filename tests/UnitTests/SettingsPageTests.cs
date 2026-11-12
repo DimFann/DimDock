@@ -1,4 +1,5 @@
 using System.Net;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using Microsoft.AspNetCore.Antiforgery;
 using Microsoft.AspNetCore.Hosting;
@@ -16,6 +17,42 @@ namespace UnitTests;
 
 public sealed partial class NavigationSettingsTests
 {
+    [Fact]
+    public async Task BlurredImageConfirmationRemembersAgeWithoutChangingFilter()
+    {
+        await Provider.SaveAsync(new NavigationSettings { Gallery = false });
+        using var client = CreateClient();
+        var html = await client.GetStringAsync("/Settings");
+        var token = ExtractToken(html);
+        using var unconfirmed = await client.PostAsync("/Settings?handler=ConfirmAdult",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["__RequestVerificationToken"] = token }));
+        Assert.Equal(HttpStatusCode.BadRequest, unconfirmed.StatusCode);
+        using var noToken = await client.PostAsync("/Settings?handler=ConfirmAdult",
+            new FormUrlEncodedContent(new Dictionary<string, string> { ["confirmAdult"] = "true" }));
+        Assert.Equal(HttpStatusCode.BadRequest, noToken.StatusCode);
+
+        using var confirmation = await client.PostAsync("/Settings?handler=ConfirmAdult",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["__RequestVerificationToken"] = token,
+                ["confirmAdult"] = "true"
+            }));
+        Assert.Equal(HttpStatusCode.OK, confirmation.StatusCode);
+        using var result = JsonDocument.Parse(await confirmation.Content.ReadAsStringAsync());
+        Assert.True(result.RootElement.GetProperty("confirmed").GetBoolean());
+        var remembered = await client.GetStringAsync("/Settings");
+        Assert.Contains("data-adult-confirmed=\"true\"", remembered);
+        Assert.Contains("value=\"BlurNsfw\" selected=\"selected\"", remembered);
+
+        using var showAll = await client.PostAsync("/Settings",
+            new FormUrlEncodedContent(new Dictionary<string, string>
+            {
+                ["__RequestVerificationToken"] = ExtractToken(remembered),
+                ["Filter"] = "ShowAll"
+            }));
+        Assert.Equal(HttpStatusCode.Redirect, showAll.StatusCode);
+    }
+
     [Fact]
     public async Task SettingsArePublicEvenWhenEverySectionIsHidden()
     {
@@ -117,6 +154,19 @@ public sealed partial class NavigationSettingsTests
             Assert.Contains($"data-blur=\"{(!admin).ToString().ToLowerInvariant()}\"", html);
             Assert.Contains("data-blur=\"false\"", html);
             Assert.Contains($"data-nsfw-admin=\"{admin.ToString().ToLowerInvariant()}\"", html);
+        }
+        var page = await RenderAsync("/Pages/Gallery.cshtml", model);
+        if (admin)
+        {
+            Assert.DoesNotContain("data-gallery-age-confirmation", page);
+        }
+        else
+        {
+            Assert.Contains("data-gallery-age-confirmation", page);
+            Assert.Contains("data-adult-confirmed=\"false\"", page);
+            Assert.Contains("href=\"/Settings\"", page);
+            Assert.Contains("handler=ConfirmAdult", page);
+            Assert.Contains("I am 18 or older", page);
         }
     }
 }

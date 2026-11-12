@@ -44,4 +44,16 @@ public sealed class SettingsModel(GalleryFilterPreferences preferences) : PageMo
         StatusMessage = "Filters saved for this browser.";
         return RedirectToPage("/Settings");
     }
+
+    public IActionResult OnPostConfirmAdult(bool confirmAdult = false)
+    {
+        Response.Headers.CacheControl = "private, no-store";
+        if (!confirmAdult)
+        {
+            return BadRequest("Confirm that you are 18 or older to continue.");
+        }
+        var current = preferences.Read(Request);
+        preferences.Save(HttpContext, current with { AdultConfirmed = true });
+        return new JsonResult(new { confirmed = true });
+    }
 }

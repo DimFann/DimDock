@@ -75,7 +75,9 @@ Home/About and Admin/Login cannot be hidden by these settings.
 Hidden pages require admin login; admins see bold, underlined links on a light blue background.
 Hidden sections also protect their posts, image pages and uploaded assets.
 Public **Settings** stores a gallery NSFW filter in a browser cookie (default: blur).
-Show All requires an 18+ confirmation; admins bypass filtering. Direct viewers are unfiltered.
+Show All and opening a blurred image require an 18+ confirmation, remembered in
+this browser for a year. Confirming an image leaves the blur setting unchanged;
+the prompt links to Settings. Admins bypass filtering. Direct viewers are unfiltered.
 
 ## Data directory
 
