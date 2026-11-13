@@ -55,7 +55,7 @@
             @if (Model.CurrentShortcutId.HasValue)
             {
                 <a class="icon-action-button soft-shadow" href="/image/@Model.Item.Id" aria-label="Go to original item" title="Go to original item">
-                    <img src="/img/first.png" alt="" />
+                    <img src="/img/unlink.png" alt="" />
                 </a>
             }
             @if (Model.Item.IsImage || Model.IsTextDocument)
@@ -519,14 +519,6 @@
         fileContentPreviewPane.hidden = true;
         fileContentEditPane.hidden = false;
         fileContentTextarea.focus();
-    });
-
-    const backToGallery = document.querySelector("[data-back-to-gallery]");
-    backToGallery.addEventListener("click", (event) => {
-        if (document.referrer && new URL(document.referrer).origin === window.location.origin) {
-            event.preventDefault();
-            window.history.back();
-        }
     });
 
     const shortcutToDialog = document.querySelector("[data-shortcut-to-dialog]");

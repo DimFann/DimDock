@@ -173,6 +173,11 @@ try
         };
         await viewer.OnGetAsync(photo.Id, shortcutId);
         var viewerHtml = await RenderAsync(viewer, "/Pages/Image.cshtml");
+        var expectedParentUrl = shortcutId.HasValue ? "/Gallery" : "/Gallery/With%20space";
+        Check(viewer.GalleryUrl == expectedParentUrl &&
+            viewerHtml.Contains($"href=\"{expectedParentUrl}\" data-back-to-gallery") &&
+            !viewerHtml.Contains("window.history.back()") && !viewerHtml.Contains("document.referrer"),
+            "viewer back link always uses the shortcut or original parent, not browser history");
         Check(viewerHtml.Contains("aria-label=\"Go to original item\"") == shortcutId.HasValue,
             "original item button appears only in shortcut viewer");
         if (shortcutId.HasValue)
@@ -181,7 +186,7 @@ try
             var originalIndex = viewerHtml.IndexOf("aria-label=\"Go to original item\"", StringComparison.Ordinal);
             var sourceIndex = viewerHtml.IndexOf("aria-label=\"View source\"", StringComparison.Ordinal);
             Check(viewerHtml.Contains($"href=\"/image/{photo.Id}\" aria-label=\"Go to original item\"") &&
-                viewerHtml.Contains("src=\"/img/first.png\"") && backIndex < originalIndex && originalIndex < sourceIndex,
+                viewerHtml.Contains("src=\"/img/unlink.png\"") && backIndex < originalIndex && originalIndex < sourceIndex,
                 "original navigation removes shortcut context and sits between back and source");
         }
     }
