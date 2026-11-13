@@ -362,6 +362,22 @@ try
     var bulkTokens = services.GetRequiredService<IAntiforgery>().GetAndStoreTokens(bulkTokenHttp);
     bulkModel.Request.Headers.Cookie = bulkTokenHttp.Response.Headers.SetCookie.ToString().Split(';')[0];
     bulkModel.Request.Headers[bulkTokens.HeaderName!] = bulkTokens.RequestToken;
+    context.Shortcuts.Add(new Shortcut { OriginalId = bulkClash.Id, OriginalName = "clash.png", ParentPath = "2021", ShortcutPath = "Album/Child" });
+    await context.SaveChangesAsync();
+    var shortcutResult = await bulkModel.OnPostBulkShortcutAsync("2021", [bulkKeep.Id, bulkClash.Id], [], "Album/Child");
+    context.ChangeTracker.Clear();
+    Check(shortcutResult is JsonResult { Value: not null } shortcutJson &&
+        JsonSerializer.Serialize(shortcutJson.Value).Contains("\"created\":1") &&
+        await context.Shortcuts.CountAsync(link => link.ShortcutPath == "Album/Child" && link.OriginalId == bulkKeep.Id && link.ParentPath == "2021") == 1 &&
+        await context.Shortcuts.CountAsync(link => link.ShortcutPath == "Album/Child" && link.OriginalId == bulkClash.Id) == 1,
+        "bulk shortcut creates new links and skips existing ones");
+    Check(await bulkModel.OnPostBulkShortcutAsync("2021", [bulkKeep.Id], [], "missing") is BadRequestObjectResult &&
+        await bulkModel.OnPostBulkShortcutAsync("Album", [bulkKeep.Id], [], "Album/Child") is BadRequestObjectResult,
+        "bulk shortcut validates destination and source gallery");
+    await context.Shortcuts.Where(link => link.OriginalId == bulkKeep.Id || link.OriginalId == bulkClash.Id).ExecuteDeleteAsync();
+    bulkModel = await GetGalleryAsync("2021", admin: true);
+    bulkModel.Request.Headers.Cookie = bulkTokenHttp.Response.Headers.SetCookie.ToString().Split(';')[0];
+    bulkModel.Request.Headers[bulkTokens.HeaderName!] = bulkTokens.RequestToken;
     var bulkResult = await bulkModel.OnPostBulkMoveAsync("2021", [bulkKeep.Id, bulkClash.Id], [], "Album");
     context.ChangeTracker.Clear();
     Check(bulkResult is JsonResult { Value: not null } bulkJson && JsonSerializer.Serialize(bulkJson.Value).Contains("clash.png"),

@@ -68,6 +68,7 @@
                     <div class="bulk-selection-actions">
                         <button type="button" class="path-admin-button" data-select-all-items>Select All</button>
                         <button type="button" class="path-admin-button" data-open-bulk-move disabled>Move Selected</button>
+                        <button type="button" class="path-admin-button" data-open-bulk-shortcut disabled>Shortcut To</button>
                         <button type="button" class="path-admin-button" data-open-bulk-tags disabled>Add Tags</button>
                         <button type="button" class="path-admin-button path-admin-delete" data-open-bulk-delete disabled>Delete selected</button>
                         <button type="button" class="path-admin-button" data-exit-bulk-select>Cancel Selection</button>
@@ -622,6 +623,7 @@
                 `${selectedCount} selected`;
             document.querySelector("[data-open-bulk-delete]").disabled = selectedCount === 0;
             document.querySelector("[data-open-bulk-move]").disabled = selectedCount === 0;
+            document.querySelector("[data-open-bulk-shortcut]").disabled = selectedCount === 0;
             document.querySelector("[data-open-bulk-tags]").disabled = selectedCount === 0;
         }
 
@@ -720,7 +722,7 @@
             document.querySelector("[data-bulk-delete-error]").textContent = "";
             bulkDeleteDialog.showModal();
         });
-        document.querySelector("[data-open-bulk-move]").addEventListener("click", () => {
+        function fillBulkMoveEntries() {
             const entries = document.querySelector("[data-bulk-move-entries]");
             entries.replaceChildren();
             for (const input of selectedBulkItems()) {
@@ -730,8 +732,14 @@
                 hiddenInput.value = input.dataset.shortcutId || input.value;
                 entries.append(hiddenInput);
             }
-
+        }
+        document.querySelector("[data-open-bulk-move]").addEventListener("click", () => {
+            fillBulkMoveEntries();
             openGalleryMoveDialog(false);
+        });
+        document.querySelector("[data-open-bulk-shortcut]").addEventListener("click", () => {
+            fillBulkMoveEntries();
+            openGalleryMoveDialog(false, null, false, true);
         });
         bulkDeleteDialog.querySelectorAll("[data-close-bulk-delete]").forEach((button) => {
             button.addEventListener("click", () => bulkDeleteDialog.close());
@@ -747,14 +755,17 @@
         let movingGalleryPath = false;
         let movingDirectoryShortcutId = null;
         let creatingDirectoryShortcut = false;
+        let creatingItemShortcuts = false;
         let moveSearchVersion = 0;
-        function openGalleryMoveDialog(movePath, directoryShortcutId = null, createShortcut = false) {
+        function openGalleryMoveDialog(movePath, directoryShortcutId = null, createShortcut = false, createItemShortcuts = false) {
             window.clearTimeout(bulkMoveSearchTimeout);
             moveSearchVersion++;
             movingGalleryPath = movePath;
             movingDirectoryShortcutId = directoryShortcutId;
             creatingDirectoryShortcut = createShortcut;
-            document.querySelector("#bulkMoveTitle").textContent = createShortcut ? "Shortcut To" : directoryShortcutId ? "Move directory shortcut" :
+            creatingItemShortcuts = createItemShortcuts;
+            document.querySelector("#bulkMoveTitle").textContent = createItemShortcuts ? "Shortcut selected items to" :
+                createShortcut ? "Shortcut To" : directoryShortcutId ? "Move directory shortcut" :
                 movePath ? "Move Path" : "Move selected items";
             document.querySelector("[data-move-path-note]").hidden = !movePath;
             const search = document.querySelector("[data-bulk-move-path-search]");
@@ -762,7 +773,8 @@
             document.querySelector("[data-bulk-move-path-results]").replaceChildren();
             document.querySelector("[data-bulk-move-target-path]").value = "";
             document.querySelector("[data-bulk-move-submit]").disabled = true;
-            document.querySelector("[data-bulk-move-submit]").textContent = createShortcut ? "Create shortcut" : directoryShortcutId ? "Move shortcut" :
+            document.querySelector("[data-bulk-move-submit]").textContent = createItemShortcuts ? "Create shortcuts" :
+                createShortcut ? "Create shortcut" : directoryShortcutId ? "Move shortcut" :
                 movePath ? "Move path" : "Move selected";
             document.querySelector("[data-bulk-move-search-status]").textContent =
                 "Enter at least two characters to search, or / for root.";
@@ -839,10 +851,12 @@
             const submit = document.querySelector("[data-bulk-move-submit]");
             if (submit.disabled) return;
             const errorStatus = document.querySelector("[data-bulk-move-error]");
-            errorStatus.textContent = creatingDirectoryShortcut ? "Creating directory shortcut..." : movingDirectoryShortcutId ? "Moving directory shortcut..." :
+            errorStatus.textContent = creatingItemShortcuts ? "Creating shortcuts..." :
+                creatingDirectoryShortcut ? "Creating directory shortcut..." : movingDirectoryShortcutId ? "Moving directory shortcut..." :
                 movingGalleryPath ? "Moving path..." : "Moving selected items...";
             const url = new URL(window.location.href);
-            url.searchParams.set("handler", creatingDirectoryShortcut ? "CreateDirectoryShortcut" : movingDirectoryShortcutId ? "MoveDirectoryShortcut" :
+            url.searchParams.set("handler", creatingItemShortcuts ? "BulkShortcut" :
+                creatingDirectoryShortcut ? "CreateDirectoryShortcut" : movingDirectoryShortcutId ? "MoveDirectoryShortcut" :
                 movingGalleryPath ? "MovePath" : "BulkMove");
             const body = new FormData(bulkMoveForm);
             if (movingDirectoryShortcutId) body.set("shortcutId", movingDirectoryShortcutId);
@@ -859,6 +873,12 @@
                     message => errorStatus.textContent = message);
                 if (creatingDirectoryShortcut) {
                     bulkMoveDialog.close();
+                    return;
+                }
+                if (creatingItemShortcuts) {
+                    bulkMoveDialog.close();
+                    submit.disabled = false;
+                    window.alert(result.message);
                     return;
                 }
                 if (result.message) window.alert(result.message);

@@ -800,6 +800,97 @@ public class GalleryModel : PageModel
         return new JsonResult(new { taggedItems = targets.Count, tags = normalizedTags });
     }
 
+    public async Task<IActionResult> OnPostBulkShortcutAsync(
+        [FromForm] string? path,
+        [FromForm] List<ulong>? itemIds,
+        [FromForm] List<ulong>? shortcutIds,
+        [FromForm] string? targetPath)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (!string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        if (string.IsNullOrEmpty(sanitizedPath))
+        {
+            sanitizedPath = "root";
+        }
+        if (string.IsNullOrWhiteSpace(targetPath) || targetPath.Length > 1024 ||
+            !await _context.Paths.AnyAsync(entry => entry.Path == targetPath, HttpContext.RequestAborted))
+        {
+            return BadRequest("Select an existing destination directory.");
+        }
+
+        var selectedItemIds = itemIds?.Distinct().ToList() ?? [];
+        var selectedShortcutIds = shortcutIds?.Distinct().ToList() ?? [];
+        if (selectedItemIds.Count + selectedShortcutIds.Count == 0)
+        {
+            return BadRequest("Select at least one item.");
+        }
+        if (selectedItemIds.Count + selectedShortcutIds.Count > 500)
+        {
+            return BadRequest("Select no more than 500 items at a time.");
+        }
+        var directItemCount = await _context.Items
+            .CountAsync(item => item.ParentPath == sanitizedPath && selectedItemIds.Contains(item.Id), HttpContext.RequestAborted);
+        var shortcutOriginalIds = await _context.Shortcuts
+            .Where(shortcut => shortcut.ShortcutPath == sanitizedPath && selectedShortcutIds.Contains(shortcut.Id))
+            .Select(shortcut => shortcut.OriginalId)
+            .ToListAsync(HttpContext.RequestAborted);
+        if (directItemCount != selectedItemIds.Count || shortcutOriginalIds.Count != selectedShortcutIds.Count)
+        {
+            return BadRequest("One or more selected items are not in this gallery.");
+        }
+
+        // Shortcut selections link the original image, not the shortcut itself.
+        var originalIds = selectedItemIds.Concat(shortcutOriginalIds).Distinct().ToList();
+        var originals = await _context.Items.AsNoTracking()
+            .Where(item => originalIds.Contains(item.Id))
+            .ToListAsync(HttpContext.RequestAborted);
+        var alreadyLinked = (await _context.Shortcuts
+                .Where(shortcut => shortcut.ShortcutPath == targetPath && originalIds.Contains(shortcut.OriginalId))
+                .Select(shortcut => shortcut.OriginalId)
+                .ToListAsync(HttpContext.RequestAborted))
+            .ToHashSet();
+        var skipped = new List<string>();
+        var created = 0;
+        foreach (var item in originals.OrderBy(item => item.OriginalName, StringComparer.OrdinalIgnoreCase))
+        {
+            if (alreadyLinked.Contains(item.Id) ||
+                string.Equals(item.ParentPath ?? "root", targetPath, StringComparison.OrdinalIgnoreCase))
+            {
+                skipped.Add(item.OriginalName);
+                continue;
+            }
+            _context.Shortcuts.Add(new Shortcut
+            {
+                OriginalId = item.Id,
+                OriginalName = item.OriginalName,
+                ParentPath = item.ParentPath,
+                ShortcutPath = targetPath
+            });
+            created++;
+        }
+        await _context.SaveChangesAsync(HttpContext.RequestAborted);
+
+        return new JsonResult(new
+        {
+            created,
+            skipped,
+            message = $"Created {created} shortcut(s) in {(targetPath == "root" ? "/" : targetPath)}." +
+                (skipped.Count == 0 ? "" : $" Skipped {skipped.Count} already there: " +
+                    string.Join(", ", skipped.Take(20)) + (skipped.Count > 20 ? ", ..." : ""))
+        });
+    }
+
     public async Task<IActionResult> OnPostBulkDeleteAsync(
         [FromForm] string? path,
         [FromForm] List<ulong>? itemIds,
