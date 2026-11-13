@@ -421,6 +421,16 @@
         pageButtons.prev?.addEventListener("click", () => displayComicPage(currentPage - 1));
         pageButtons.next?.addEventListener("click", () => displayComicPage(currentPage + 1));
         pageButtons.last?.addEventListener("click", () => displayComicPage(pages.length - 1));
+        image?.addEventListener("click", (event) => {
+            const bounds = image.getBoundingClientRect();
+            if (bounds.width === 0) return;
+            const position = (event.clientX - bounds.left) / bounds.width;
+            if (position >= 0 && position <= 0.2) {
+                pageButtons.prev?.click();
+            } else if (position >= 0.8 && position <= 1) {
+                pageButtons.next?.click();
+            }
+        });
         if (comicViewer && !comicViewer.hidden) {
             displayComicPage(0);
         }
