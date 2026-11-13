@@ -702,18 +702,9 @@ public class GalleryModel : PageModel
             return BadRequest("Invalid gallery path.");
         }
 
-        try
-        {
-            var renamedPath = await _filesystemPersistence.RenamePathAsync(
-                sanitizedPath,
-                newName ?? string.Empty,
-                HttpContext.RequestAborted);
-            return new JsonResult(new { path = renamedPath });
-        }
-        catch (GalleryPathRenameException error)
-        {
-            return StatusCode(StatusCodes.Status409Conflict, error.Message);
-        }
+        return await RunPathOperationAsync(async (services, token) => new GalleryOperationResult(
+            await services.GetRequiredService<FilesystemPersistenceService>()
+                .RenamePathAsync(sanitizedPath, newName ?? string.Empty, token)));
     }
 
     public async Task<IActionResult> OnPostBulkAddTagsAsync(
@@ -1138,18 +1129,77 @@ public class GalleryModel : PageModel
         {
             return BadRequest("Select an existing destination directory.");
         }
-        try
+        return await RunPathOperationAsync(async (services, token) => new GalleryOperationResult(
+            await services.GetRequiredService<FilesystemPersistenceService>()
+                .MovePathAsync(sanitizedPath, targetPath, token)));
+    }
+
+    public async Task<IActionResult> OnPostReloadPathAsync([FromForm] string? path)
+    {
+        if (!AdminEnabled)
         {
-            var movedPath = await _filesystemPersistence.MovePathAsync(sanitizedPath, targetPath, HttpContext.RequestAborted);
+            return NotFound();
+        }
+        if (!await IsAntiForgeryTokenValidAsync())
+        {
+            return BadRequest("Invalid anti-forgery token.");
+        }
+        var sanitizedPath = SanitizePath(path ?? string.Empty).TrimStart('/');
+        if (string.IsNullOrEmpty(sanitizedPath) ||
+            !string.Equals(sanitizedPath, path?.TrimStart('/'), StringComparison.Ordinal))
+        {
+            return BadRequest("Invalid gallery path.");
+        }
+        return await RunPathOperationAsync((services, token) =>
+            services.GetRequiredService<GalleryPathReloader>().ReloadAsync(sanitizedPath, token));
+    }
+
+    public IActionResult OnGetPathOperation([FromQuery] string? id)
+    {
+        if (!AdminEnabled)
+        {
+            return NotFound();
+        }
+        var operation = HttpContext.RequestServices.GetRequiredService<GalleryPathOperations>().Find(id);
+        return operation is null
+            ? NotFound("The path operation is no longer tracked. Refresh the page to check its current state.")
+            : PathOperationResult(operation);
+    }
+
+    private async Task<IActionResult> RunPathOperationAsync(
+        Func<IServiceProvider, CancellationToken, Task<GalleryOperationResult>> run)
+    {
+        var operation = HttpContext.RequestServices.GetRequiredService<GalleryPathOperations>().TryStart(run);
+        if (operation is null)
+        {
+            return StatusCode(
+                StatusCodes.Status409Conflict,
+                "Another path move, rename or reload is still running. Try again when it finishes.");
+        }
+        await Task.WhenAny(operation.Task, Task.Delay(GalleryPathOperations.InlineWait, HttpContext.RequestAborted));
+        return PathOperationResult(operation);
+    }
+
+    private IActionResult PathOperationResult(GalleryPathOperations.Operation operation)
+    {
+        if (!operation.Task.IsCompleted)
+        {
+            return StatusCode(StatusCodes.Status202Accepted, new { operationId = operation.Id });
+        }
+        if (operation.Task.IsCompletedSuccessfully)
+        {
+            var (path, message) = operation.Task.Result;
             return new JsonResult(new
             {
-                redirectPath = "/Gallery/" + string.Join('/', movedPath.Split('/').Select(Uri.EscapeDataString))
+                path,
+                message,
+                redirectPath = "/Gallery/" + string.Join('/', path.Split('/').Select(Uri.EscapeDataString))
             });
         }
-        catch (GalleryPathRenameException error)
-        {
-            return StatusCode(StatusCodes.Status409Conflict, error.Message);
-        }
+        var error = operation.Task.Exception?.GetBaseException() ?? new OperationCanceledException();
+        return StatusCode(
+            GalleryPathOperations.IsUserError(error) ? StatusCodes.Status409Conflict : StatusCodes.Status500InternalServerError,
+            GalleryPathOperations.ErrorMessage(error));
     }
 
     public async Task<IActionResult> OnPostBulkMoveAsync(
@@ -1664,60 +1714,8 @@ public class GalleryModel : PageModel
     private static string JoinStorageKey(string directory, string name) =>
         string.IsNullOrEmpty(directory) ? name : $"{directory}/{name}";
 
-    private static DateTime GetCreatedDate(string fileName, string path, DateTime fallback)
-    {
-        var filenameDate = System.Text.RegularExpressions.Regex.Match(
-            fileName,
-            @"^(\d{4})-?(\d{2})(\d{2})");
-        if (filenameDate.Success &&
-            int.TryParse(filenameDate.Groups[1].Value, out var fileYear) &&
-            int.TryParse(filenameDate.Groups[2].Value, out var fileMonth) &&
-            int.TryParse(filenameDate.Groups[3].Value, out var fileDay) &&
-            fileYear >= 2000 &&
-            fileYear <= fallback.Year &&
-            fileMonth is >= 1 and <= 12 &&
-            fileDay is >= 1 and <= 31 &&
-            DateTime.TryParseExact(
-                $"{fileYear:D4}-{fileMonth:D2}-{fileDay:D2}",
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var parsedFilenameDate))
-        {
-            return parsedFilenameDate;
-        }
-
-        var monthSegment = path
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault(segment =>
-                System.Text.RegularExpressions.Regex.IsMatch(segment, @"^\d{4}-\d{2}$"));
-        if (monthSegment is not null &&
-            DateTime.TryParseExact(
-                $"{monthSegment}-01",
-                "yyyy-MM-dd",
-                CultureInfo.InvariantCulture,
-                DateTimeStyles.None,
-                out var parsedMonthDate) &&
-            parsedMonthDate.Year >= 2000 &&
-            parsedMonthDate.Year <= fallback.Year)
-        {
-            return parsedMonthDate;
-        }
-
-        var yearSegment = path
-            .Split('/', StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault(segment =>
-                System.Text.RegularExpressions.Regex.IsMatch(segment, @"^\d{4}$"));
-        if (yearSegment is not null &&
-            int.TryParse(yearSegment, out var pathYear) &&
-            pathYear >= 2000 &&
-            pathYear <= fallback.Year)
-        {
-            return new DateTime(pathYear, 1, 1);
-        }
-
-        return new DateTime(2000, 1, 1);
-    }
+    private static DateTime GetCreatedDate(string fileName, string path, DateTime fallback) =>
+        GalleryItemDates.Created(fileName, path, fallback);
 
     private async Task EnsurePendingPathDeletionsTableAsync()
     {

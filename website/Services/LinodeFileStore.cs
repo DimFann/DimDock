@@ -6,7 +6,10 @@ using Microsoft.AspNetCore.StaticFiles;
 
 namespace Website.Services;
 
-public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions options) : IFileStore, IChunkedUploadStore
+public sealed class LinodeFileStore(
+    IAmazonS3 client,
+    LinodeStorageOptions options,
+    ILogger<LinodeFileStore>? logger = null) : IFileStore, IChunkedUploadStore
 {
     private static readonly FileExtensionContentTypeProvider ContentTypes = new();
     private static readonly TimeSpan AbandonedChunkLifetime = TimeSpan.FromDays(1);
@@ -459,16 +462,63 @@ public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions optio
         await CreateDirectoryAsync(area,
             normalizedDestination.Contains('/') ? normalizedDestination[..normalizedDestination.LastIndexOf('/')] : "",
             cancellationToken);
-        foreach (var item in objects)
+        // Copy and verify the entire subtree before deleting anything.
+        try
         {
-            await CopyVerifiedAsync(item.Key, destination + item.Key[source.Length..], cancellationToken);
+            await Parallel.ForEachAsync(
+                objects,
+                new ParallelOptions { MaxDegreeOfParallelism = MoveParallelism, CancellationToken = cancellationToken },
+                async (item, token) =>
+                    await CopyVerifiedAsync(item.Key, destination + item.Key[source.Length..], token));
         }
-        // Copy and verify the entire subtree before deleting anything. Interrupted
-        // deletion leaves recoverable duplicates and surfaces an error to the caller.
-        foreach (var item in objects)
+        catch
         {
-            await DeleteObjectAsync(item.Key, cancellationToken);
+            // The destination did not exist before the move, so remove the partial copy.
+            await DeleteObjectsBestEffortAsync(
+                (await ObjectsAsync(destination, CancellationToken.None)).Select(item => item.Key));
+            throw;
         }
+        // The destination is now complete; source deletion must not be abandoned midway.
+        var leftovers = await DeleteObjectsBestEffortAsync(objects.Select(item => item.Key));
+        if (leftovers.Count > 0)
+        {
+            logger?.LogWarning(
+                "Moved {Source} to {Destination}, but {Count} source objects could not be deleted.",
+                source, destination, leftovers.Count);
+        }
+    }
+
+    private const int MoveParallelism = 8;
+
+    private async Task<IReadOnlyList<string>> DeleteObjectsBestEffortAsync(IEnumerable<string> keys)
+    {
+        var failed = new System.Collections.Concurrent.ConcurrentBag<string>();
+        await Parallel.ForEachAsync(
+            keys,
+            new ParallelOptions { MaxDegreeOfParallelism = MoveParallelism },
+            async (key, _) =>
+            {
+                for (var attempt = 1; ; attempt++)
+                {
+                    try
+                    {
+                        await DeleteObjectAsync(key, CancellationToken.None);
+                        return;
+                    }
+                    catch (Exception error) when (attempt < 3)
+                    {
+                        logger?.LogDebug(error, "Retrying deletion of {Key}.", key);
+                        await Task.Delay(TimeSpan.FromMilliseconds(250 * attempt));
+                    }
+                    catch (Exception error)
+                    {
+                        logger?.LogWarning(error, "Could not delete {Key}.", key);
+                        failed.Add(key);
+                        return;
+                    }
+                }
+            });
+        return failed.ToList();
     }
 
     public async Task<IReadOnlyList<string>> ListFilesAsync(FileStoreArea area, string directoryKey, bool recursive = false,
@@ -483,14 +533,23 @@ public sealed class LinodeFileStore(IAmazonS3 client, LinodeStorageOptions optio
     }
 
     public async Task<IReadOnlyList<string>> ListDirectoriesAsync(FileStoreArea area, string directoryKey,
-        CancellationToken cancellationToken = default)
+        bool recursive = false, CancellationToken cancellationToken = default)
     {
         var prefix = DirectoryPrefix(area, directoryKey);
         var root = DirectoryPrefix(area, "");
         return (await ObjectsAsync(prefix, cancellationToken))
             .Select(item => item.Key[prefix.Length..])
-            .Where(relative => relative.Contains('/'))
-            .Select(relative => prefix[root.Length..] + relative[..relative.IndexOf('/')])
+            .SelectMany(relative =>
+            {
+                var directories = new List<string>();
+                for (var slash = relative.IndexOf('/'); slash > 0; slash = relative.IndexOf('/', slash + 1))
+                {
+                    directories.Add(relative[..slash]);
+                    if (!recursive) break;
+                }
+                return directories;
+            })
+            .Select(relative => prefix[root.Length..] + relative)
             .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal).ToList();
     }
 

@@ -50,6 +50,11 @@
     width: auto;
   }
 
+  .gallery-admin-toolbar .admin-toolbar-maintenance {
+    grid-area: 3 / 1;
+    justify-self: end;
+  }
+
   .gallery-admin-toolbar .bulk-delete-toolbar,
   .gallery-admin-toolbar .path-upload-status {
     grid-column: 1 / -1;

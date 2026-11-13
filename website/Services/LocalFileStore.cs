@@ -439,9 +439,10 @@ public sealed class LocalFileStore : IFileStore, IChunkedUploadStore
     public Task<IReadOnlyList<string>> ListDirectoriesAsync(
         FileStoreArea area,
         string directoryKey,
+        bool recursive = false,
         CancellationToken cancellationToken = default) =>
         Task.FromResult<IReadOnlyList<string>>(
-            Enumerate(area, directoryKey, recursive: false, directories: true, cancellationToken));
+            Enumerate(area, directoryKey, recursive, directories: true, cancellationToken));
 
     private List<string> Enumerate(
         FileStoreArea area,

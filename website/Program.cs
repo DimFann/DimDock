@@ -100,6 +100,8 @@ builder.Services.AddScoped<AdminOnlyTagsProvider>();
 builder.Services.AddScoped<NavigationSettingsProvider>();
 builder.Services.AddSingleton<GalleryFilterPreferences>();
 builder.Services.AddScoped<FilesystemPersistenceService>();
+builder.Services.AddScoped<GalleryPathReloader>();
+builder.Services.AddSingleton<GalleryPathOperations>();
 builder.Services.AddHttpClient("ThumbnailService", client =>
 {
     client.BaseAddress = new Uri(

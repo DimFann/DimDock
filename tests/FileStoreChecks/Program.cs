@@ -48,6 +48,10 @@ try
         snapshots.Add(string.Join('|', await store.ListFilesAsync(FileStoreArea.Gallery, "", recursive: true)));
         Check((await store.ListDirectoriesAsync(FileStoreArea.Gallery, "")).SequenceEqual(["2023"]), "directory listing");
         Check((await store.ListDirectoriesAsync(FileStoreArea.Gallery, "2023/2023-01")).SequenceEqual(["2023/2023-01/empty"]), "empty directory");
+        Check((await store.ListDirectoriesAsync(FileStoreArea.Gallery, "", recursive: true)).Order(StringComparer.Ordinal)
+            .SequenceEqual(["2023", "2023/2023-01", "2023/2023-01/empty"]), "recursive directory listing");
+        Check((await store.ListDirectoriesAsync(FileStoreArea.Gallery, "2023", recursive: true)).Order(StringComparer.Ordinal)
+            .SequenceEqual(["2023/2023-01", "2023/2023-01/empty"]), "nested recursive directory listing");
         await ExpectAsync<IOException>(async () =>
         {
             await using var input = new MemoryStream([1]);
@@ -117,6 +121,14 @@ try
     await ExpectAsync<AmazonS3Exception>(() => interrupted.MoveDirectoryAsync(FileStoreArea.Gallery, "source", "destination"));
     Check(await remote.FileExistsAsync(FileStoreArea.Gallery, "source/a.txt") &&
         await remote.FileExistsAsync(FileStoreArea.Gallery, "source/b.txt"), "copy failure retains all source files");
+    Check(!await remote.DirectoryExistsAsync(FileStoreArea.Gallery, "destination"), "copy failure removes partial destination");
+    for (var index = 0; index < 40; index++)
+        await remote.WriteAllTextAsync(FileStoreArea.Gallery, $"bulk/nested/{index:00}.txt", index.ToString());
+    await remote.MoveDirectoryAsync(FileStoreArea.Gallery, "bulk", "bulk-moved");
+    Check(!await remote.DirectoryExistsAsync(FileStoreArea.Gallery, "bulk") &&
+        (await remote.ListFilesAsync(FileStoreArea.Gallery, "bulk-moved/nested")).Count == 40 &&
+        await remote.ReadAllTextAsync(FileStoreArea.Gallery, "bulk-moved/nested/39.txt") == "39",
+        "parallel directory move copies and removes every object");
     using var denied = new DeniedClient(endpoint);
     var inaccessible = new LinodeFileStore(denied, options);
     await ExpectAsync<AmazonS3Exception>(() => inaccessible.FileExistsAsync(FileStoreArea.Gallery, "source/a.txt"));
@@ -238,7 +250,7 @@ sealed class FailingClient(string endpoint) : AmazonS3Client(new BasicAWSCredent
     private int _copies;
     public override Task<CopyObjectResponse> CopyObjectAsync(CopyObjectRequest request, CancellationToken cancellationToken = default)
     {
-        if (++_copies == 2) throw new AmazonS3Exception("Injected copy failure") { StatusCode = HttpStatusCode.Forbidden };
+        if (Interlocked.Increment(ref _copies) == 2) throw new AmazonS3Exception("Injected copy failure") { StatusCode = HttpStatusCode.Forbidden };
         return base.CopyObjectAsync(request, cancellationToken);
     }
 }

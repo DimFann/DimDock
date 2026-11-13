@@ -441,7 +441,7 @@ public sealed class FilesystemPersistenceService(
             return;
         }
 
-        foreach (var key in await fileStore.ListDirectoriesAsync(FileStoreArea.Blogs, BlogDraftAssetsDirectory, cancellationToken))
+        foreach (var key in await fileStore.ListDirectoriesAsync(FileStoreArea.Blogs, BlogDraftAssetsDirectory, cancellationToken: cancellationToken))
         {
             var draftId = key.TrimEnd('/')[(key.TrimEnd('/').LastIndexOf('/') + 1)..];
             if (!TryGetBlogDraftCreated(draftId, out var created) || DateTime.UtcNow - created > BlogDraftLifetime)
@@ -1244,6 +1244,8 @@ public sealed class FilesystemPersistenceService(
             sourceDirectory,
             destinationDirectory,
             cancellationToken);
+        // Storage now lives at the new path; the database must follow even if the caller goes away.
+        cancellationToken = CancellationToken.None;
         try
         {
             var executionStrategy = context.Database.CreateExecutionStrategy();

@@ -119,5 +119,6 @@ public interface IFileStore
     Task<IReadOnlyList<string>> ListDirectoriesAsync(
         FileStoreArea area,
         string directoryKey,
+        bool recursive = false,
         CancellationToken cancellationToken = default);
 }

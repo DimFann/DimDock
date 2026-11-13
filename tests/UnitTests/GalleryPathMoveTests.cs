@@ -48,6 +48,9 @@ public sealed partial class NavigationSettingsTests
         Assert.Equal(admin, html.Contains("class=\"directory-shortcut-delete-form\""));
         Assert.Equal(admin, html.Contains("data-move-directory-shortcut=\"7\""));
         Assert.Equal(admin, html.Contains("data-open-directory-shortcut>Shortcut To</button>"));
+        Assert.Equal(admin, html.Contains(">Reload Path</button>"));
+        Assert.Equal(admin, html.Contains("data-reload-path-dialog aria-labelledby"));
+        Assert.Contains("url.searchParams.set(\"handler\", \"ReloadPath\")", html);
         Assert.DoesNotContain("Delete directory shortcut Folder", html);
         if (admin)
         {

@@ -54,6 +54,10 @@
                     </label>
                 }
             </div>
+            <div class="admin-toolbar-maintenance" aria-label="Path maintenance">
+                <button type="button" class="path-admin-button" data-open-reload-path
+                        title="Scan storage for this path and its subdirectories and index anything new">Reload Path</button>
+            </div>
             @if (Model.Items.Count > 0)
             {
                 <div class="bulk-delete-toolbar" data-bulk-selection-controls hidden aria-label="Bulk selection">
@@ -133,6 +137,29 @@
                 <div class="path-admin-dialog-actions">
                     <button type="button" data-close-path-dialog>Cancel</button>
                     <button type="submit">Add Path</button>
+                </div>
+            </form>
+        </dialog>
+
+        <dialog class="path-description-dialog path-admin-dialog" data-reload-path-dialog aria-labelledby="reloadPathTitle">
+            <form method="post" data-reload-path-form>
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="path" value="@Model.CurrentPath" />
+                <div class="path-description-dialog-header">
+                    <h2 id="reloadPathTitle">Reload Path</h2>
+                    <button type="button" class="icon-action-button" data-close-path-dialog aria-label="Close" title="Close">
+                        <img src="/img/cancel.png" alt="" />
+                    </button>
+                </div>
+                <p>
+                    Scan storage for <strong>@Model.CurrentPath</strong> and all of its subdirectories, like the path loader does.
+                    New files and directories are added, <code>.dimdock.json</code> tags, types and descriptions are applied,
+                    and missing thumbnails are generated. Nothing is removed.
+                </p>
+                <p class="description-editor-error" data-reload-path-status role="status"></p>
+                <div class="path-admin-dialog-actions">
+                    <button type="button" data-close-path-dialog>Cancel</button>
+                    <button type="submit" data-reload-path-submit>Reload</button>
                 </div>
             </form>
         </dialog>
@@ -289,6 +316,10 @@
 }
 
 <script src="~/js/gallery-age-confirmation.js" asp-append-version="true"></script>
+@if (Model.AdminEnabled)
+{
+    <script src="~/js/gallery-path-operations.js" asp-append-version="true"></script>
+}
 <script>
     const pathTypeSelect = document.querySelector("[data-path-type-form] select[name='type']");
     const comicViewer = document.querySelector("[data-comic-viewer]");
@@ -822,10 +853,10 @@
                     body,
                     headers: { "X-Requested-With": "XMLHttpRequest" }
                 });
-                if (!response.ok) {
-                    throw new Error(await response.text() || "Moving to the selected directory failed.");
-                }
-                const result = await response.json();
+                const result = await DimDockPathOperation.complete(
+                    response,
+                    "Moving to the selected directory failed.",
+                    message => errorStatus.textContent = message);
                 if (creatingDirectoryShortcut) {
                     bulkMoveDialog.close();
                     return;
@@ -897,6 +928,7 @@
     const addPathDialog = document.querySelector("[data-add-path-dialog]");
     const renamePathDialog = document.querySelector("[data-rename-path-dialog]");
     const deletePathDialog = document.querySelector("[data-delete-path-dialog]");
+    const reloadPathDialog = document.querySelector("[data-reload-path-dialog]");
     const uploadPicker = document.querySelector("[data-upload-picker]");
     const uploadStatus = document.querySelector("[data-upload-status]");
     const uploadProgress = document.querySelector("[data-upload-progress]");
@@ -1035,6 +1067,15 @@
             return;
         }
 
+        if (event.target.closest("[data-open-reload-path]")) {
+            const submit = reloadPathDialog.querySelector("[data-reload-path-submit]");
+            if (!submit.dataset.finished) {
+                reloadPathDialog.querySelector("[data-reload-path-status]").textContent = "";
+            }
+            reloadPathDialog.showModal();
+            return;
+        }
+
         if (event.target.closest("[data-open-upload-picker]")) {
             uploadPicker.click();
             return;
@@ -1047,6 +1088,39 @@
 
         if (event.target.closest("[data-close-path-dialog]")) {
             event.target.closest("dialog").close();
+        }
+    });
+
+    reloadPathDialog?.querySelector("[data-reload-path-form]").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const form = event.target;
+        const submit = form.querySelector("[data-reload-path-submit]");
+        if (submit.dataset.finished) {
+            window.location.reload();
+            return;
+        }
+        const status = form.querySelector("[data-reload-path-status]");
+        status.textContent = "Reloading path...";
+        submit.disabled = true;
+        try {
+            const url = new URL(window.location.href);
+            url.searchParams.set("handler", "ReloadPath");
+            const response = await fetch(url, {
+                method: "POST",
+                body: new FormData(form),
+                headers: { "X-Requested-With": "XMLHttpRequest" }
+            });
+            const result = await DimDockPathOperation.complete(
+                response,
+                "Reloading path failed.",
+                message => status.textContent = message);
+            status.textContent = result.message || "Reload finished.";
+            submit.dataset.finished = "true";
+            submit.textContent = "Close & refresh";
+        } catch (requestError) {
+            status.textContent = requestError.message;
+        } finally {
+            submit.disabled = false;
         }
     });
 
@@ -1075,11 +1149,10 @@
                 body: new FormData(form),
                 headers: { "X-Requested-With": "XMLHttpRequest" }
             });
-            if (!response.ok) {
-                throw new Error(await response.text() || (isAdd ? "Adding path failed." : "Deleting path failed."));
-            }
-
-            const result = await response.json();
+            const result = await DimDockPathOperation.complete(
+                response,
+                isAdd ? "Adding path failed." : isRename ? "Renaming path failed." : "Deleting path failed.",
+                message => error.textContent = message);
             if (isAdd) {
                 const encodedPath = result.path.split("/").map(encodeURIComponent).join("/");
                 window.location.assign(`/Gallery/${encodedPath}`);

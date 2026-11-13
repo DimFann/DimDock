@@ -59,6 +59,8 @@ try
         options.UseMySql(connectionSettings.ConnectionString, new MariaDbServerVersion(new Version(11, 4, 0))));
     builder.Services.AddSingleton<IFileStore, LocalFileStore>();
     builder.Services.AddScoped<FilesystemPersistenceService>();
+    builder.Services.AddScoped<GalleryPathReloader>();
+    builder.Services.AddSingleton<GalleryPathOperations>();
     builder.Services.AddScoped<AdminOnlyTagsProvider>();
     builder.Services.AddSingleton<GalleryFilterPreferences>();
     await using var app = builder.Build();
@@ -526,6 +528,120 @@ try
     Check(!await store.DirectoryExistsAsync(FileStoreArea.Blogs, $"assets/drafts/{stale}"), "stale drafts swept on upload");
     Check(!FilesystemPersistenceService.IsValidBlogDraftId("../x") && !FilesystemPersistenceService.IsValidBlogDraftId(draftId.ToUpperInvariant()), "draft IDs validated");
     Console.WriteLine("PASS new-post draft images: staging, publish move/rewrite, discard and stale sweep");
+
+    context.ChangeTracker.Clear();
+    var reloadEntry = new PathEntry { Path = "Reload", ParentPath = "root" };
+    context.Paths.Add(reloadEntry);
+    context.Tags.Add(new Tag { Name = "Fresh" });
+    var reloadExisting = new Item
+    {
+        OriginalName = "old.png", ParentPath = "Reload", ThumbnailKey = "legacy-key", Type = "file", Metadata = "{}"
+    };
+    reloadExisting.TagLinks.Add(new ItemTag { Item = reloadExisting, Tag = new Tag { Name = "stale-reload" } });
+    context.Items.AddRange(reloadExisting,
+        new Item { OriginalName = "gone.png", ParentPath = "Reload", ThumbnailKey = "gone", Type = "image", Metadata = "{}" });
+    context.PendingItemDeletions.Add(new PendingItemDeletion { ParentPath = "Reload", OriginalName = "pending.png" });
+    context.PendingPathDeletions.Add(new PendingPathDeletion { Path = "Reload/Doomed" });
+    await context.SaveChangesAsync();
+    var reloadVersion = reloadExisting.ThumbnailUrl;
+    foreach (var (key, content) in new[]
+             {
+                 ("Reload/old.png", "old"), ("Reload/new.png", "new"), ("Reload/notes.txt", "notes"),
+                 ("Reload/pending.png", "pending"), ("Reload/.description.md", "ignored for existing path"),
+                 ("Reload/.dimdock.json",
+                     """{"version":1,"tags":["Dir-Tag"],"items":{"old.png":{"tags":["fresh"],"description":"Old desc"},"orphan.png":{}}}"""),
+                 ("Reload/Sub/description.md", "Sub description"), ("Reload/Sub/inner.gif", "gif"),
+                 ("Reload/comic_Strip/page.png", "page"), ("Reload/wip_Draft/a.png", "draft"),
+                 ("Reload/.hidden/x.png", "hidden"), ("Reload/Doomed/x.png", "doomed"),
+                 ("Unrelated/outside.png", "outside")
+             })
+        await store.WriteAllTextAsync(FileStoreArea.Gallery, key, content);
+    await store.CreateDirectoryAsync(FileStoreArea.Gallery, "Reload/Sub/Empty");
+    GalleryOperationResult reloadResult;
+    using (var reloadScope = app.Services.CreateScope())
+    {
+        var reloader = new GalleryPathReloader(
+            reloadScope.ServiceProvider.GetRequiredService<AppDbContext>(), store,
+            new TestThumbnailClientFactory(System.Net.HttpStatusCode.OK),
+            reloadScope.ServiceProvider.GetRequiredService<ILogger<GalleryPathReloader>>());
+        reloadResult = await reloader.ReloadAsync("Reload");
+        Check(reloadResult.Path == "Reload" && reloadResult.Message!.Contains("added 4 paths and 5 items") &&
+            reloadResult.Message.Contains("updated 2 entries") && reloadResult.Message.Contains("generated 5 thumbnails") &&
+            reloadResult.Message.Contains("1 indexed item were not found") &&
+            reloadResult.Message.Contains("1 manifest entry had no matching file"), $"reload summary: {reloadResult.Message}");
+        var repeated = await reloader.ReloadAsync("Reload");
+        Check(repeated.Message!.Contains("Everything was already up to date"), $"repeated reload is idempotent: {repeated.Message}");
+        await ExpectReloadErrorAsync(reloader, "Missing");
+        await store.WriteAllTextAsync(FileStoreArea.Gallery, "Reload/Sub/.dimdock.json", """{"version":2}""");
+        await ExpectReloadErrorAsync(reloader, "Reload");
+        await store.DeleteFileAsync(FileStoreArea.Gallery, "Reload/Sub/.dimdock.json");
+    }
+    var reloadedPaths = await context.Paths.AsNoTracking().Include(path => path.TagLinks).ThenInclude(link => link.Tag)
+        .Where(path => path.Path.StartsWith("Reload")).ToDictionaryAsync(path => path.Path);
+    Check(reloadedPaths.Keys.Order(StringComparer.Ordinal).SequenceEqual(
+        ["Reload", "Reload/Sub", "Reload/Sub/Empty", "Reload/comic_Strip", "Reload/wip_Draft"]),
+        "reload indexes new directories, skipping dot and pending-deletion directories");
+    Check(reloadedPaths["Reload"].Description is null && reloadedPaths["Reload/Sub"].Description == "Sub description" &&
+        await store.FileExistsAsync(FileStoreArea.Gallery, "Reload/Sub/.description.md"),
+        "reload migrates legacy descriptions and only sets them on new paths");
+    Check(reloadedPaths["Reload"].TagLinks.Select(link => link.Tag.Name).SequenceEqual(["dir-tag"]) &&
+        reloadedPaths["Reload/comic_Strip"].Type == "comic" &&
+        reloadedPaths["Reload/wip_Draft"].TagLinks.Any(link => link.Tag.Name == "hidden"),
+        "reload applies directory tags, comic_ and wip_ rules");
+    Check(!await context.Paths.AnyAsync(path => path.Path == "Unrelated"), "reload stays within the selected subtree");
+    var reloadedItems = await context.Items.AsNoTracking().Include(item => item.TagLinks).ThenInclude(link => link.Tag)
+        .Where(item => item.ParentPath!.StartsWith("Reload")).ToListAsync();
+    var reloadedOld = reloadedItems.Single(item => item.OriginalName == "old.png");
+    Check(reloadedOld.Type == "image" && reloadedOld.Description == "Old desc" &&
+        reloadedOld.TagLinks.Select(link => link.Tag.Name).SequenceEqual(["Fresh"]) &&
+        reloadedOld.ThumbnailKey != "legacy-key" && reloadedOld.ThumbnailUrl != reloadVersion,
+        "reload updates existing item type, manifest tags/description, thumbnail key and version");
+    Check(reloadedItems.Any(item => item.OriginalName == "gone.png") &&
+        !reloadedItems.Any(item => item.OriginalName is "pending.png" or "x.png"),
+        "reload keeps missing rows and skips pending deletions and hidden directories");
+    Check(reloadedItems.Single(item => item.OriginalName == "notes.txt").Type == "file" &&
+        await store.ReadAllTextAsync(FileStoreArea.Thumbnails,
+            reloadedItems.Single(item => item.OriginalName == "inner.gif").ThumbnailKey + ".png") == "regenerated",
+        "reload indexes files and generates thumbnails for new images");
+    Check(await context.ItemTags.CountAsync(link => link.ItemId == reloadedOld.Id) == 1,
+        "replaced item tag links are deleted");
+
+    async Task<IActionResult> ReloadHandlerAsync(string? path, bool admin = true, bool token = true)
+    {
+        var gallery = await GetGalleryAsync("root", admin);
+        gallery.Request.Method = "POST";
+        if (token)
+        {
+            var issuing = new DefaultHttpContext { RequestServices = services, User = gallery.User };
+            var tokens = services.GetRequiredService<IAntiforgery>().GetAndStoreTokens(issuing);
+            gallery.Request.Headers.Cookie = issuing.Response.Headers.SetCookie.ToString().Split(';')[0];
+            gallery.Request.Headers[tokens.HeaderName!] = tokens.RequestToken;
+        }
+        return await gallery.OnPostReloadPathAsync(path);
+    }
+    Check(await ReloadHandlerAsync("Reload", admin: false) is NotFoundResult, "reload handler requires admin");
+    Check(await ReloadHandlerAsync("Reload", token: false) is BadRequestObjectResult, "reload handler requires antiforgery");
+    Check(await ReloadHandlerAsync("Reload/../x") is BadRequestObjectResult, "reload handler rejects invalid paths");
+    Check(await ReloadHandlerAsync("Reload/comic_Strip") is JsonResult handlerResult &&
+        JsonSerializer.SerializeToElement(handlerResult.Value).GetProperty("message").GetString()!
+            .Contains("Everything was already up to date"), "reload handler returns the summary");
+    Check(await ReloadHandlerAsync("root") is JsonResult rootReload &&
+        JsonSerializer.SerializeToElement(rootReload.Value).GetProperty("path").GetString() == "root" &&
+        await context.Paths.AnyAsync(path => path.Path == "Unrelated"), "root reload scans the whole gallery");
+    Console.WriteLine("PASS path reload: new paths/items, manifests, legacy files, comic/wip rules, pending deletions, scope, idempotency, thumbnails and handler guards");
+
+    async Task ExpectReloadErrorAsync(GalleryPathReloader reloader, string path)
+    {
+        try
+        {
+            await reloader.ReloadAsync(path);
+        }
+        catch (GalleryReloadException)
+        {
+            return;
+        }
+        throw new InvalidOperationException($"FAIL: reload of {path} should be rejected");
+    }
 
     DirectoryShortcut Link(PathEntry parent, PathEntry target, string name) =>
         new() { ParentPathId = parent.Id, TargetPathId = target.Id, Name = name };

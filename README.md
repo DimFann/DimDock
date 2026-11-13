@@ -25,7 +25,10 @@ Storage (S3-compatible).
 On startup the path loader indexes `img_src`, generates missing thumbnails and
 imports blog/About content; the website starts once it has finished
 (`docker compose logs -f path-loader` to watch). Edits made in the website are
-written back to the data files automatically.
+written back to the data files automatically. To pick up files added to storage
+later without restarting, open the folder in the gallery as admin and click
+**Reload Path**; it indexes that folder and its subfolders the same way (additive
+only, no blog/About or shortcut import).
 
 For code/layout-only restarts with unchanged content and a current database:
 `PATH_LOADER_FAST=true docker compose up -d --build` (Bash).
@@ -214,7 +217,7 @@ restored by `npm run build` in `website/`.
 | Database-backed checks (needs a throwaway MariaDB on loopback) | set `DIRECTORY_SHORTCUT_TEST_CONNECTION=Server=127.0.0.1;Port=<port>;User=root;Password=<pw>`, then `dotnet run --project tests\DirectoryShortcutChecks` from the repository root |
 | Python loader/storage tests | `docker build -f path_loader/Dockerfile.tests -t dimdock-storage-tests .` then `docker run --rm dimdock-storage-tests` |
 
-Database checks cover directory shortcuts, subtree moves, item edits and persisted metadata.
+Database checks cover directory shortcuts, subtree moves, path reloads, item edits and persisted metadata.
 
 Test checks create and remove their own databases, buckets and folders, and
 refuse non-loopback endpoints. Never point them at production.
