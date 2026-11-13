@@ -827,6 +827,58 @@ public sealed class FilesystemPersistenceService(
             System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(normalizedPath)));
     }
 
+    // Drops selected entries that would collide with something already in the destination,
+    // returning the display names of what was skipped.
+    public async Task<IReadOnlyList<string>> RemoveMoveConflictsAsync(
+        List<Item> items,
+        List<Shortcut> shortcuts,
+        string targetPath,
+        CancellationToken cancellationToken = default)
+    {
+        var destinationItems = await context.Items
+            .AsNoTracking()
+            .Where(item => item.ParentPath == targetPath)
+            .Select(item => new { item.Id, item.OriginalName })
+            .ToListAsync(cancellationToken);
+        var destinationNames = destinationItems
+            .Select(item => item.OriginalName)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var displayedIds = destinationItems.Select(item => item.Id)
+            .Concat(await context.Shortcuts
+                .AsNoTracking()
+                .Where(shortcut => shortcut.ShortcutPath == targetPath)
+                .Select(shortcut => shortcut.OriginalId)
+                .ToListAsync(cancellationToken))
+            .ToHashSet();
+
+        var skipped = new List<string>();
+        foreach (var item in items.ToList())
+        {
+            if (string.Equals(item.ParentPath ?? "root", targetPath, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            var destination = ItemFileKey(targetPath, item.OriginalName);
+            if (destinationNames.Contains(item.OriginalName) ||
+                displayedIds.Contains(item.Id) ||
+                await fileStore.FileExistsAsync(FileStoreArea.Gallery, destination, cancellationToken) ||
+                await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, destination, cancellationToken))
+            {
+                items.Remove(item);
+                skipped.Add(item.OriginalName);
+            }
+        }
+        foreach (var shortcut in shortcuts.ToList())
+        {
+            if (displayedIds.Contains(shortcut.OriginalId))
+            {
+                shortcuts.Remove(shortcut);
+                skipped.Add(shortcut.OriginalName);
+            }
+        }
+        return skipped;
+    }
+
     public async Task MoveEntriesAsync(
         IReadOnlyCollection<Item> items,
         IReadOnlyCollection<Shortcut> shortcuts,

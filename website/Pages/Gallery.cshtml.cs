@@ -1263,8 +1263,16 @@ public class GalleryModel : PageModel
             return BadRequest("One or more selected shortcuts are not in this gallery.");
         }
 
+        IReadOnlyList<string> skipped;
         try
         {
+            skipped = await _filesystemPersistence.RemoveMoveConflictsAsync(
+                items, shortcuts, targetPath, HttpContext.RequestAborted);
+            if (items.Count + shortcuts.Count == 0)
+            {
+                return StatusCode(StatusCodes.Status409Conflict,
+                    "The destination already contains every selected item; nothing was moved.");
+            }
             await _filesystemPersistence.MoveEntriesAsync(
                 items,
                 shortcuts,
@@ -1286,7 +1294,12 @@ public class GalleryModel : PageModel
         {
             redirectPath,
             movedItems = items.Count,
-            movedShortcuts = shortcuts.Count
+            movedShortcuts = shortcuts.Count,
+            skipped,
+            message = skipped.Count == 0
+                ? null
+                : $"Skipped {skipped.Count} item(s) that already exist in the destination: " +
+                    string.Join(", ", skipped.Take(20)) + (skipped.Count > 20 ? ", ..." : "")
         });
     }
 

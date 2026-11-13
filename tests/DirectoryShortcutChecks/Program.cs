@@ -349,6 +349,33 @@ try
     await store.DeleteFileAsync(FileStoreArea.Gallery, "2021/Album/Child/already.png");
     Check((await persistence.MovePathAsync("2021/Album", "root")).Message is null, "move without collision is not a merge");
     context.ChangeTracker.Clear();
+
+    var bulkKeep = new Item { OriginalName = "keep.png", ParentPath = "2021", ThumbnailKey = ThumbnailKey("2021", "keep.png"), Type = "image" };
+    var bulkClash = new Item { OriginalName = "clash.png", ParentPath = "2021", ThumbnailKey = ThumbnailKey("2021", "clash.png"), Type = "image" };
+    var bulkExisting = new Item { OriginalName = "Clash.png", ParentPath = "Album", ThumbnailKey = ThumbnailKey("Album", "Clash.png"), Type = "image" };
+    context.Items.AddRange(bulkKeep, bulkClash, bulkExisting);
+    await context.SaveChangesAsync();
+    foreach (var (key, body) in new[] { ("2021/keep.png", "keep"), ("2021/clash.png", "clash-source"), ("Album/Clash.png", "clash-destination") })
+        await store.WriteAllTextAsync(FileStoreArea.Gallery, key, body);
+    var bulkModel = await GetGalleryAsync("2021", admin: true);
+    var bulkTokenHttp = new DefaultHttpContext { RequestServices = services, User = bulkModel.HttpContext.User };
+    var bulkTokens = services.GetRequiredService<IAntiforgery>().GetAndStoreTokens(bulkTokenHttp);
+    bulkModel.Request.Headers.Cookie = bulkTokenHttp.Response.Headers.SetCookie.ToString().Split(';')[0];
+    bulkModel.Request.Headers[bulkTokens.HeaderName!] = bulkTokens.RequestToken;
+    var bulkResult = await bulkModel.OnPostBulkMoveAsync("2021", [bulkKeep.Id, bulkClash.Id], [], "Album");
+    context.ChangeTracker.Clear();
+    Check(bulkResult is JsonResult { Value: not null } bulkJson && JsonSerializer.Serialize(bulkJson.Value).Contains("clash.png"),
+        "bulk move reports skipped name conflicts");
+    Check(await context.Items.AnyAsync(item => item.Id == bulkKeep.Id && item.ParentPath == "Album") &&
+        await store.ReadAllTextAsync(FileStoreArea.Gallery, "Album/keep.png") == "keep", "bulk move still moves non-conflicting items");
+    Check(await context.Items.AnyAsync(item => item.Id == bulkClash.Id && item.ParentPath == "2021") &&
+        await store.ReadAllTextAsync(FileStoreArea.Gallery, "2021/clash.png") == "clash-source" &&
+        await store.ReadAllTextAsync(FileStoreArea.Gallery, "Album/Clash.png") == "clash-destination", "bulk move leaves conflicting items in place");
+    await context.Items.Where(item => item.Id == bulkKeep.Id || item.Id == bulkClash.Id || item.Id == bulkExisting.Id).ExecuteDeleteAsync();
+    foreach (var key in new[] { "Album/keep.png", "2021/clash.png", "Album/Clash.png" })
+        await store.DeleteFileAsync(FileStoreArea.Gallery, key);
+    foreach (var path in new[] { "2021", "Album" })
+        await persistence.PersistPathAsync(path);
     Console.WriteLine("PASS moving path subtree: destinations, collisions, child paths/items/files, shortcuts, date tags, thumbnails, manifests, root and merges");
 
     var deletionTarget = await context.Paths.SingleAsync(entry => entry.Path == "Album/Child");

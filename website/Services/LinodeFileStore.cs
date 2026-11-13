@@ -409,12 +409,17 @@ public sealed class LinodeFileStore(
         }, token);
         var copied = await MetadataAsync(destination, token)
             ?? throw new IOException($"Move destination could not be verified: {destination}. Source retained.");
+        // Multipart ETags ("md5-partcount") are not preserved by a server-side copy, so only
+        // single-part ETags can be compared; ETagToMatch already pinned the copied source version.
         if (copied.ContentLength != original.ContentLength ||
-            !string.Equals(copied.ETag, original.ETag, StringComparison.Ordinal))
+            (!IsMultipartETag(original.ETag) && !IsMultipartETag(copied.ETag) &&
+             !string.Equals(copied.ETag, original.ETag, StringComparison.Ordinal)))
         {
             throw new IOException($"Move destination verification failed: {destination}. Source retained.");
         }
     }
+
+    private static bool IsMultipartETag(string? etag) => etag?.Contains('-') == true;
 
     public async Task MoveFileAsync(FileStoreArea area, string sourceKey, string destinationKey,
         CancellationToken cancellationToken = default)

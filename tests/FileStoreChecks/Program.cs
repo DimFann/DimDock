@@ -193,6 +193,11 @@ try
         await chunked.CompleteChunkedUploadAsync(FileStoreArea.Gallery, "chunked/empty.bin", empty, 1);
         await using (var stored = await files.OpenReadAsync(FileStoreArea.Gallery, "chunked/empty.bin"))
             Check(stored.Length == 0, "single empty chunk");
+        // Server-side copies of multipart objects get a new ETag; moves must still verify.
+        await files.MoveFileAsync(FileStoreArea.Gallery, chunkKey, "chunked-file-moved/large.bin");
+        await files.MoveDirectoryAsync(FileStoreArea.Gallery, "chunked-file-moved", "chunked-dir-moved");
+        await using (var stored = await files.OpenReadAsync(FileStoreArea.Gallery, "chunked-dir-moved/large.bin"))
+            Check(stored.Length == chunkPayload.Length, "multipart uploads can be moved");
         Console.WriteLine($"PASS {chunked.GetType().Name} chunked upload assemble/retry/incomplete/create-only/abort/guards");
     }
 
