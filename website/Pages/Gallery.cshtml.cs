@@ -1129,9 +1129,9 @@ public class GalleryModel : PageModel
         {
             return BadRequest("Select an existing destination directory.");
         }
-        return await RunPathOperationAsync(async (services, token) => new GalleryOperationResult(
-            await services.GetRequiredService<FilesystemPersistenceService>()
-                .MovePathAsync(sanitizedPath, targetPath, token)));
+        return await RunPathOperationAsync((services, token) =>
+            services.GetRequiredService<FilesystemPersistenceService>()
+                .MovePathAsync(sanitizedPath, targetPath, token));
     }
 
     public async Task<IActionResult> OnPostReloadPathAsync([FromForm] string? path)

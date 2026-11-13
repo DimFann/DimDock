@@ -273,7 +273,7 @@
                         <img src="/img/cancel.png" alt="" />
                     </button>
                 </div>
-                <p data-move-path-note hidden>Moves this directory and all child directories, items, and shortcuts. The directory name stays the same.</p>
+                <p data-move-path-note hidden>Moves this directory and all child directories, items, and shortcuts. The directory name stays the same. If the destination already has a directory with that name, the contents are merged; items that already exist there are left behind for cleanup.</p>
                 <label for="bulkMovePathSearch">Search existing directories (enter / for root)</label>
                 <input id="bulkMovePathSearch" type="search" autocomplete="off" data-bulk-move-path-search />
                 <p class="shortcut-dialog-status" data-bulk-move-search-status role="status"></p>
@@ -861,6 +861,7 @@
                     bulkMoveDialog.close();
                     return;
                 }
+                if (result.message) window.alert(result.message);
                 window.location.assign(result.redirectPath);
             } catch (requestError) {
                 errorStatus.textContent = requestError.message;

@@ -264,7 +264,7 @@ try
     shortcutConfig["shortcuts"]!["root"]!.AsArray().Add("2020/Album/Child/child.png");
     await store.WriteAllTextAsync(FileStoreArea.Gallery, ".shortcuts.json", shortcutConfig.ToJsonString());
     foreach (var (source, target) in new[] { ("root", "2021"), ("2020/Album", "2020/Album/Child"),
-        ("2020/Album", "2020/Album"), ("2020/Album", "2020"), ("2020/Album", "2021"), ("2020/Album", "missing") })
+        ("2020/Album", "2020/Album"), ("2020/Album", "2020"), ("2020/Album", "missing") })
     {
         try { await persistence.MovePathAsync(source, target); Check(false, $"reject move {source} to {target}"); }
         catch (GalleryPathRenameException) { }
@@ -305,11 +305,51 @@ try
         Check(fileShortcuts.GetProperty("root").EnumerateArray().Any(value => value.GetString() == "2021/Album/Child/child.png"), "persisted file shortcut source follows moved subtree");
         Check(fileShortcuts.GetProperty("2021/Album/Child")[0].GetString() == "With space/photo new.png", "persisted file shortcut destination follows moved subtree");
     }
-    Check(await persistence.MovePathAsync("2021/Album", "root") == "Album", "subtree can move to root");
+    Check((await persistence.MovePathAsync("2021/Album", "root")).Path == "Album", "subtree can move to root");
     context.ChangeTracker.Clear();
     Check(await context.Paths.AnyAsync(entry => entry.Path == "Album" && entry.ParentPath == "root"), "root move updates parent");
     Check(await context.Items.AnyAsync(item => item.Id == childItem.Id && item.ParentPath == "Album/Child"), "root move updates descendants");
-    Console.WriteLine("PASS moving path subtree: destinations, collisions, child paths/items/files, shortcuts, date tags, thumbnails, manifests and root");
+
+    // Simulate an interrupted earlier move: the destination exists and holds some of the files.
+    context.Paths.Add(new PathEntry { Path = "2021/Album", ParentPath = "2021" });
+    var dupeItem = new Item { OriginalName = "dupe.png", ParentPath = "Album/Child",
+        ThumbnailKey = ThumbnailKey("Album/Child", "dupe.png"), Type = "image" };
+    var alreadyMovedItem = new Item { OriginalName = "already.png", ParentPath = "Album/Child",
+        ThumbnailKey = ThumbnailKey("Album/Child", "already.png"), Type = "image" };
+    context.Items.AddRange(dupeItem, alreadyMovedItem);
+    await context.SaveChangesAsync();
+    await store.CreateDirectoryAsync(FileStoreArea.Gallery, "2021/Album/Child");
+    await store.WriteAllTextAsync(FileStoreArea.Gallery, "Album/Child/dupe.png", "dupe-source");
+    await store.WriteAllTextAsync(FileStoreArea.Gallery, "2021/Album/Child/dupe.png", "dupe-destination");
+    await store.WriteAllTextAsync(FileStoreArea.Gallery, "2021/Album/Child/already.png", "already-bytes");
+    var merge = await persistence.MovePathAsync("Album", "2021");
+    context.ChangeTracker.Clear();
+    Check(merge.Path == "2021/Album" && merge.Message?.Contains("1 item(s) already existed") == true, "merge reports left-behind duplicates");
+    Check(await context.Items.AnyAsync(item => item.Id == childItem.Id && item.ParentPath == "2021/Album/Child") &&
+        await store.ReadAllTextAsync(FileStoreArea.Gallery, "2021/Album/Child/child.png") == "child-bytes", "merge moves non-duplicate items");
+    Check(await context.Items.AnyAsync(item => item.Id == alreadyMovedItem.Id && item.ParentPath == "2021/Album/Child"), "merge re-links files moved by an interrupted move");
+    Check(await context.Items.AnyAsync(item => item.Id == dupeItem.Id && item.ParentPath == "Album/Child") &&
+        await store.ReadAllTextAsync(FileStoreArea.Gallery, "Album/Child/dupe.png") == "dupe-source" &&
+        await store.ReadAllTextAsync(FileStoreArea.Gallery, "2021/Album/Child/dupe.png") == "dupe-destination", "merge leaves duplicates untouched");
+    Check(await context.Paths.AnyAsync(entry => entry.Path == "Album/Child") && await context.Paths.AnyAsync(entry => entry.Path == "Album"), "merge keeps sources with leftovers");
+    Check(await context.Paths.AnyAsync(entry => entry.Path == "2021/Album/Child" && entry.ParentPath == "2021/Album"), "merge creates missing destination paths");
+    Check(await context.Paths.AnyAsync(entry => entry.Path == "2021/Album" && entry.Description == "Keep description"), "merge fills blank destination description");
+    Check(await context.Shortcuts.AnyAsync(link => link.OriginalId == photo.Id && link.ShortcutPath == "2021/Album/Child"), "merge moves displayed item shortcuts");
+    Check(await context.ItemTags.AnyAsync(link => link.ItemId == childItem.Id && link.Tag.Name == "2021"), "merge updates date tags");
+
+    await context.Items.Where(item => item.Id == dupeItem.Id).ExecuteDeleteAsync();
+    await store.DeleteFileAsync(FileStoreArea.Gallery, "Album/Child/dupe.png");
+    var cleanMerge = await persistence.MovePathAsync("Album", "2021");
+    context.ChangeTracker.Clear();
+    Check(cleanMerge.Path == "2021/Album" && !await context.Paths.AnyAsync(entry => entry.Path == "Album" || entry.Path == "Album/Child") &&
+        !await store.DirectoryExistsAsync(FileStoreArea.Gallery, "Album"), "merge removes emptied sources");
+    Check(await context.DirectoryShortcuts.AnyAsync(link => link.ParentPath.Path == "2021/Album/Child" && link.Name == "Outside") &&
+        await context.DirectoryShortcuts.AnyAsync(link => link.TargetPath.Path == "2021/Album/Child" && link.Name == "Moved child"), "merge repoints directory shortcuts of removed sources");
+    await context.Items.Where(item => item.Id == alreadyMovedItem.Id).ExecuteDeleteAsync();
+    await store.DeleteFileAsync(FileStoreArea.Gallery, "2021/Album/Child/already.png");
+    Check((await persistence.MovePathAsync("2021/Album", "root")).Message is null, "move without collision is not a merge");
+    context.ChangeTracker.Clear();
+    Console.WriteLine("PASS moving path subtree: destinations, collisions, child paths/items/files, shortcuts, date tags, thumbnails, manifests, root and merges");
 
     var deletionTarget = await context.Paths.SingleAsync(entry => entry.Path == "Album/Child");
     var deletionParent = await context.Paths.SingleAsync(entry => entry.Path == "root");

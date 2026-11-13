@@ -1066,7 +1066,7 @@ public sealed class FilesystemPersistenceService(
         return await RelocatePathAsync(path, newName, null, cancellationToken);
     }
 
-    public async Task<string> MovePathAsync(
+    public async Task<GalleryOperationResult> MovePathAsync(
         string path,
         string targetPath,
         CancellationToken cancellationToken = default)
@@ -1093,7 +1093,348 @@ public sealed class FilesystemPersistenceService(
         {
             throw new DirectoryNotFoundException($"Gallery directory does not exist: {target.Path}");
         }
-        return await RelocatePathAsync(source.Path, source.Path.Split('/').Last(), target.Path, cancellationToken);
+        var name = source.Path.Split('/').Last();
+        var newPath = string.Equals(target.Path, "root", StringComparison.OrdinalIgnoreCase) ? name : $"{target.Path}/{name}";
+        var existingDestination = await context.Paths.AsNoTracking()
+            .Where(entry => entry.Path == newPath)
+            .Select(entry => entry.Path)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (existingDestination is not null ||
+            await fileStore.DirectoryExistsAsync(FileStoreArea.Gallery, GalleryDirectoryKey(newPath), cancellationToken))
+        {
+            return await MergePathAsync(source.Path, existingDestination ?? newPath, target.Path, cancellationToken);
+        }
+        return new GalleryOperationResult(
+            await RelocatePathAsync(source.Path, name, target.Path, cancellationToken));
+    }
+
+    private static readonly HashSet<string> PathMetadataFileNames =
+        new(StringComparer.OrdinalIgnoreCase) { ".dimdock.json", ".description.md", "description.md" };
+
+    // Moves a subtree into an existing destination of the same name (e.g. left behind by an interrupted move).
+    // Items whose name already exists at the destination stay in the source for manual cleanup;
+    // source directories are only removed once nothing is left in them.
+    private async Task<GalleryOperationResult> MergePathAsync(
+        string oldPath,
+        string newPath,
+        string parentPath,
+        CancellationToken cancellationToken)
+    {
+        if (await fileStore.FileExistsAsync(FileStoreArea.Gallery, GalleryDirectoryKey(newPath), cancellationToken))
+        {
+            throw new GalleryPathRenameException("A filesystem path with that name already exists.");
+        }
+        await EnsureNoPendingDeletionsAsync(oldPath, newPath, cancellationToken);
+
+        var oldPrefix = oldPath + "/";
+        var sources = (await context.Paths
+                .AsNoTracking()
+                .Include(entry => entry.TagLinks)
+                .Where(entry => entry.Path == oldPath || entry.Path.StartsWith(oldPrefix))
+                .ToListAsync(cancellationToken))
+            .OrderBy(entry => entry.Path.Length)
+            .ToList();
+        if (sources.Count == 0)
+        {
+            throw new GalleryPathRenameException("The path no longer exists.");
+        }
+        string MapPath(string path) => newPath + path[oldPath.Length..];
+        if (sources.Any(entry => MapPath(entry.Path).Length > 1024))
+        {
+            throw new GalleryPathRenameException("A descendant path would exceed the 1024 character path limit.");
+        }
+
+        // Storage changes start below; finish the merge even if the caller goes away.
+        cancellationToken = CancellationToken.None;
+        var destinations = new Dictionary<string, PathEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in sources)
+        {
+            var destinationPath = MapPath(source.Path);
+            await fileStore.CreateDirectoryAsync(FileStoreArea.Gallery, GalleryDirectoryKey(destinationPath), cancellationToken);
+            var destination = await context.Paths.FirstOrDefaultAsync(entry => entry.Path == destinationPath, cancellationToken);
+            if (destination is null)
+            {
+                destination = new PathEntry
+                {
+                    Path = destinationPath,
+                    ParentPath = source.Path == oldPath ? parentPath : MapPath(source.ParentPath ?? oldPath),
+                    Description = source.Description,
+                    Type = source.Type,
+                    Metadata = source.Metadata
+                };
+                foreach (var link in source.TagLinks)
+                {
+                    destination.TagLinks.Add(new PathTag { TagId = link.TagId });
+                }
+                context.Paths.Add(destination);
+            }
+            else if (string.IsNullOrWhiteSpace(destination.Description) && !string.IsNullOrWhiteSpace(source.Description))
+            {
+                destination.Description = source.Description;
+            }
+            await context.SaveChangesAsync(cancellationToken);
+            destinations[source.Path] = destination;
+        }
+
+        var movedCount = 0;
+        var leftCount = 0;
+        var failedCount = 0;
+        foreach (var source in sources)
+        {
+            var destinationPath = destinations[source.Path].Path;
+            var items = await context.Items
+                .AsNoTracking()
+                .Where(item => item.ParentPath == source.Path)
+                .Select(item => new { item.Id, item.OriginalName })
+                .ToListAsync(cancellationToken);
+            var destinationNames = (await context.Items
+                    .AsNoTracking()
+                    .Where(item => item.ParentPath == destinationPath)
+                    .Select(item => item.OriginalName)
+                    .ToListAsync(cancellationToken))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var moved = new System.Collections.Concurrent.ConcurrentBag<(ulong Id, string Name, bool FileMoved)>();
+            await Parallel.ForEachAsync(
+                items,
+                new ParallelOptions { MaxDegreeOfParallelism = 8 },
+                async (item, token) =>
+                {
+                    if (destinationNames.Contains(item.OriginalName))
+                    {
+                        Interlocked.Increment(ref leftCount);
+                        return;
+                    }
+                    try
+                    {
+                        var sourceKey = ItemFileKey(source.Path, item.OriginalName);
+                        var destinationKey = ItemFileKey(destinationPath, item.OriginalName);
+                        if (await fileStore.FileExistsAsync(FileStoreArea.Gallery, destinationKey, token))
+                        {
+                            if (await fileStore.FileExistsAsync(FileStoreArea.Gallery, sourceKey, token))
+                            {
+                                Interlocked.Increment(ref leftCount);
+                                return;
+                            }
+                            // The file already moved during an interrupted attempt; only the record needs to follow.
+                            moved.Add((item.Id, item.OriginalName, false));
+                            return;
+                        }
+                        await fileStore.MoveFileAsync(FileStoreArea.Gallery, sourceKey, destinationKey, token);
+                        moved.Add((item.Id, item.OriginalName, true));
+                    }
+                    catch (Exception)
+                    {
+                        // Leave the item where it is; the summary reports it for manual cleanup.
+                        Interlocked.Increment(ref failedCount);
+                    }
+                });
+            if (moved.IsEmpty)
+            {
+                continue;
+            }
+
+            var movedIds = moved.Select(item => item.Id).ToList();
+            var oldTags = DatePathTags.ForPath(source.Path);
+            var newTags = DatePathTags.ForPath(destinationPath);
+            try
+            {
+                var executionStrategy = context.Database.CreateExecutionStrategy();
+                await executionStrategy.ExecuteAsync(async () =>
+                {
+                    await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+                    await context.Items
+                        .Where(item => movedIds.Contains(item.Id))
+                        .ExecuteUpdateAsync(update => update.SetProperty(item => item.ParentPath, destinationPath), cancellationToken);
+                    await context.Shortcuts
+                        .Where(shortcut => movedIds.Contains(shortcut.OriginalId))
+                        .ExecuteUpdateAsync(update => update.SetProperty(shortcut => shortcut.ParentPath, destinationPath), cancellationToken);
+                    await ApplyDateTagChangesAsync(movedIds.Select(id => (id, oldTags, newTags)), cancellationToken);
+                    await transaction.CommitAsync(cancellationToken);
+                });
+            }
+            catch
+            {
+                foreach (var item in moved.Where(item => item.FileMoved))
+                {
+                    await fileStore.MoveFileAsync(
+                        FileStoreArea.Gallery,
+                        ItemFileKey(destinationPath, item.Name),
+                        ItemFileKey(source.Path, item.Name),
+                        CancellationToken.None);
+                }
+                throw;
+            }
+            movedCount += moved.Count;
+        }
+
+        foreach (var source in sources)
+        {
+            var destinationPath = destinations[source.Path].Path;
+            var unavailable = (await context.Items
+                    .Where(item => item.ParentPath == destinationPath)
+                    .Select(item => item.Id)
+                    .ToListAsync(cancellationToken))
+                .Concat(await context.Shortcuts
+                    .Where(shortcut => shortcut.ShortcutPath == destinationPath)
+                    .Select(shortcut => shortcut.OriginalId)
+                    .ToListAsync(cancellationToken))
+                .ToHashSet();
+            var displayedShortcuts = await context.Shortcuts
+                .Where(shortcut => shortcut.ShortcutPath == source.Path)
+                .ToListAsync(cancellationToken);
+            foreach (var shortcut in displayedShortcuts.Where(shortcut => unavailable.Add(shortcut.OriginalId)))
+            {
+                shortcut.ShortcutPath = destinationPath;
+            }
+            await context.SaveChangesAsync(cancellationToken);
+        }
+
+        var removedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var source in sources.OrderByDescending(entry => entry.Path.Length))
+        {
+            var directoryKey = GalleryDirectoryKey(source.Path);
+            if (await context.Items.AnyAsync(item => item.ParentPath == source.Path, cancellationToken) ||
+                await context.Shortcuts.AnyAsync(shortcut => shortcut.ShortcutPath == source.Path, cancellationToken) ||
+                await context.Paths.AnyAsync(entry => entry.ParentPath == source.Path, cancellationToken) ||
+                (await fileStore.ListDirectoriesAsync(FileStoreArea.Gallery, directoryKey, cancellationToken: cancellationToken)).Count > 0 ||
+                (await fileStore.ListFilesAsync(FileStoreArea.Gallery, directoryKey, cancellationToken: cancellationToken))
+                    .Any(key => !PathMetadataFileNames.Contains(key[(key.LastIndexOf('/') + 1)..])))
+            {
+                continue;
+            }
+            var destinationId = destinations[source.Path].Id;
+            var executionStrategy = context.Database.CreateExecutionStrategy();
+            await executionStrategy.ExecuteAsync(async () =>
+            {
+                await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+                await context.DirectoryShortcuts
+                    .Where(shortcut => shortcut.TargetPathId == source.Id)
+                    .ExecuteUpdateAsync(update => update.SetProperty(shortcut => shortcut.TargetPathId, destinationId), cancellationToken);
+                await context.DirectoryShortcuts
+                    .Where(shortcut => shortcut.ParentPathId == source.Id)
+                    .ExecuteUpdateAsync(update => update.SetProperty(shortcut => shortcut.ParentPathId, destinationId), cancellationToken);
+                await context.Paths.Where(entry => entry.Id == source.Id).ExecuteDeleteAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+            });
+            await fileStore.DeleteDirectoryAsync(FileStoreArea.Gallery, directoryKey, recursive: true, cancellationToken);
+            removedPaths.Add(source.Path);
+        }
+
+        foreach (var source in sources.Where(entry => !removedPaths.Contains(entry.Path)))
+        {
+            await PersistPathAsync(source.Path, cancellationToken);
+        }
+        foreach (var destination in sources.Select(entry => destinations[entry.Path].Path))
+        {
+            await PersistPathAsync(destination, cancellationToken);
+        }
+        await PersistDirectoryShortcutsAsync(
+            removedPaths.Contains(oldPath) ? (oldPath, newPath) : null,
+            cancellationToken);
+
+        var message = $"Merged into existing {newPath}: moved {movedCount} item(s).";
+        if (leftCount > 0)
+        {
+            message += $" {leftCount} item(s) already existed at the destination and were left in {oldPath} for cleanup.";
+        }
+        if (failedCount > 0)
+        {
+            message += $" {failedCount} item(s) could not be moved and were left in {oldPath}.";
+        }
+        if (!removedPaths.Contains(oldPath) && leftCount == 0 && failedCount == 0)
+        {
+            message += $" {oldPath} still contains other files or shortcuts and was kept.";
+        }
+        return new GalleryOperationResult(newPath, message);
+    }
+
+    private async Task EnsureNoPendingDeletionsAsync(string oldPath, string newPath, CancellationToken cancellationToken)
+    {
+        await context.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS PendingPathDeletions (
+                path VARCHAR(1024) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY
+            )
+            """,
+            cancellationToken);
+        var pendingPathDeletions = await context.PendingPathDeletions
+            .AsNoTracking()
+            .Select(entry => entry.Path)
+            .ToListAsync(cancellationToken);
+        if (pendingPathDeletions.Any(pendingPath =>
+            IsSameOrChildPath(oldPath, pendingPath) ||
+            IsSameOrChildPath(pendingPath, oldPath) ||
+            IsSameOrChildPath(newPath, pendingPath) ||
+            IsSameOrChildPath(pendingPath, newPath)))
+        {
+            throw new GalleryPathRenameException(
+                "Finish queued path deletions before changing this path.");
+        }
+
+        await context.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS PendingItemDeletions (
+                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                parent_path VARCHAR(1024) NOT NULL,
+                original_name VARCHAR(255) NOT NULL
+            )
+            """,
+            cancellationToken);
+        var oldPrefix = oldPath + "/";
+        var newPrefix = newPath + "/";
+        if (await context.PendingItemDeletions.AnyAsync(entry =>
+                entry.ParentPath == oldPath || entry.ParentPath.StartsWith(oldPrefix) ||
+                entry.ParentPath == newPath || entry.ParentPath.StartsWith(newPrefix),
+                cancellationToken))
+        {
+            throw new GalleryPathRenameException(
+                "Finish queued item deletions before changing this path.");
+        }
+    }
+
+    private async Task ApplyDateTagChangesAsync(
+        IEnumerable<(ulong Id, IReadOnlyCollection<string> OldTags, IReadOnlyCollection<string> NewTags)> changes,
+        CancellationToken cancellationToken)
+    {
+        var changeList = changes.ToList();
+        foreach (var tagName in changeList.SelectMany(change => change.NewTags).Distinct(StringComparer.Ordinal))
+        {
+            await context.Database.ExecuteSqlInterpolatedAsync(
+                $"INSERT IGNORE INTO Tags (name) VALUES ({tagName})",
+                cancellationToken);
+        }
+
+        var dateTagNames = changeList
+            .SelectMany(change => change.OldTags.Concat(change.NewTags))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var dateTagIds = (await context.Tags
+            .Where(tag => dateTagNames.Contains(tag.Name))
+            .Select(tag => new { tag.Name, tag.Id })
+            .ToListAsync(cancellationToken))
+            .ToDictionary(tag => tag.Name, tag => tag.Id, StringComparer.Ordinal);
+
+        foreach (var change in changeList)
+        {
+            var removedTagIds = change.OldTags
+                .Where(tagName => !change.NewTags.Contains(tagName, StringComparer.Ordinal))
+                .Where(dateTagIds.ContainsKey)
+                .Select(tagName => dateTagIds[tagName])
+                .ToList();
+            if (removedTagIds.Count > 0)
+            {
+                await context.ItemTags
+                    .Where(link => link.ItemId == change.Id && removedTagIds.Contains(link.TagId))
+                    .ExecuteDeleteAsync(cancellationToken);
+            }
+
+            foreach (var tagName in change.NewTags)
+            {
+                await context.Database.ExecuteSqlInterpolatedAsync(
+                    $"INSERT IGNORE INTO ItemTags (item_id, tag_id) VALUES ({change.Id}, {dateTagIds[tagName]})",
+                    cancellationToken);
+            }
+        }
     }
 
     private async Task<string> RelocatePathAsync(
@@ -1161,43 +1502,7 @@ public sealed class FilesystemPersistenceService(
             throw new GalleryPathRenameException("A path with that name already exists.");
         }
 
-        await context.Database.ExecuteSqlRawAsync(
-            """
-            CREATE TABLE IF NOT EXISTS PendingPathDeletions (
-                path VARCHAR(1024) CHARACTER SET ascii COLLATE ascii_bin NOT NULL PRIMARY KEY
-            )
-            """,
-            cancellationToken);
-        var pendingPathDeletions = await context.PendingPathDeletions
-            .AsNoTracking()
-            .Select(entry => entry.Path)
-            .ToListAsync(cancellationToken);
-        if (pendingPathDeletions.Any(pendingPath =>
-            IsSameOrChildPath(oldPath, pendingPath) ||
-            IsSameOrChildPath(pendingPath, oldPath) ||
-            IsSameOrChildPath(newPath, pendingPath) ||
-            IsSameOrChildPath(pendingPath, newPath)))
-        {
-            throw new GalleryPathRenameException(
-                "Finish queued path deletions before changing this path.");
-        }
-
-        await context.Database.ExecuteSqlRawAsync(
-            """
-            CREATE TABLE IF NOT EXISTS PendingItemDeletions (
-                id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
-                parent_path VARCHAR(1024) NOT NULL,
-                original_name VARCHAR(255) NOT NULL
-            )
-            """,
-            cancellationToken);
-        var hasPendingItemDeletions = await context.PendingItemDeletions
-            .AnyAsync(entry => entry.ParentPath == oldPath || entry.ParentPath.StartsWith(oldPrefix), cancellationToken);
-        if (hasPendingItemDeletions)
-        {
-            throw new GalleryPathRenameException(
-                "Finish queued item deletions before changing this path.");
-        }
+        await EnsureNoPendingDeletionsAsync(oldPath, newPath, cancellationToken);
 
         var sourceDirectory = GalleryDirectoryKey(oldPath);
         var destinationDirectory = GalleryDirectoryKey(newPath);
@@ -1306,48 +1611,9 @@ public sealed class FilesystemPersistenceService(
                                         : shortcut.ParentPath),
                         cancellationToken);
 
-                var newDateTagNames = dateTagChanges
-                    .SelectMany(change => change.NewTags)
-                    .Distinct(StringComparer.Ordinal)
-                    .ToList();
-                foreach (var tagName in newDateTagNames)
-                {
-                    await context.Database.ExecuteSqlInterpolatedAsync(
-                        $"INSERT IGNORE INTO Tags (name) VALUES ({tagName})",
-                        cancellationToken);
-                }
-
-                var dateTagNames = dateTagChanges
-                    .SelectMany(change => change.OldTags.Concat(change.NewTags))
-                    .Distinct(StringComparer.Ordinal)
-                    .ToList();
-                var dateTagIds = (await context.Tags
-                    .Where(tag => dateTagNames.Contains(tag.Name))
-                    .Select(tag => new { tag.Name, tag.Id })
-                    .ToListAsync(cancellationToken))
-                    .ToDictionary(tag => tag.Name, tag => tag.Id, StringComparer.Ordinal);
-
-                foreach (var change in dateTagChanges)
-                {
-                    var removedTagIds = change.OldTags
-                        .Where(tagName => !change.NewTags.Contains(tagName, StringComparer.Ordinal))
-                        .Where(dateTagIds.ContainsKey)
-                        .Select(tagName => dateTagIds[tagName])
-                        .ToList();
-                    if (removedTagIds.Count > 0)
-                    {
-                        await context.ItemTags
-                            .Where(link => link.ItemId == change.Id && removedTagIds.Contains(link.TagId))
-                            .ExecuteDeleteAsync(cancellationToken);
-                    }
-
-                    foreach (var tagName in change.NewTags)
-                    {
-                        await context.Database.ExecuteSqlInterpolatedAsync(
-                            $"INSERT IGNORE INTO ItemTags (item_id, tag_id) VALUES ({change.Id}, {dateTagIds[tagName]})",
-                            cancellationToken);
-                    }
-                }
+                await ApplyDateTagChangesAsync(
+                    dateTagChanges.Select(change => (change.Id, change.OldTags, change.NewTags)),
+                    cancellationToken);
 
                 await transaction.CommitAsync(cancellationToken);
             });
