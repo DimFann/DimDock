@@ -161,6 +161,32 @@ try
     await store.WriteAllTextAsync(FileStoreArea.Thumbnails, $"{photo.ThumbnailKey}.png", "thumb");
     context.ChangeTracker.Clear();
 
+    var viewerShortcutId = await context.Shortcuts.Where(link => link.OriginalId == photo.Id)
+        .Select(link => link.Id).SingleAsync();
+    foreach (var shortcutId in new ulong?[] { viewerShortcutId, null })
+    {
+        var viewer = new Website.Pages.ImageModel(context, builder.Configuration,
+            services.GetRequiredService<IWebHostEnvironment>(), services.GetRequiredService<IAntiforgery>(),
+            services.GetRequiredService<AdminOnlyTagsProvider>(), persistence)
+        {
+            PageContext = (await GetGalleryAsync("root")).PageContext
+        };
+        await viewer.OnGetAsync(photo.Id, shortcutId);
+        var viewerHtml = await RenderAsync(viewer, "/Pages/Image.cshtml");
+        Check(viewerHtml.Contains("aria-label=\"Go to original item\"") == shortcutId.HasValue,
+            "original item button appears only in shortcut viewer");
+        if (shortcutId.HasValue)
+        {
+            var backIndex = viewerHtml.IndexOf("data-back-to-gallery", StringComparison.Ordinal);
+            var originalIndex = viewerHtml.IndexOf("aria-label=\"Go to original item\"", StringComparison.Ordinal);
+            var sourceIndex = viewerHtml.IndexOf("aria-label=\"View source\"", StringComparison.Ordinal);
+            Check(viewerHtml.Contains($"href=\"/image/{photo.Id}\" aria-label=\"Go to original item\"") &&
+                viewerHtml.Contains("src=\"/img/first.png\"") && backIndex < originalIndex && originalIndex < sourceIndex,
+                "original navigation removes shortcut context and sits between back and source");
+        }
+    }
+
+    context.ChangeTracker.Clear();
     var renamed = await persistence.RenameItemAsync(photo.Id, " Photo New.png ");
     Check(renamed.OriginalName == "Photo New.png", "rename trims and returns the new name");
     Check(await store.ReadAllTextAsync(FileStoreArea.Gallery, "With space/Photo New.png") == "photo-bytes" &&
@@ -749,17 +775,23 @@ try
         return model;
     }
 
-    async Task<string> RenderAsync(GalleryModel model)
+    async Task<string> RenderAsync<TModel>(TModel model, string viewPath = "/Pages/Shared/_GalleryResults.cshtml")
+        where TModel : PageModel
     {
         var engine = services.GetRequiredService<IRazorViewEngine>();
-        var view = engine.GetView(null, "/Pages/Shared/_GalleryResults.cshtml", false);
+        var view = engine.GetView(null, viewPath, false);
         Check(view.Success, "compiled gallery partial found");
         var galleryView = view.View ?? throw new InvalidOperationException("Compiled gallery view is missing.");
         using var output = new StringWriter();
-        var viewData = new ViewDataDictionary<GalleryModel>(new EmptyModelMetadataProvider(), new ModelStateDictionary())
+        var viewData = new ViewDataDictionary<TModel>(new EmptyModelMetadataProvider(), new ModelStateDictionary())
         {
             Model = model
         };
+        if (galleryView is RazorView { RazorPage: Page page })
+        {
+            model.PageContext.ViewData = viewData;
+            page.PageContext = model.PageContext;
+        }
         var viewContext = new ViewContext(model.PageContext, galleryView, viewData,
             new TempDataDictionary(model.HttpContext, services.GetRequiredService<ITempDataProvider>()),
             output, new HtmlHelperOptions());
